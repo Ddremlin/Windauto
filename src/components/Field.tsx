@@ -1,4 +1,5 @@
 import type { HTMLAttributes } from 'react'
+import { useT } from '../settings'
 import type { Check } from '../validate'
 
 interface Props {
@@ -16,6 +17,7 @@ interface Props {
 }
 
 export default function Field({ label, value, onChange, onBlur, check, placeholder, inputMode, type, mono, upper, wide }: Props) {
+  const t = useT()
   const level = check?.level ?? 'empty'
   return (
     <label className={`field lvl-${level}` + (wide ? ' wide' : '')}>
@@ -32,7 +34,7 @@ export default function Field({ label, value, onChange, onBlur, check, placehold
         onChange={(e) => onChange(upper ? e.target.value.toUpperCase() : e.target.value)}
         onBlur={onBlur}
       />
-      {check?.message ? <span className="field-hint">{check.message}</span> : null}
+      {check?.message ? <span className="field-hint">{t(check.message, check.vars)}</span> : null}
     </label>
   )
 }

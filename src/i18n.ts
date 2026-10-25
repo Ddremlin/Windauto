@@ -1,0 +1,373 @@
+export type Lang = 'ru' | 'pl'
+
+export const LANGS: { id: Lang; label: string }[] = [
+  { id: 'ru', label: 'Русский' },
+  { id: 'pl', label: 'Polski' },
+]
+
+type Dict = Record<string, string>
+
+const ru: Dict = {
+  // общее
+  'app.new': 'Новый заказ',
+  'app.back': 'Назад',
+  'app.menu': 'Меню',
+  'app.close': 'Закрыть',
+  'app.done': 'Готово',
+  'app.clear': 'Очистить',
+  'app.settings': 'Настройки',
+  'app.share': 'Отправить',
+
+  // список
+  'list.search': 'Поиск: номер, VIN, марка, клиент',
+  'list.empty': 'Пока нет ни одного заказа.',
+  'list.accept': 'Принять автомобиль',
+  'list.notFound': 'Ничего не найдено',
+  'list.noPlate': '— без номера —',
+  'list.noMake': 'Марка не указана',
+  'list.elements': 'Элементов: {n}',
+  'list.noWorks': 'Работы не отмечены',
+  'list.backup': 'Сохранить резервную копию',
+  'list.restore': 'Загрузить из копии…',
+  'list.restoreConfirm': 'Загрузить {n} заказ(ов)? Текущие данные ({m}) будут заменены.',
+
+  // статусы
+  'status.new': 'Принят',
+  'status.in_work': 'В работе',
+  'status.done': 'Готов',
+
+  // заказ
+  'order.car': 'Автомобиль',
+  'order.plate': 'Госномер (PL)',
+  'order.vin': 'VIN',
+  'order.vinPh': '17 символов',
+  'order.make': 'Марка',
+  'order.model': 'Модель',
+  'order.year': 'Год',
+  'order.mileage': 'Пробег, км',
+  'order.paint': 'Краска',
+  'order.color': 'Цвет',
+  'order.colorPh': 'Серебристый металлик',
+  'order.paintCode': 'Код краски',
+  'order.formula': 'Формула краски',
+  'order.formulaPh': 'Компонент — количество, г\nнапр.: 9140 — 412.5\n9160 — 38.2',
+  'order.client': 'Клиент',
+  'order.clientName': 'Имя',
+  'order.phone': 'Телефон',
+  'order.body': 'Кузов',
+  'order.bodyHint': 'Нажмите на элемент, чтобы отметить работы и стоимость',
+  'order.works': 'Работы',
+  'order.noElements': 'Элементы не отмечены',
+  'order.total': 'Предварительная стоимость',
+  'order.notes': 'Примечания',
+  'order.notesPh': 'Общие замечания, состояние, договорённости…',
+  'order.delete': 'Удалить заказ',
+  'order.deleteConfirm': 'Удалить заказ? Это действие нельзя отменить.',
+  'order.bodyLost': 'В кузове «{body}» нет элементов: {names}. Отметки по ним будут удалены. Продолжить?',
+
+  // шторка элемента
+  'sheet.elementTotal': 'Предварительно по элементу',
+  'sheet.photos': 'Фото повреждений',
+  'sheet.note': 'Комментарий к элементу (необязательно)',
+  'sheet.clearConfirm': 'Удалить отметки и {n} фото этого элемента?',
+  'sheet.price': 'Стоимость: {work}',
+
+  // фото
+  'photo.camera': '📷 Камера',
+  'photo.gallery': '🖼 Галерея',
+  'photo.saving': 'Сохраняю…',
+  'photo.saveError': 'Не удалось сохранить фото: {e}',
+  'photo.open': 'Открыть фото',
+  'photo.delete': 'Удалить фото',
+  'photo.deleteConfirm': 'Удалить фото?',
+
+  // отправка
+  'share.title': 'Лист приёмки',
+  'share.pdf': 'Отправить PDF',
+  'share.pdfHint': 'WhatsApp, e-mail, мессенджеры',
+  'share.download': 'Скачать PDF',
+  'share.whatsapp': 'Текст в WhatsApp клиенту',
+  'share.whatsappHint': 'Откроет чат с номером клиента',
+  'share.print': 'Печать',
+  'share.making': 'Готовлю PDF…',
+  'share.error': 'Не удалось создать PDF: {e}',
+  'share.noPhone': 'У клиента не указан телефон — WhatsApp откроется без адресата',
+
+  // проверки
+  'v.plateLen': 'Длина номера 4–8 символов',
+  'v.plateLetters': 'Буквы B, D, I, O, Z обычно не встречаются после кода повята',
+  'v.plateOk': 'Формат PL',
+  'v.plateIndividual': 'Индивидуальный номер PL',
+  'v.plateService': 'Служебный номер PL',
+  'v.plateForeign': 'Не похоже на польский номер — проверьте (или авто иностранное)',
+  'v.vinIOQ': 'В VIN нет букв I, O, Q — вероятно, это 1 или 0',
+  'v.vinLen': 'VIN — 17 символов, сейчас {n}',
+  'v.vinOkNoCheck': '17 символов (контрольная цифра не совпала — для EU это нормально)',
+  'v.vinOk': '17 символов, контрольная цифра верна',
+
+  // настройки
+  'set.title': 'Настройки',
+  'set.lang': 'Язык интерфейса',
+  'set.docLang': 'Язык документов для клиента',
+  'set.shop': 'Данные сервиса',
+  'set.shopHint': 'Печатаются в шапке листа приёмки',
+  'set.shopName': 'Название',
+  'set.shopAddress': 'Адрес',
+  'set.shopPhone': 'Телефон',
+  'set.shopNip': 'NIP',
+  'set.prices': 'Цены по умолчанию',
+  'set.pricesHint': 'Подставляются при отметке работы, если цена для элемента ещё не введена. Пустое поле — без подстановки.',
+  'set.data': 'Данные',
+  'set.storage': 'Занято на устройстве: {used}',
+  'set.version': 'Версия {v}',
+
+  // документ
+  'doc.title': 'Лист приёмки автомобиля',
+  'doc.number': '№ {n}',
+  'doc.date': 'Дата',
+  'doc.element': 'Элемент',
+  'doc.workList': 'Виды работ',
+  'doc.price': 'Стоимость',
+  'doc.photos': 'Фото повреждений',
+  'doc.signClient': 'Клиент',
+  'doc.signMaster': 'Мастер-приёмщик',
+  'doc.disclaimer': 'Стоимость предварительная и может измениться после разборки и дефектовки.',
+  'doc.textHeader': 'Здравствуйте! Лист приёмки автомобиля {car}:',
+
+  // типы кузова
+  'body.sedan': 'Седан',
+  'body.hatchback': 'Хэтчбек',
+  'body.wagon': 'Универсал',
+  'body.suv': 'Внедорожник',
+  'body.coupe': 'Купе',
+  'body.pickup': 'Пикап',
+  'map.front': 'ПЕРЕД',
+  'map.rear': 'ЗАД',
+  'map.left': 'ЛЕВЫЙ БОРТ',
+  'map.right': 'ПРАВЫЙ БОРТ',
+  'map.aria': 'Развёртка кузова',
+
+  // виды работ
+  'work.replace': 'Замена',
+  'work.repair': 'Ремонт / рихтовка',
+  'work.paint_partial': 'Окрас частичный',
+  'work.paint_full': 'Окрас полный',
+  'work.polish': 'Полировка',
+  'work.rr': 'Снятие / установка',
+  'work.plastic': 'Ремонт пластика',
+  'work.pdr': 'PDR (без покраски)',
+  'work.weld': 'Сварка',
+}
+
+const pl: Dict = {
+  'app.new': 'Nowe zlecenie',
+  'app.back': 'Wstecz',
+  'app.menu': 'Menu',
+  'app.close': 'Zamknij',
+  'app.done': 'Gotowe',
+  'app.clear': 'Wyczyść',
+  'app.settings': 'Ustawienia',
+  'app.share': 'Wyślij',
+
+  'list.search': 'Szukaj: rejestracja, VIN, marka, klient',
+  'list.empty': 'Nie ma jeszcze żadnych zleceń.',
+  'list.accept': 'Przyjmij pojazd',
+  'list.notFound': 'Nic nie znaleziono',
+  'list.noPlate': '— bez rejestracji —',
+  'list.noMake': 'Marka nieokreślona',
+  'list.elements': 'Elementów: {n}',
+  'list.noWorks': 'Brak zaznaczonych prac',
+  'list.backup': 'Zapisz kopię zapasową',
+  'list.restore': 'Wczytaj z kopii…',
+  'list.restoreConfirm': 'Wczytać {n} zleceń? Obecne dane ({m}) zostaną zastąpione.',
+
+  'status.new': 'Przyjęty',
+  'status.in_work': 'W naprawie',
+  'status.done': 'Gotowy',
+
+  'order.car': 'Pojazd',
+  'order.plate': 'Nr rejestracyjny (PL)',
+  'order.vin': 'VIN',
+  'order.vinPh': '17 znaków',
+  'order.make': 'Marka',
+  'order.model': 'Model',
+  'order.year': 'Rok',
+  'order.mileage': 'Przebieg, km',
+  'order.paint': 'Lakier',
+  'order.color': 'Kolor',
+  'order.colorPh': 'Srebrny metalik',
+  'order.paintCode': 'Kod lakieru',
+  'order.formula': 'Receptura lakieru',
+  'order.formulaPh': 'Składnik — ilość, g\nnp.: 9140 — 412.5\n9160 — 38.2',
+  'order.client': 'Klient',
+  'order.clientName': 'Imię i nazwisko',
+  'order.phone': 'Telefon',
+  'order.body': 'Nadwozie',
+  'order.bodyHint': 'Dotknij element, aby zaznaczyć prace i koszt',
+  'order.works': 'Prace',
+  'order.noElements': 'Brak zaznaczonych elementów',
+  'order.total': 'Wstępny koszt',
+  'order.notes': 'Uwagi',
+  'order.notesPh': 'Uwagi ogólne, stan pojazdu, ustalenia…',
+  'order.delete': 'Usuń zlecenie',
+  'order.deleteConfirm': 'Usunąć zlecenie? Tej operacji nie można cofnąć.',
+  'order.bodyLost': 'Nadwozie „{body}” nie ma elementów: {names}. Zaznaczenia zostaną usunięte. Kontynuować?',
+
+  'sheet.elementTotal': 'Wstępnie za element',
+  'sheet.photos': 'Zdjęcia uszkodzeń',
+  'sheet.note': 'Komentarz do elementu (opcjonalnie)',
+  'sheet.clearConfirm': 'Usunąć zaznaczenia i {n} zdjęć tego elementu?',
+  'sheet.price': 'Koszt: {work}',
+
+  'photo.camera': '📷 Aparat',
+  'photo.gallery': '🖼 Galeria',
+  'photo.saving': 'Zapisuję…',
+  'photo.saveError': 'Nie udało się zapisać zdjęcia: {e}',
+  'photo.open': 'Otwórz zdjęcie',
+  'photo.delete': 'Usuń zdjęcie',
+  'photo.deleteConfirm': 'Usunąć zdjęcie?',
+
+  'share.title': 'Protokół przyjęcia',
+  'share.pdf': 'Wyślij PDF',
+  'share.pdfHint': 'WhatsApp, e-mail, komunikatory',
+  'share.download': 'Pobierz PDF',
+  'share.whatsapp': 'Tekst na WhatsApp do klienta',
+  'share.whatsappHint': 'Otworzy czat z numerem klienta',
+  'share.print': 'Drukuj',
+  'share.making': 'Przygotowuję PDF…',
+  'share.error': 'Nie udało się utworzyć PDF: {e}',
+  'share.noPhone': 'Brak telefonu klienta — WhatsApp otworzy się bez odbiorcy',
+
+  'v.plateLen': 'Numer ma 4–8 znaków',
+  'v.plateLetters': 'Litery B, D, I, O, Z zwykle nie występują po wyróżniku powiatu',
+  'v.plateOk': 'Format PL',
+  'v.plateIndividual': 'Tablica indywidualna PL',
+  'v.plateService': 'Tablica służbowa PL',
+  'v.plateForeign': 'Nie wygląda na polską tablicę — sprawdź (lub pojazd zagraniczny)',
+  'v.vinIOQ': 'VIN nie zawiera liter I, O, Q — prawdopodobnie to 1 lub 0',
+  'v.vinLen': 'VIN ma 17 znaków, teraz {n}',
+  'v.vinOkNoCheck': '17 znaków (cyfra kontrolna nie zgadza się — w UE to normalne)',
+  'v.vinOk': '17 znaków, cyfra kontrolna poprawna',
+
+  'set.title': 'Ustawienia',
+  'set.lang': 'Język interfejsu',
+  'set.docLang': 'Język dokumentów dla klienta',
+  'set.shop': 'Dane warsztatu',
+  'set.shopHint': 'Drukowane w nagłówku protokołu',
+  'set.shopName': 'Nazwa',
+  'set.shopAddress': 'Adres',
+  'set.shopPhone': 'Telefon',
+  'set.shopNip': 'NIP',
+  'set.prices': 'Ceny domyślne',
+  'set.pricesHint': 'Wstawiane przy zaznaczeniu pracy, jeśli cena dla elementu nie została jeszcze wpisana. Puste pole — bez podstawiania.',
+  'set.data': 'Dane',
+  'set.storage': 'Zajęte na urządzeniu: {used}',
+  'set.version': 'Wersja {v}',
+
+  'doc.title': 'Protokół przyjęcia pojazdu',
+  'doc.number': 'Nr {n}',
+  'doc.date': 'Data',
+  'doc.element': 'Element',
+  'doc.workList': 'Zakres prac',
+  'doc.price': 'Koszt',
+  'doc.photos': 'Zdjęcia uszkodzeń',
+  'doc.signClient': 'Klient',
+  'doc.signMaster': 'Przyjmujący',
+  'doc.disclaimer': 'Koszt jest wstępny i może ulec zmianie po demontażu i weryfikacji uszkodzeń.',
+  'doc.textHeader': 'Dzień dobry! Protokół przyjęcia pojazdu {car}:',
+
+  'body.sedan': 'Sedan',
+  'body.hatchback': 'Hatchback',
+  'body.wagon': 'Kombi',
+  'body.suv': 'SUV',
+  'body.coupe': 'Coupé',
+  'body.pickup': 'Pickup',
+  'map.front': 'PRZÓD',
+  'map.rear': 'TYŁ',
+  'map.left': 'LEWA STRONA',
+  'map.right': 'PRAWA STRONA',
+  'map.aria': 'Rozkład nadwozia',
+
+  'work.replace': 'Wymiana',
+  'work.repair': 'Naprawa / prostowanie',
+  'work.paint_partial': 'Lakierowanie częściowe',
+  'work.paint_full': 'Lakierowanie całe',
+  'work.polish': 'Polerowanie',
+  'work.rr': 'Demontaż / montaż',
+  'work.plastic': 'Naprawa plastiku',
+  'work.pdr': 'PDR (bez lakierowania)',
+  'work.weld': 'Spawanie',
+}
+
+// Элементы кузова: [рус. полное, рус. краткое, пол. полное, пол. краткое]
+const ELEMENTS: Record<string, [string, string, string, string]> = {
+  bumper_f: ['Бампер передний', 'Бампер пер', 'Zderzak przedni', 'Zderzak prz.'],
+  headlight_l: ['Фара левая', 'Фара', 'Reflektor lewy', 'Reflektor'],
+  headlight_r: ['Фара правая', 'Фара', 'Reflektor prawy', 'Reflektor'],
+  grille: ['Решётка радиатора', 'Решётка', 'Atrapa chłodnicy', 'Atrapa'],
+  hood: ['Капот', 'Капот', 'Maska', 'Maska'],
+  windshield: ['Лобовое стекло', 'Лобовое', 'Szyba przednia', 'Szyba prz.'],
+  roof: ['Крыша', 'Крыша', 'Dach', 'Dach'],
+  roof_cab: ['Крыша кабины', 'Крыша', 'Dach kabiny', 'Dach'],
+  rear_glass: ['Заднее стекло', 'Зад. стекло', 'Szyba tylna', 'Szyba tył'],
+  rear_glass_cab: ['Заднее стекло кабины', 'Стекло', 'Szyba tylna kabiny', 'Szyba'],
+  trunk: ['Крышка багажника', 'Багажник', 'Klapa bagażnika', 'Klapa'],
+  liftgate: ['Дверь багажника', 'Дв. багажника', 'Klapa tylna', 'Klapa tylna'],
+  bed: ['Платформа (пол кузова)', 'Платформа', 'Skrzynia ładunkowa', 'Skrzynia'],
+  tailgate: ['Задний борт', 'Задний борт', 'Klapa skrzyni', 'Klapa skrzyni'],
+  spare_wheel: ['Запасное колесо / кожух', 'Запаска', 'Koło zapasowe / osłona', 'Zapas'],
+  roof_rail_l: ['Рейлинг левый', '', 'Reling dachowy lewy', ''],
+  roof_rail_r: ['Рейлинг правый', '', 'Reling dachowy prawy', ''],
+  taillight_l: ['Фонарь левый', 'Фонарь', 'Lampa tylna lewa', 'Lampa'],
+  taillight_r: ['Фонарь правый', 'Фонарь', 'Lampa tylna prawa', 'Lampa'],
+  bumper_r: ['Бампер задний', 'Бампер зад', 'Zderzak tylny', 'Zderzak tył'],
+
+  fender_f_l: ['Крыло переднее левое', 'Крыло Л', 'Błotnik przedni lewy', 'Błotnik L'],
+  fender_f_r: ['Крыло переднее правое', 'Крыло П', 'Błotnik przedni prawy', 'Błotnik P'],
+  door_f_l: ['Дверь передняя левая', 'Дв.пер Л', 'Drzwi przednie lewe', 'Drzwi prz. L'],
+  door_f_r: ['Дверь передняя правая', 'Дв.пер П', 'Drzwi przednie prawe', 'Drzwi prz. P'],
+  door_r_l: ['Дверь задняя левая', 'Дв.зад Л', 'Drzwi tylne lewe', 'Drzwi tył L'],
+  door_r_r: ['Дверь задняя правая', 'Дв.зад П', 'Drzwi tylne prawe', 'Drzwi tył P'],
+  door_l: ['Дверь левая', 'Дверь Л', 'Drzwi lewe', 'Drzwi L'],
+  door_r: ['Дверь правая', 'Дверь П', 'Drzwi prawe', 'Drzwi P'],
+  quarter_l: ['Крыло заднее левое', 'Кр.зад Л', 'Błotnik tylny lewy', 'Błotn. tył L'],
+  quarter_r: ['Крыло заднее правое', 'Кр.зад П', 'Błotnik tylny prawy', 'Błotn. tył P'],
+  bedside_l: ['Борт платформы левый', 'Борт Л', 'Burta skrzyni lewa', 'Burta L'],
+  bedside_r: ['Борт платформы правый', 'Борт П', 'Burta skrzyni prawa', 'Burta P'],
+  sill_l: ['Порог левый', 'Порог', 'Próg lewy', 'Próg'],
+  sill_r: ['Порог правый', 'Порог', 'Próg prawy', 'Próg'],
+  step_l: ['Подножка левая', 'Подножка', 'Stopień boczny lewy', 'Stopień'],
+  step_r: ['Подножка правая', 'Подножка', 'Stopień boczny prawy', 'Stopień'],
+  mirror_l: ['Зеркало левое', 'Зерк', 'Lusterko lewe', 'Luster.'],
+  mirror_r: ['Зеркало правое', 'Зерк', 'Lusterko prawe', 'Luster.'],
+  pillar_a_l: ['Стойка A левая', 'A', 'Słupek A lewy', 'A'],
+  pillar_a_r: ['Стойка A правая', 'A', 'Słupek A prawy', 'A'],
+  pillar_b_l: ['Стойка B левая', 'B', 'Słupek B lewy', 'B'],
+  pillar_b_r: ['Стойка B правая', 'B', 'Słupek B prawy', 'B'],
+  pillar_c_l: ['Стойка C левая', 'C', 'Słupek C lewy', 'C'],
+  pillar_c_r: ['Стойка C правая', 'C', 'Słupek C prawy', 'C'],
+  pillar_d_l: ['Стойка D левая', 'D', 'Słupek D lewy', 'D'],
+  pillar_d_r: ['Стойка D правая', 'D', 'Słupek D prawy', 'D'],
+}
+
+for (const [k, [rl, rs, pll, pls]] of Object.entries(ELEMENTS)) {
+  ru[`el.${k}`] = rl
+  ru[`els.${k}`] = rs
+  pl[`el.${k}`] = pll
+  pl[`els.${k}`] = pls
+}
+
+const DICTS: Record<Lang, Dict> = { ru, pl }
+
+export type T = (key: string, vars?: Record<string, string | number>) => string
+
+export function makeT(lang: Lang): T {
+  const d = DICTS[lang] ?? ru
+  return (key, vars) => {
+    let s = d[key] ?? ru[key] ?? key
+    if (vars) for (const [k, v] of Object.entries(vars)) s = s.replaceAll(`{${k}}`, String(v))
+    return s
+  }
+}
+
+export const LOCALE: Record<Lang, string> = { ru: 'ru-RU', pl: 'pl-PL' }

@@ -2,7 +2,9 @@ export type Level = 'ok' | 'warn' | 'error' | 'empty'
 
 export interface Check {
   level: Level
+  // ключ перевода из i18n.ts
   message?: string
+  vars?: Record<string, string | number>
 }
 
 // Первая буква польского номера — воеводство (H — службы, U — армия)
@@ -29,17 +31,17 @@ export function formatPlate(raw: string): string {
 export function checkPlatePL(raw: string): Check {
   const s = normalizePlate(raw)
   if (!s) return { level: 'empty' }
-  if (s.length < 4 || s.length > 8) return { level: 'error', message: 'Длина номера 4–8 символов' }
+  if (s.length < 4 || s.length > 8) return { level: 'error', message: 'v.plateLen' }
   if (PL_STANDARD.test(s)) {
     const district = s.match(/^[A-Z]{2,3}/)![0]
     const rest = s.slice(district.length)
     // в польских номерах после кода повята не используют B, D, I, O, Z
-    if (/[BDIOZ]/.test(rest)) return { level: 'warn', message: 'Буквы B, D, I, O, Z обычно не встречаются после кода повята' }
-    return { level: 'ok', message: 'Формат PL' }
+    if (/[BDIOZ]/.test(rest)) return { level: 'warn', message: 'v.plateLetters' }
+    return { level: 'ok', message: 'v.plateOk' }
   }
-  if (PL_INDIVIDUAL.test(s)) return { level: 'ok', message: 'Индивидуальный номер PL' }
-  if (PL_SERVICE.test(s)) return { level: 'ok', message: 'Служебный номер PL' }
-  return { level: 'warn', message: 'Не похоже на польский номер — проверьте (или авто иностранное)' }
+  if (PL_INDIVIDUAL.test(s)) return { level: 'ok', message: 'v.plateIndividual' }
+  if (PL_SERVICE.test(s)) return { level: 'ok', message: 'v.plateService' }
+  return { level: 'warn', message: 'v.plateForeign' }
 }
 
 const VIN_MAP: Record<string, number> = {
@@ -56,8 +58,8 @@ export function normalizeVin(raw: string): string {
 export function checkVin(raw: string): Check {
   const s = normalizeVin(raw)
   if (!s) return { level: 'empty' }
-  if (/[IOQ]/.test(s)) return { level: 'error', message: 'В VIN нет букв I, O, Q — вероятно, это 1 или 0' }
-  if (s.length !== 17) return { level: 'error', message: `VIN — 17 символов, сейчас ${s.length}` }
+  if (/[IOQ]/.test(s)) return { level: 'error', message: 'v.vinIOQ' }
+  if (s.length !== 17) return { level: 'error', message: 'v.vinLen', vars: { n: s.length } }
   let sum = 0
   for (let i = 0; i < 17; i++) {
     const c = s[i]
@@ -67,6 +69,6 @@ export function checkVin(raw: string): Check {
   const rem = sum % 11
   const expected = rem === 10 ? 'X' : String(rem)
   // контрольная цифра обязательна только для Северной Америки, в Европе часто не совпадает
-  if (s[8] !== expected) return { level: 'ok', message: '17 символов (контрольная цифра не совпала — для EU это нормально)' }
-  return { level: 'ok', message: '17 символов, контрольная цифра верна' }
+  if (s[8] !== expected) return { level: 'ok', message: 'v.vinOkNoCheck' }
+  return { level: 'ok', message: 'v.vinOk' }
 }

@@ -17,7 +17,7 @@ function save(orders: Order[]) {
   try {
     localStorage.setItem(KEY, JSON.stringify(orders))
   } catch (e) {
-    alert('Не удалось сохранить данные: ' + (e as Error).message)
+    alert('Не удалось сохранить данные / Nie udało się zapisać danych: ' + (e as Error).message)
   }
 }
 
@@ -84,7 +84,7 @@ export async function exportJson(orders: Order[]) {
 export async function importJson(file: File): Promise<Order[]> {
   const data = JSON.parse(await file.text())
   const list = Array.isArray(data) ? data : data.orders
-  if (!Array.isArray(list)) throw new Error('Неверный формат файла')
+  if (!Array.isArray(list)) throw new Error('Неверный формат файла / Nieprawidłowy format pliku')
   if (data.photos) await restorePhotos(data.photos)
   return (list as Partial<Order>[]).map(migrate)
 }
