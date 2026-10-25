@@ -132,10 +132,31 @@ export function orderText(o: Order, lang: Lang, s: Settings): string {
   return lines.join('\n')
 }
 
-/** Польский номер без кода страны → +48 */
-export function whatsappUrl(phone: string, text: string): string {
+/** Польский номер без кода страны → 48…, только цифры */
+function intlDigits(phone: string): string {
   let d = phone.replace(/\D/g, '')
   if (d.length === 9) d = '48' + d
   if (d.startsWith('00')) d = d.slice(2)
-  return `https://wa.me/${d}?text=${encodeURIComponent(text)}`
+  return d
+}
+
+export function whatsappUrl(phone: string, text: string): string {
+  return `https://wa.me/${intlDigits(phone)}?text=${encodeURIComponent(text)}`
+}
+
+/** «?&body=» понимают и Android, и iPhone */
+export function smsUrl(phone: string, text: string): string {
+  const d = intlDigits(phone)
+  return `sms:${d ? '+' + d : ''}?&body=${encodeURIComponent(text)}`
+}
+
+/** Текст через системное меню «Поделиться»; false — если меню нет */
+export async function shareText(text: string, title: string): Promise<boolean> {
+  if (!navigator.share) return false
+  try {
+    await navigator.share({ title, text })
+  } catch (e) {
+    if ((e as Error).name !== 'AbortError') return false
+  }
+  return true
 }

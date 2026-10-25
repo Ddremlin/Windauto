@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { LANGS, makeT, type Lang } from '../i18n'
 import { useSettings } from '../settings'
-import { downloadBlob, makePdf, orderText, pdfFileName, sharePdf, whatsappUrl } from '../share'
+import { downloadBlob, makePdf, orderText, pdfFileName, sharePdf, shareText, smsUrl, whatsappUrl } from '../share'
 import type { Order } from '../types'
 
 interface Props {
@@ -36,9 +36,28 @@ export default function ShareSheet({ order, onClose }: Props) {
     }
   }
 
+  const text = () => orderText(order, lang, settings)
+
   const whatsapp = () => {
     if (!order.phone) alert(t('share.noPhone'))
-    window.open(whatsappUrl(order.phone, orderText(order, lang, settings)), '_blank')
+    window.open(whatsappUrl(order.phone, text()), '_blank')
+  }
+
+  const sms = () => {
+    window.location.href = smsUrl(order.phone, text())
+  }
+
+  const copy = async () => {
+    try {
+      await navigator.clipboard.writeText(text())
+      alert(t('share.copied'))
+    } catch {
+      prompt(t('share.copyManual'), text())
+    }
+  }
+
+  const message = async () => {
+    if (!(await shareText(text(), makeT(lang)('doc.title')))) copy()
   }
 
   return (
@@ -86,6 +105,26 @@ export default function ShareSheet({ order, onClose }: Props) {
             <span>
               <b>{t('share.whatsapp')}</b>
               <small>{order.phone || t('share.whatsappHint')}</small>
+            </span>
+          </button>
+          <button className="share-item" onClick={sms}>
+            <span className="share-icon">✉️</span>
+            <span>
+              <b>{t('share.sms')}</b>
+              <small>{order.phone || t('share.smsHint')}</small>
+            </span>
+          </button>
+          <button className="share-item" onClick={message}>
+            <span className="share-icon">📨</span>
+            <span>
+              <b>{t('share.text')}</b>
+              <small>{t('share.textHint')}</small>
+            </span>
+          </button>
+          <button className="share-item" onClick={copy}>
+            <span className="share-icon">📋</span>
+            <span>
+              <b>{t('share.copy')}</b>
             </span>
           </button>
           <button
