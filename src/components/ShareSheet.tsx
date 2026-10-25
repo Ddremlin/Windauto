@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { LANGS, makeT, type Lang } from '../i18n'
 import { useSettings } from '../settings'
-import { downloadBlob, makePdf, orderText, pdfFileName, sharePdf, shareText, smsUrl, whatsappUrl } from '../share'
+import { downloadBlob, mailtoUrl, makePdf, orderText, pdfFileName, sharePdf, shareText, smsUrl, whatsappUrl } from '../share'
 import type { Order } from '../types'
 
 interface Props {
@@ -45,6 +45,12 @@ export default function ShareSheet({ order, onClose }: Props) {
 
   const sms = () => {
     window.location.href = smsUrl(order.phone, text())
+  }
+
+  const email = () => {
+    const tt = makeT(lang)
+    const car = [order.make, order.model, order.plate].filter(Boolean).join(' ')
+    window.location.href = mailtoUrl(order.email, `${tt('doc.title')}${car ? ' — ' + car : ''}`, text())
   }
 
   const copy = async () => {
@@ -112,6 +118,13 @@ export default function ShareSheet({ order, onClose }: Props) {
             <span>
               <b>{t('share.sms')}</b>
               <small>{order.phone || t('share.smsHint')}</small>
+            </span>
+          </button>
+          <button className="share-item" onClick={email}>
+            <span className="share-icon">📧</span>
+            <span>
+              <b>{t('share.email')}</b>
+              <small>{order.email || t('share.emailHint')}</small>
             </span>
           </button>
           <button className="share-item" onClick={message}>

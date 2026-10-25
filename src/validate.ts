@@ -72,3 +72,9 @@ export function checkVin(raw: string): Check {
   if (s[8] !== expected) return { level: 'ok', message: 'v.vinOkNoCheck' }
   return { level: 'ok', message: 'v.vinOk' }
 }
+
+export function checkEmail(raw: string): Check {
+  const s = raw.trim()
+  if (!s) return { level: 'empty' }
+  return /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(s) ? { level: 'ok' } : { level: 'warn', message: 'v.email' }
+}

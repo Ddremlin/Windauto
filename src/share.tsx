@@ -150,6 +150,10 @@ export function smsUrl(phone: string, text: string): string {
   return `sms:${d ? '+' + d : ''}?&body=${encodeURIComponent(text)}`
 }
 
+export function mailtoUrl(email: string, subject: string, text: string): string {
+  return `mailto:${encodeURIComponent(email.trim())}?subject=${encodeURIComponent(subject)}&body=${encodeURIComponent(text)}`
+}
+
 /** Текст через системное меню «Поделиться»; false — если меню нет */
 export async function shareText(text: string, title: string): Promise<boolean> {
   if (!navigator.share) return false

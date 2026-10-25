@@ -39,6 +39,7 @@ export interface Order {
   bodyType: BodyType
   client: string
   phone: string
+  email: string
   notes: string
   elements: Record<string, ElementWork>
 }
