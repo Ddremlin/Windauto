@@ -6,6 +6,7 @@ import type { Order } from '../types'
 import { formatPlate } from '../validate'
 import { WORKS, WORK_BY_ID, elementTotal, formatMoney, orderTotal } from '../works'
 import BodyMap from './BodyMap'
+import { PlateBadge } from './Plate'
 
 export const DOC_WIDTH = 794 // A4 при 96 dpi
 
@@ -26,7 +27,7 @@ const css = `
 .doc-title div { color: #444; }
 .doc h2 { font-size: 14px; margin: 16px 0 6px; text-transform: uppercase; letter-spacing: .04em; color: #333; }
 .doc-grid { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 4px 16px; }
-.doc-kv span { color: #666; font-size: 11px; display: block; }
+.doc-kv > span { color: #666; font-size: 11px; display: block; }
 .doc-kv b { font-weight: 600; }
 .doc-mono { font-family: 'Roboto Mono', Menlo, monospace; letter-spacing: .04em; }
 .doc-formula { white-space: pre-wrap; font-family: 'Roboto Mono', Menlo, monospace; font-size: 12px; background: #f4f5f7; padding: 6px 8px; border-radius: 4px; margin-top: 6px; }
@@ -101,7 +102,14 @@ export default function AcceptanceDoc({ order, photoUrls }: Props) {
       <div data-block>
         <h2>{t('order.car')}</h2>
         <div className="doc-grid">
-          {kv(t('order.plate'), order.plate ? formatPlate(order.plate) : '', true)}
+          {order.plate && (
+            <div className="doc-kv">
+              <span>{t('order.plate')}</span>
+              <span>
+                <PlateBadge text={formatPlate(order.plate, order.plateCountry)} country={order.plateCountry} height={26} />
+              </span>
+            </div>
+          )}
           {kv(t('order.vin'), order.vin, true)}
           {kv(t('order.make'), [order.make, order.model].filter(Boolean).join(' '))}
           {kv(t('order.year'), order.year)}

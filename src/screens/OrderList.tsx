@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { PlateBadge } from '../components/Plate'
 import { useSettings } from '../settings'
 import { syncNow, useSyncStatus } from '../sync'
 import type { Order } from '../types'
@@ -71,7 +72,11 @@ export default function OrderList({ orders, onOpen, onCreate, onSettings }: Prop
           return (
             <button key={o.id} className="card" onClick={() => onOpen(o.id)}>
               <div className="card-row">
-                <span className="plate">{o.plate ? formatPlate(o.plate) : t('list.noPlate')}</span>
+                {o.plate ? (
+                  <PlateBadge text={formatPlate(o.plate, o.plateCountry)} country={o.plateCountry} height={28} />
+                ) : (
+                  <span className="plate">{t('list.noPlate')}</span>
+                )}
                 <span className={`status st-${o.status}`}>{t(`status.${o.status}`)}</span>
               </div>
               <div className="card-row muted">
