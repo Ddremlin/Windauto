@@ -7,8 +7,7 @@
     "dev": "vite",
     "build": "tsc -b && vite build",
     "lint": "oxlint",
-    "preview": "vite preview",
-    "deploy": "./deploy.sh"
+    "preview": "vite preview"
   },
   "dependencies": {
     "html2canvas-pro": "^1.6.7",
