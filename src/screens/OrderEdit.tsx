@@ -4,11 +4,12 @@ import BodyMap from '../components/BodyMap'
 import ElementSheet from '../components/ElementSheet'
 import Field from '../components/Field'
 import { PhotoStrip } from '../components/Photos'
+import { PlateInput } from '../components/Plate'
 import ShareSheet from '../components/ShareSheet'
 import { deletePhotos, orderPhotoIds } from '../photos'
 import { useSettings } from '../settings'
 import type { BodyType, ElementWork, Order } from '../types'
-import { checkEmail, checkPlatePL, checkVin, formatPlate, normalizeVin } from '../validate'
+import { checkEmail, checkPlate, checkVin, formatPlate, normalizeVin } from '../validate'
 import { STATUSES, WORKS, WORK_BY_ID, elementTotal, formatMoney, orderTotal } from '../works'
 
 interface Props {
@@ -50,7 +51,7 @@ export default function OrderEdit({ initial, onSave, onDelete, onBack }: Props) 
     onChange: (v: string) => update({ [key]: v } as Partial<Order>),
   })
 
-  const plateCheck = checkPlatePL(order.plate)
+  const plateCheck = checkPlate(order.plate, order.plateCountry)
   const vinCheck = checkVin(order.vin)
   const layout = getLayout(order.bodyType)
   const marked = layout.elements.filter((e) => order.elements[e.id])
@@ -86,7 +87,7 @@ export default function OrderEdit({ initial, onSave, onDelete, onBack }: Props) 
     <div className="screen">
       <header className="topbar">
         <button className="icon-btn" aria-label={t('app.back')} onClick={onBack}>←</button>
-        <h1>{order.plate ? formatPlate(order.plate) : t('app.new')}</h1>
+        <h1>{order.plate ? formatPlate(order.plate, order.plateCountry) : t('app.new')}</h1>
         <button className="icon-btn" aria-label={t('app.share')} onClick={() => setShare(true)}>⇪</button>
       </header>
 
@@ -109,14 +110,15 @@ export default function OrderEdit({ initial, onSave, onDelete, onBack }: Props) 
         <section className="panel">
           <h2>{t('order.car')}</h2>
           <div className="grid">
-            <Field
+            <PlateInput
               label={t('order.plate')}
-              placeholder="WA 12345"
-              upper
-              mono
-              {...field('plate')}
-              onBlur={() => order.plate && update({ plate: formatPlate(order.plate) })}
-              check={plateCheck}
+              value={order.plate}
+              country={order.plateCountry}
+              onChange={(v) => update({ plate: v })}
+              onCountry={(c) => update({ plateCountry: c })}
+              onBlur={() => order.plate && update({ plate: formatPlate(order.plate, order.plateCountry) })}
+              level={plateCheck.level}
+              hint={plateCheck.message ? t(plateCheck.message, plateCheck.vars) : undefined}
             />
             <Field
               label={t('order.vin')}

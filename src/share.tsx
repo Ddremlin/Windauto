@@ -115,7 +115,7 @@ export function orderText(o: Order, lang: Lang, s: Settings): string {
   const t = makeT(lang)
   const layout = getLayout(o.bodyType)
   const marked = layout.elements.filter((e) => o.elements[e.id]?.works.length)
-  const car = [o.make, o.model, o.plate && formatPlate(o.plate)].filter(Boolean).join(' ')
+  const car = [o.make, o.model, o.plate && formatPlate(o.plate, o.plateCountry)].filter(Boolean).join(' ')
   const lines = [t('doc.textHeader', { car }), '']
   if (o.vin) lines.push(`VIN: ${o.vin}`)
   for (const e of marked) {

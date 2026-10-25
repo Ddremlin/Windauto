@@ -20,12 +20,20 @@ export function normalizePlate(raw: string): string {
   return s
 }
 
-/** "WA12345" -> "WA 12345", "KRA1234" -> "KRA 1234" */
-export function formatPlate(raw: string): string {
+/** "WA12345" -> "WA 12345", "KRA1234" -> "KRA 1234"; чужие номера — как ввели */
+export function formatPlate(raw: string, country = 'PL'): string {
+  if (country !== 'PL') return raw.toUpperCase().replace(/\s+/g, ' ').trim()
   const s = normalizePlate(raw)
   if (PL_INDIVIDUAL.test(s)) return `${s.slice(0, 2)} ${s.slice(2)}`
   const m = s.match(/^([A-Z]{2,3})([0-9].*)$/) ?? s.match(/^([A-Z]{3})(.+)$/)
   return m ? `${m[1]} ${m[2]}` : s
+}
+
+export function checkPlate(raw: string, country = 'PL'): Check {
+  if (country === 'PL') return checkPlatePL(raw)
+  const s = normalizePlate(raw)
+  if (!s) return { level: 'empty' }
+  return s.length < 2 || s.length > 10 ? { level: 'warn', message: 'v.plateLenAny' } : { level: 'ok' }
 }
 
 export function checkPlatePL(raw: string): Check {

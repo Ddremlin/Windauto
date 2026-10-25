@@ -35,7 +35,7 @@ export function newOrder(): Order {
     createdAt: now,
     updatedAt: now,
     status: 'new',
-    plate: '', vin: '', make: '', model: '', year: '', mileage: '',
+    plate: '', plateCountry: 'PL', vin: '', make: '', model: '', year: '', mileage: '',
     color: '', paintCode: '', paintFormula: '',
     bodyType: 'sedan',
     client: '', phone: '', email: '', notes: '',

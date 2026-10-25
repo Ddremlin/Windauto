@@ -28,6 +28,7 @@ export interface Order {
   updatedAt: number
   status: OrderStatus
   plate: string
+  plateCountry: string
   vin: string
   make: string
   model: string
