@@ -72,6 +72,15 @@ export function applyRemoteShared(data: SharedSettings, updatedAt: number) {
   commit({ ...settings, ...data, sharedUpdatedAt: updatedAt })
 }
 
+/** Есть ли в общих настройках что-то заполненное */
+export const hasShared = (s: Settings) =>
+  Boolean(s.shopName || s.shopAddress || s.shopPhone || s.shopNip || Object.keys(s.defaultPrices).length)
+
+/** Поставить отметку времени общим настройкам без уведомления (0 — уступить серверу) */
+export function setSharedStamp(at: number) {
+  commit({ ...settings, sharedUpdatedAt: at })
+}
+
 export function onSharedChange(fn: () => void) {
   sharedListeners.add(fn)
   return () => sharedListeners.delete(fn)

@@ -234,7 +234,7 @@ const routes = {
         accepted.push(o.id)
         changed = true
       }
-      if (settings && typeof settings.updatedAt === 'number') {
+      if (settings && typeof settings.updatedAt === 'number' && u.role === 'admin') {
         const cur = db.prepare("SELECT updated_at FROM shared WHERE key = 'settings'").get()
         if (!cur || cur.updated_at <= settings.updatedAt) {
           db.prepare(

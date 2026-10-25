@@ -3,7 +3,7 @@
 // когда есть связь. Конфликты: побеждает более позднее изменение заказа.
 import { useSyncExternalStore } from 'react'
 import { deletePhotos, getLocalPhoto, markRemoteSource, orderPhotoIds } from './photos'
-import { applyRemoteShared, getSettings, onSharedChange, pickShared, type SharedSettings } from './settings'
+import { applyRemoteShared, getSettings, hasShared, onSharedChange, pickShared, setSharedStamp, type SharedSettings } from './settings'
 import { getOrders, migrate, onLocalChange, removeOrder, upsertOrder } from './storage'
 import type { Order } from './types'
 
@@ -183,6 +183,14 @@ export async function syncNow(): Promise<void> {
     }
 
     // 2. свои изменения
+    // общие настройки отправляет только администратор; заполненные в старой
+    // версии (без отметки времени) получают минимальную, чтобы не затереть серверные
+    const isAdmin = state.user?.role === 'admin'
+    if (!isAdmin) state.sharedDirty = false
+    else if (!getSettings().sharedUpdatedAt && hasShared(getSettings())) {
+      setSharedStamp(1)
+      state.sharedDirty = true
+    }
     const sent = new Map<string, number>()
     const payload: RemoteOrder[] = []
     for (const id of Object.keys(state.dirty)) {
@@ -275,7 +283,10 @@ export async function connect(server: string, login: string, password: string) {
   // всё, что уже есть на телефоне, отправляем на сервер
   const dirty: Record<string, true> = {}
   getOrders().forEach((o) => (dirty[o.id] = true))
-  state = { ...EMPTY, server: url, token: res.token, user: res.user, dirty, sharedDirty: getSettings().sharedUpdatedAt > 0 }
+  const isAdmin = res.user.role === 'admin'
+  // у сотрудника цены и реквизиты всегда берутся с сервера
+  if (!isAdmin) setSharedStamp(0)
+  state = { ...EMPTY, server: url, token: res.token, user: res.user, dirty, sharedDirty: isAdmin && getSettings().sharedUpdatedAt > 0 }
   persist()
   setStatus({ error: null, authError: false })
   startLive()
@@ -314,7 +325,7 @@ export function initSync() {
     scheduleSync()
   })
   onSharedChange(() => {
-    if (!state.token) return
+    if (!state.token || state.user?.role !== 'admin') return
     state.sharedDirty = true
     persist()
     setStatus()
