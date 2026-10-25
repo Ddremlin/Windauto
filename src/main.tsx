@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import App from './App.tsx'
 import { requestPersistence } from './photos'
 import { SettingsProvider } from './settings'
+import { initSync } from './sync'
 import './index.css'
 
 createRoot(document.getElementById('root')!).render(
@@ -14,6 +15,7 @@ createRoot(document.getElementById('root')!).render(
 )
 
 requestPersistence()
+initSync()
 
 // офлайн-режим и установка на главный экран (только в собранной версии)
 if (import.meta.env.PROD && 'serviceWorker' in navigator) {

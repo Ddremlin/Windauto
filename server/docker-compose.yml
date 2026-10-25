@@ -1,0 +1,31 @@
+# Windauto: сервер синхронизации + Caddy (HTTPS с автоматическим сертификатом)
+# Запуск: DOMAIN=1.2.3.4.sslip.io docker compose up -d
+services:
+  api:
+    build: .
+    restart: unless-stopped
+    environment:
+      ADMIN_LOGIN: ${ADMIN_LOGIN:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-https://ddremlin.github.io}
+    volumes:
+      - ./data:/data
+
+  caddy:
+    image: caddy:2
+    restart: unless-stopped
+    ports:
+      - "80:80"
+      - "443:443"
+    environment:
+      DOMAIN: ${DOMAIN:?укажите DOMAIN, например 1.2.3.4.sslip.io}
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    depends_on:
+      - api
+
+volumes:
+  caddy_data:
+  caddy_config:

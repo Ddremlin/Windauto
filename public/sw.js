@@ -1,5 +1,5 @@
 // Сеть в приоритете, кэш — запасной вариант без интернета
-const CACHE = 'windauto-v3'
+const CACHE = 'windauto-v4'
 
 self.addEventListener('install', () => self.skipWaiting())
 self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()))

@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { BODY_TYPES, getLayout } from '../body'
 import BodyMap from '../components/BodyMap'
 import ElementSheet from '../components/ElementSheet'
@@ -27,8 +27,13 @@ export default function OrderEdit({ initial, onSave, onDelete, onBack }: Props) 
   const [sheet, setSheet] = useState<string | null>(null)
   const [share, setShare] = useState(false)
 
+  // заказ изменили на другом телефоне — показываем свежую версию
+  useEffect(() => {
+    if (initial.updatedAt > order.updatedAt) setOrder(initial)
+  }, [initial, order.updatedAt])
+
   const update = (patch: Partial<Order>) => {
-    const next = { ...order, ...patch }
+    const next = { ...order, ...patch, updatedAt: Math.max(Date.now(), order.updatedAt + 1) }
     setOrder(next)
     if (hasContent(next)) onSave(next)
   }
