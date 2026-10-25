@@ -113,12 +113,13 @@ export default function AcceptanceDoc({ order, photoUrls }: Props) {
         {order.paintFormula && <div className="doc-formula">{order.paintFormula}</div>}
       </div>
 
-      {(order.client || order.phone) && (
+      {(order.client || order.phone || order.email) && (
         <div data-block>
           <h2>{t('order.client')}</h2>
           <div className="doc-grid">
             {kv(t('order.clientName'), order.client)}
             {kv(t('order.phone'), order.phone)}
+            {kv(t('order.email'), order.email)}
           </div>
         </div>
       )}

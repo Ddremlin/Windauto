@@ -8,7 +8,7 @@ import ShareSheet from '../components/ShareSheet'
 import { deletePhotos, orderPhotoIds } from '../photos'
 import { useSettings } from '../settings'
 import type { BodyType, ElementWork, Order } from '../types'
-import { checkPlatePL, checkVin, formatPlate, normalizeVin } from '../validate'
+import { checkEmail, checkPlatePL, checkVin, formatPlate, normalizeVin } from '../validate'
 import { STATUSES, WORKS, WORK_BY_ID, elementTotal, formatMoney, orderTotal } from '../works'
 
 interface Props {
@@ -19,7 +19,7 @@ interface Props {
 }
 
 const hasContent = (o: Order) =>
-  Boolean(o.plate || o.vin || o.make || o.model || o.client || o.phone || o.notes || Object.keys(o.elements).length)
+  Boolean(o.plate || o.vin || o.make || o.model || o.client || o.phone || o.email || o.notes || Object.keys(o.elements).length)
 
 export default function OrderEdit({ initial, onSave, onDelete, onBack }: Props) {
   const { t, locale } = useSettings()
@@ -158,6 +158,16 @@ export default function OrderEdit({ initial, onSave, onDelete, onBack }: Props) 
           <div className="grid">
             <Field label={t('order.clientName')} {...field('client')} />
             <Field label={t('order.phone')} type="tel" inputMode="tel" placeholder="+48" {...field('phone')} />
+            <Field
+              label={t('order.email')}
+              type="email"
+              inputMode="email"
+              placeholder="jan@example.pl"
+              wide
+              {...field('email')}
+              onBlur={() => order.email && update({ email: order.email.trim() })}
+              check={checkEmail(order.email)}
+            />
           </div>
         </section>
 

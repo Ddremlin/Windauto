@@ -26,7 +26,7 @@ export default function OrderList({ orders, onOpen, onCreate, onSettings }: Prop
     return list.filter(
       (o) =>
         (nq && (normalizePlate(o.plate).includes(nq) || o.vin.includes(nq))) ||
-        `${o.make} ${o.model} ${o.client} ${o.phone}`.toLowerCase().includes(tq),
+        `${o.make} ${o.model} ${o.client} ${o.phone} ${o.email}`.toLowerCase().includes(tq),
     )
   }, [orders, q])
 
