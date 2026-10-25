@@ -99,7 +99,8 @@ export default function Settings({ orders, onImport, onBack }: Props) {
         <section className="panel">
           <h2>{t('set.prices')}</h2>
           <p className="hint">{locked ? t('sync.sharedLocked') : t('set.pricesHint')}</p>
-          <div className="price-list">
+          {/* key: поля без контроля — пересоздаём, когда цены пришли с сервера */}
+          <div className="price-list" key={sync.connected && locked ? settings.sharedUpdatedAt : 0}>
             {WORKS.map((w) => (
               <label key={w.id} className="price-row">
                 <span className="swatch" style={{ background: w.color }} />
