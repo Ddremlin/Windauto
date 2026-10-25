@@ -33,7 +33,7 @@ fi
 docker compose up -d --build
 
 # ежедневная резервная копия в 03:30
-( crontab -l 2>/dev/null | grep -v windauto-backup; echo "30 3 * * * $(pwd)/backup.sh >/dev/null 2>&1 # windauto-backup" ) | crontab -
+( crontab -l 2>/dev/null | grep -v windauto-backup || true; echo "30 3 * * * $(pwd)/backup.sh >/dev/null 2>&1 # windauto-backup" ) | crontab -
 
 source .env
 echo
