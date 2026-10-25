@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { useSettings } from '../settings'
+import { syncNow, useSyncStatus } from '../sync'
 import type { Order } from '../types'
 import { formatPlate, normalizePlate } from '../validate'
 import { WORK_BY_ID, formatMoney, orderTotal } from '../works'
@@ -14,6 +15,8 @@ interface Props {
 export default function OrderList({ orders, onOpen, onCreate, onSettings }: Props) {
   const { t, locale } = useSettings()
   const [q, setQ] = useState('')
+  const sync = useSyncStatus()
+  const syncIcon = sync.syncing ? '⟳' : sync.error || !sync.online ? '⚠' : sync.pending ? '↑' : '✓'
 
   const filtered = useMemo(() => {
     const nq = normalizePlate(q)
@@ -31,6 +34,16 @@ export default function OrderList({ orders, onOpen, onCreate, onSettings }: Prop
     <div className="screen">
       <header className="topbar">
         <h1 className="brand">Windauto</h1>
+        {sync.connected && (
+          <button
+            className={'sync-badge' + (sync.error || !sync.online ? ' warn' : '') + (sync.syncing ? ' spin' : '')}
+            onClick={() => (sync.authError ? onSettings() : syncNow())}
+            title={sync.error ?? ''}
+            aria-label={t('sync.now')}
+          >
+            ☁ {syncIcon}
+          </button>
+        )}
         <button className="icon-btn" aria-label={t('app.settings')} onClick={onSettings}>⚙</button>
       </header>
 

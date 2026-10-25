@@ -1,4 +1,6 @@
-import { useCallback, useEffect, useState } from 'react'
+// Заказы: единое хранилище в памяти + localStorage.
+// Экраны подписываются через useOrders, синхронизация — через onLocalChange.
+import { useSyncExternalStore } from 'react'
 import { orderPhotoIds, photosToDataUrls, restorePhotos } from './photos'
 import type { Order } from './types'
 
@@ -41,39 +43,68 @@ export function newOrder(): Order {
   }
 }
 
-export function useOrders() {
-  const [orders, setOrders] = useState<Order[]>(load)
+// --- хранилище ---
+let orders: Order[] = load()
+const listeners = new Set<() => void>()
+type Change = { type: 'upsert'; order: Order } | { type: 'delete'; id: string; at: number }
+const changeListeners = new Set<(c: Change) => void>()
 
-  useEffect(() => save(orders), [orders])
-
-  // синхронизация между вкладками
-  useEffect(() => {
-    const onStorage = (e: StorageEvent) => e.key === KEY && setOrders(load())
-    window.addEventListener('storage', onStorage)
-    return () => window.removeEventListener('storage', onStorage)
-  }, [])
-
-  const upsert = useCallback((o: Order) => {
-    setOrders((list) => {
-      const next = { ...o, updatedAt: Date.now() }
-      const i = list.findIndex((x) => x.id === o.id)
-      if (i < 0) return [next, ...list]
-      const copy = list.slice()
-      copy[i] = next
-      return copy
-    })
-  }, [])
-
-  const remove = useCallback((id: string) => setOrders((list) => list.filter((x) => x.id !== id)), [])
-
-  const replaceAll = useCallback((list: Order[]) => setOrders(list), [])
-
-  return { orders, upsert, remove, replaceAll }
+function commit(next: Order[]) {
+  orders = next
+  save(orders)
+  listeners.forEach((l) => l())
 }
 
-export async function exportJson(orders: Order[]) {
-  const photos = await photosToDataUrls(orders.flatMap(orderPhotoIds))
-  const blob = new Blob([JSON.stringify({ app: 'windauto', version: 2, orders, photos })], { type: 'application/json' })
+export const getOrders = () => orders
+
+/** Подписка на локальные изменения (для синхронизации) */
+export function onLocalChange(fn: (c: Change) => void) {
+  changeListeners.add(fn)
+  return () => changeListeners.delete(fn)
+}
+
+export function upsertOrder(o: Order, { remote = false } = {}) {
+  const next = remote ? o : { ...o, updatedAt: Math.max(o.updatedAt, Date.now()) }
+  const i = orders.findIndex((x) => x.id === o.id)
+  const list = orders.slice()
+  if (i < 0) list.unshift(next)
+  else list[i] = next
+  commit(list)
+  if (!remote) changeListeners.forEach((l) => l({ type: 'upsert', order: next }))
+}
+
+export function removeOrder(id: string, { remote = false } = {}) {
+  commit(orders.filter((x) => x.id !== id))
+  if (!remote) changeListeners.forEach((l) => l({ type: 'delete', id, at: Date.now() }))
+}
+
+export function replaceAllOrders(list: Order[]) {
+  commit(list)
+  list.forEach((o) => changeListeners.forEach((l) => l({ type: 'upsert', order: o })))
+}
+
+// изменения в другой вкладке
+window.addEventListener('storage', (e) => {
+  if (e.key === KEY) {
+    orders = load()
+    listeners.forEach((l) => l())
+  }
+})
+
+const subscribe = (l: () => void) => {
+  listeners.add(l)
+  return () => listeners.delete(l)
+}
+
+export function useOrders() {
+  const list = useSyncExternalStore(subscribe, getOrders)
+  return { orders: list, upsert: upsertOrder, remove: removeOrder, replaceAll: replaceAllOrders }
+}
+
+// --- резервная копия ---
+export async function exportJson(list: Order[]) {
+  const photos = await photosToDataUrls(list.flatMap(orderPhotoIds))
+  const blob = new Blob([JSON.stringify({ app: 'windauto', version: 2, orders: list, photos })], { type: 'application/json' })
   const a = document.createElement('a')
   a.href = URL.createObjectURL(blob)
   a.download = `windauto-backup-${new Date().toISOString().slice(0, 10)}.json`

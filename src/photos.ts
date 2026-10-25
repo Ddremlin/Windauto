@@ -53,8 +53,23 @@ export async function addPhoto(file: Blob): Promise<string> {
   return id
 }
 
-export async function getPhoto(id: string): Promise<Blob | undefined> {
+export async function getLocalPhoto(id: string): Promise<Blob | undefined> {
   return tx('readonly', (s) => s.get(id) as IDBRequest<Blob | undefined>)
+}
+
+// источник фото, которых нет на телефоне (сервер синхронизации)
+let remoteSource: ((id: string) => Promise<Blob | undefined>) | null = null
+export function markRemoteSource(fn: typeof remoteSource) {
+  remoteSource = fn
+}
+
+/** Фото с телефона, а если его нет — с сервера (и сохраняем у себя) */
+export async function getPhoto(id: string): Promise<Blob | undefined> {
+  const local = await getLocalPhoto(id)
+  if (local || !remoteSource) return local
+  const blob = await remoteSource(id).catch(() => undefined)
+  if (blob) await tx('readwrite', (s) => s.put(blob, id)).catch(() => {})
+  return blob
 }
 
 export async function deletePhotos(ids: string[]) {

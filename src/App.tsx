@@ -32,7 +32,7 @@ export default function App() {
 
   if (route === '/new') {
     if (!draft) return null
-    const d = draft
+    const d = orders.find((x) => x.id === draft.id) ?? draft
     return (
       <OrderEdit
         key={d.id}
