@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
 import OrderEdit from './screens/OrderEdit'
 import OrderList from './screens/OrderList'
+import Settings from './screens/Settings'
 import { newOrder, useOrders } from './storage'
 import type { Order } from './types'
 
-// Простая навигация через hash: #/ — список, #/order/<id> — заказ, #/new — новый
+// Простая навигация через hash: #/ — список, #/order/<id> — заказ, #/new — новый, #/settings
 function useRoute() {
   const [hash, setHash] = useState(location.hash)
   useEffect(() => {
@@ -50,6 +51,8 @@ export default function App() {
     )
   }
 
+  if (route === '/settings') return <Settings orders={orders} onImport={replaceAll} onBack={() => go('/')} />
+
   const m = route.match(/^\/order\/(.+)$/)
   if (m) {
     const o = orders.find((x) => x.id === m[1]) ?? (draft?.id === m[1] ? draft : null)
@@ -76,7 +79,7 @@ export default function App() {
         setDraft(newOrder())
         go('/new')
       }}
-      onImport={replaceAll}
+      onSettings={() => go('/settings')}
     />
   )
 }

@@ -1,5 +1,6 @@
 import { useEffect } from 'react'
 import { deletePhotos } from '../photos'
+import { useSettings } from '../settings'
 import { PhotoStrip } from './Photos'
 import type { ElementWork, WorkId } from '../types'
 import { EXCLUSIVE, WORKS, elementTotal, formatMoney } from '../works'
@@ -17,6 +18,7 @@ const parsePrice = (s: string): number | undefined => {
 }
 
 export default function ElementSheet({ label, value, onChange, onClose }: Props) {
+  const { t, settings } = useSettings()
   const works = value?.works ?? []
   const prices = value?.prices ?? {}
   const note = value?.note ?? ''
@@ -41,7 +43,7 @@ export default function ElementSheet({ label, value, onChange, onClose }: Props)
   }
 
   const clear = () => {
-    if (photos.length && !confirm(`Удалить отметки и ${photos.length} фото этого элемента?`)) return
+    if (photos.length && !confirm(t('sheet.clearConfirm', { n: photos.length }))) return
     deletePhotos(photos)
     onChange(undefined)
   }
@@ -55,6 +57,9 @@ export default function ElementSheet({ label, value, onChange, onClose }: Props)
       next = [...works.filter((w) => !group.includes(w)), id]
       // порядок как в справочнике, чтобы полосы на схеме были стабильными
       next.sort((a, b) => WORKS.findIndex((w) => w.id === a) - WORKS.findIndex((w) => w.id === b))
+      // цена по умолчанию из настроек, если для элемента ещё не вводили
+      const def = settings.defaultPrices[id]
+      if (prices[id] === undefined && def !== undefined) return commit({ works: next, prices: { ...prices, [id]: def } })
     }
     commit({ works: next })
   }
@@ -82,7 +87,7 @@ export default function ElementSheet({ label, value, onChange, onClose }: Props)
                 <label className="work-check">
                   <input type="checkbox" checked={on} onChange={() => toggle(w.id)} />
                   <span className="swatch" style={{ background: w.color }} />
-                  <span>{w.label}</span>
+                  <span>{t(`work.${w.id}`)}</span>
                 </label>
                 {on && (
                   <label className="price">
@@ -91,7 +96,7 @@ export default function ElementSheet({ label, value, onChange, onClose }: Props)
                       placeholder="0"
                       defaultValue={prices[w.id] != null ? String(prices[w.id]).replace('.', ',') : ''}
                       onChange={(e) => setPrice(w.id, e.target.value)}
-                      aria-label={`Стоимость: ${w.label}`}
+                      aria-label={t('sheet.price', { work: t(`work.${w.id}`) })}
                     />
                     <span>zł</span>
                   </label>
@@ -101,11 +106,11 @@ export default function ElementSheet({ label, value, onChange, onClose }: Props)
           })}
         </div>
         <div className="sheet-total">
-          <span>Предварительно по элементу</span>
+          <span>{t('sheet.elementTotal')}</span>
           <strong>{formatMoney(total)}</strong>
         </div>
         <div className="sheet-section">
-          <span className="field-label">Фото повреждений {photos.length ? `(${photos.length})` : ''}</span>
+          <span className="field-label">{t('sheet.photos')} {photos.length ? `(${photos.length})` : ''}</span>
           <PhotoStrip
             ids={photos}
             onAdd={(ids) => commit({ photos: [...photos, ...ids] })}
@@ -115,13 +120,13 @@ export default function ElementSheet({ label, value, onChange, onClose }: Props)
             }}
           />
         </div>
-        <textarea placeholder="Комментарий к элементу (необязательно)" value={note} rows={2} onChange={(e) => commit({ note: e.target.value })} />
+        <textarea placeholder={t('sheet.note')} value={note} rows={2} onChange={(e) => commit({ note: e.target.value })} />
         <div className="sheet-actions">
           <button className="btn ghost" onClick={clear} disabled={!value}>
-            Очистить
+            {t('app.clear')}
           </button>
           <button className="btn primary" onClick={onClose}>
-            Готово
+            {t('app.done')}
           </button>
         </div>
       </div>

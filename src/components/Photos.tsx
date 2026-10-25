@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { addPhoto, usePhotoUrl } from '../photos'
+import { useT } from '../settings'
 
 export function Thumb({ id, onClick }: { id: string; onClick?: () => void }) {
   const url = usePhotoUrl(id)
+  const t = useT()
   return (
-    <button type="button" className="thumb" onClick={onClick} aria-label="Открыть фото">
+    <button type="button" className="thumb" onClick={onClick} aria-label={t('photo.open')}>
       {url ? <img src={url} alt="" /> : null}
     </button>
   )
@@ -21,6 +23,7 @@ export function PhotoStrip({ ids, onAdd, onDelete }: StripProps) {
   const camRef = useRef<HTMLInputElement>(null)
   const galRef = useRef<HTMLInputElement>(null)
   const [busy, setBusy] = useState(false)
+  const t = useT()
   const [open, setOpen] = useState<number | null>(null)
 
   const handle = async (files: FileList | null) => {
@@ -31,7 +34,7 @@ export function PhotoStrip({ ids, onAdd, onDelete }: StripProps) {
       for (const f of Array.from(files)) added.push(await addPhoto(f))
       onAdd(added)
     } catch (e) {
-      alert('Не удалось сохранить фото: ' + (e as Error).message)
+      alert(t('photo.saveError', { e: (e as Error).message }))
     } finally {
       setBusy(false)
       if (camRef.current) camRef.current.value = ''
@@ -51,12 +54,12 @@ export function PhotoStrip({ ids, onAdd, onDelete }: StripProps) {
       {onAdd && (
         <div className="photo-actions no-print">
           <button type="button" className="btn ghost" disabled={busy} onClick={() => camRef.current?.click()}>
-            📷 Камера
+            {t('photo.camera')}
           </button>
           <button type="button" className="btn ghost" disabled={busy} onClick={() => galRef.current?.click()}>
-            🖼 Галерея
+            {t('photo.gallery')}
           </button>
-          {busy && <span className="muted">Сохраняю…</span>}
+          {busy && <span className="muted">{t('photo.saving')}</span>}
           <input ref={camRef} type="file" accept="image/*" capture="environment" hidden onChange={(e) => handle(e.target.files)} />
           <input ref={galRef} type="file" accept="image/*" multiple hidden onChange={(e) => handle(e.target.files)} />
         </div>
@@ -92,6 +95,7 @@ function PhotoViewer({ ids, index, onIndex, onClose, onDelete }: ViewerProps) {
   const id = ids[index]
   const url = usePhotoUrl(id)
   const touchX = useRef<number | null>(null)
+  const t = useT()
   const prev = () => index > 0 && onIndex(index - 1)
   const next = () => index < ids.length - 1 && onIndex(index + 1)
 
@@ -119,12 +123,12 @@ function PhotoViewer({ ids, index, onIndex, onClose, onDelete }: ViewerProps) {
       }}
     >
       <div className="viewer-bar">
-        <button className="icon-btn" onClick={onClose} aria-label="Закрыть">✕</button>
+        <button className="icon-btn" onClick={onClose} aria-label={t('app.close')}>✕</button>
         <span>
           {index + 1} / {ids.length}
         </span>
         {onDelete ? (
-          <button className="icon-btn" aria-label="Удалить фото" onClick={() => confirm('Удалить фото?') && onDelete(id)}>
+          <button className="icon-btn" aria-label={t('photo.delete')} onClick={() => confirm(t('photo.deleteConfirm')) && onDelete(id)}>
             🗑
           </button>
         ) : (
