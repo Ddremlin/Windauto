@@ -12,7 +12,7 @@ git init -q -b gh-pages
 git add -A
 git -c user.name="$(git -C "$OLDPWD" config user.name)" -c user.email="$(git -C "$OLDPWD" config user.email)" \
   commit -q -m "Deploy $(date '+%Y-%m-%d %H:%M')"
-git push -q -f "$REMOTE" gh-pages
+git -c credential.helper= -c credential.helper="$(git -C "$OLDPWD" config credential.helper)" push -q -f "$REMOTE" gh-pages
 cd - >/dev/null
 rm -rf "$TMP"
 echo "Опубликовано: https://ddremlin.github.io/Windauto/"
