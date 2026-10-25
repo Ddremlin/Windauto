@@ -23,6 +23,5 @@ npm run preview    # просмотр сборки, http://<ip>:4173
 
 Сайт: https://ddremlin.github.io/Windauto/
 
-```bash
-npm run deploy     # сборка и публикация в ветку gh-pages
-```
+Публикуется автоматически при каждом push в `main` (GitHub Actions, `.github/workflows/deploy.yml`).
+Вручную: на GitHub → Actions → Deploy to GitHub Pages → Run workflow.
