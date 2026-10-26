@@ -76,7 +76,7 @@ export function suggest(items: string[], query: string, limit = 50): string[] {
   const word: string[] = []
   for (const it of items) {
     if (norm(it).startsWith(q)) head.push(it)
-    else if (it.split(/[\s\-]/).some((w) => norm(w).startsWith(q))) word.push(it)
+    else if (it.split(/[\s-]/).some((w) => norm(w).startsWith(q))) word.push(it)
   }
   return [...head, ...word].slice(0, limit)
 }

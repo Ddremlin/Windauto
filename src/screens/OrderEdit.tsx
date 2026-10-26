@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useRef, useState } from 'react'
 import { BODY_TYPES, getLayout } from '../body'
 import { MAKES, isKnownModel, modelsOf } from '../cars'
 import BodyMap from '../components/BodyMap'
@@ -9,7 +9,7 @@ import { PhotoStrip } from '../components/Photos'
 import { PlateInput } from '../components/Plate'
 import ShareSheet from '../components/ShareSheet'
 import { deletePhotos, orderPhotoIds } from '../photos'
-import { useSettings } from '../settings'
+import { useSettings } from '../settingsHooks'
 import type { BodyType, ElementWork, Order } from '../types'
 import { checkEmail, checkPlate, checkVin, formatPlate, normalizeVin } from '../validate'
 import { STATUSES, WORKS, WORK_BY_ID, elementTotal, formatMoney, orderTotal } from '../works'
@@ -24,6 +24,10 @@ interface Props {
 const hasContent = (o: Order) =>
   Boolean(o.plate || o.vin || o.make || o.model || o.client || o.phone || o.email || o.notes || o.paintNotes || Object.keys(o.elements).length)
 
+function stamp(order: Order, patch: Partial<Order>): Order {
+  return { ...order, ...patch, updatedAt: Math.max(Date.now(), order.updatedAt + 1) }
+}
+
 export default function OrderEdit({ initial, onSave, onDelete, onBack }: Props) {
   const { t, locale } = useSettings()
   const [order, setOrder] = useState(initial)
@@ -32,12 +36,10 @@ export default function OrderEdit({ initial, onSave, onDelete, onBack }: Props) 
   const modelRef = useRef<HTMLInputElement>(null)
 
   // заказ изменили на другом телефоне — показываем свежую версию
-  useEffect(() => {
-    if (initial.updatedAt > order.updatedAt) setOrder(initial)
-  }, [initial, order.updatedAt])
+  if (initial.updatedAt > order.updatedAt) setOrder(initial)
 
   const update = (patch: Partial<Order>) => {
-    const next = { ...order, ...patch, updatedAt: Math.max(Date.now(), order.updatedAt + 1) }
+    const next = stamp(order, patch)
     setOrder(next)
     if (hasContent(next)) onSave(next)
   }

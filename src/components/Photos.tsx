@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
 import { addPhoto, usePhotoUrl } from '../photos'
-import { useT } from '../settings'
+import { useT } from '../settingsHooks'
 
 export function Thumb({ id, onClick }: { id: string; onClick?: () => void }) {
   const url = usePhotoUrl(id)

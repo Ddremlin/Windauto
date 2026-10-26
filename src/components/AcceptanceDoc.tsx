@@ -1,7 +1,8 @@
 // Лист приёмки для клиента — рендерится вне экрана и снимается в PDF.
 // Стили простые (без var/color-mix), чтобы html2canvas отрисовал их точно.
 import { getLayout } from '../body'
-import { useSettings } from '../settings'
+import { docNumber } from '../docNumber'
+import { useSettings } from '../settingsHooks'
 import type { Order } from '../types'
 import { formatPlate } from '../validate'
 import { WORKS, WORK_BY_ID, elementTotal, formatMoney, orderTotal } from '../works'
@@ -9,12 +10,6 @@ import BodyMap from './BodyMap'
 import { PlateBadge } from './Plate'
 
 export const DOC_WIDTH = 794 // A4 при 96 dpi
-
-export function docNumber(o: Order): string {
-  const d = new Date(o.createdAt)
-  const p = (n: number) => String(n).padStart(2, '0')
-  return `${String(d.getFullYear()).slice(2)}${p(d.getMonth() + 1)}${p(d.getDate())}-${p(d.getHours())}${p(d.getMinutes())}`
-}
 
 const css = `
 .doc { width: ${DOC_WIDTH}px; padding: 0 40px; background: #fff; color: #111; font: 13px/1.4 Roboto, 'Segoe UI', Arial, sans-serif; box-sizing: border-box; }

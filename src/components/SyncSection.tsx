@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { useSettings } from '../settings'
+import { useSettings } from '../settingsHooks'
 import {
   changePassword,
   connect,

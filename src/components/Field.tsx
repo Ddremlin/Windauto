@@ -1,5 +1,5 @@
 import type { HTMLAttributes } from 'react'
-import { useT } from '../settings'
+import { useT } from '../settingsHooks'
 import type { Check } from '../validate'
 
 interface Props {

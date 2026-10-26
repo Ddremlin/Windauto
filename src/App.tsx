@@ -21,14 +21,21 @@ const go = (path: string) => {
   window.scrollTo(0, 0)
 }
 
+function readRoute() {
+  return location.hash.replace(/^#/, '') || '/'
+}
+
 export default function App() {
   const route = useRoute()
   const { orders, upsert, remove, replaceAll } = useOrders()
-  const [draft, setDraft] = useState<Order | null>(null)
+  const [draft, setDraft] = useState<Order | null>(() => (readRoute() === '/new' ? newOrder() : null))
+  const [draftRoute, setDraftRoute] = useState(readRoute)
 
-  useEffect(() => {
+  // Черновик создаём только при входе на #/new, а не пока маршрут ещё не сменился после «назад».
+  if (route !== draftRoute) {
+    setDraftRoute(route)
     if (route === '/new' && !draft) setDraft(newOrder())
-  }, [route, draft])
+  }
 
   if (route === '/new') {
     if (!draft) return null

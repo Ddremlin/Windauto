@@ -1,6 +1,6 @@
 import { VIEW_H, VIEW_W, getLayout } from '../body'
 import type { BodyType, ElementWork } from '../types'
-import { useT } from '../settings'
+import { useT } from '../settingsHooks'
 import { WORK_BY_ID } from '../works'
 
 interface Props {

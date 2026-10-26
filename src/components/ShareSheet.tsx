@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { LANGS, makeT, type Lang } from '../i18n'
-import { useSettings } from '../settings'
+import { useSettings } from '../settingsHooks'
 import { downloadBlob, mailtoUrl, makePdf, orderText, pdfFileName, sharePdf, shareText, smsUrl, whatsappUrl } from '../share'
 import type { Order } from '../types'
 

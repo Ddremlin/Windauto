@@ -3,7 +3,7 @@
 // когда есть связь. Конфликты: побеждает более позднее изменение заказа.
 import { useSyncExternalStore } from 'react'
 import { deletePhotos, getLocalPhoto, markRemoteSource, orderPhotoIds } from './photos'
-import { applyRemoteShared, getSettings, hasShared, onSharedChange, pickShared, setSharedStamp, type SharedSettings } from './settings'
+import { applyRemoteShared, getSettings, hasShared, onSharedChange, pickShared, setSharedStamp, type SharedSettings } from './settingsStore'
 import { getOrders, migrate, onLocalChange, removeOrder, upsertOrder } from './storage'
 import type { Order } from './types'
 

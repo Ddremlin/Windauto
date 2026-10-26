@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { PlateBadge } from '../components/Plate'
-import { useSettings } from '../settings'
+import { useSettings } from '../settingsHooks'
 import { syncNow, useSyncStatus } from '../sync'
 import type { Order } from '../types'
 import { formatPlate, normalizePlate } from '../validate'
