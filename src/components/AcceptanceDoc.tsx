@@ -42,6 +42,8 @@ const css = `
 .doc-table .num { text-align: right; white-space: nowrap; }
 .doc-work { display: flex; justify-content: space-between; gap: 8px; }
 .doc-work span:first-child { display: flex; align-items: center; gap: 6px; }
+.doc-paint-notes { white-space: pre-wrap; margin-top: 6px; }
+.doc-paint-notes > span { color: #666; font-size: 11px; display: block; }
 .doc-note { color: #555; font-style: italic; margin-top: 2px; }
 .doc-total { display: flex; justify-content: space-between; font-size: 16px; padding: 10px 6px; border-top: 2px solid #111; margin-top: 4px; }
 .doc-total b { font-size: 18px; }
@@ -119,6 +121,12 @@ export default function AcceptanceDoc({ order, photoUrls }: Props) {
           {kv(t('order.paintCode'), order.paintCode, true)}
         </div>
         {order.paintFormula && <div className="doc-formula">{order.paintFormula}</div>}
+        {order.paintNotes && (
+          <div className="doc-paint-notes">
+            <span>{t('order.paintNotes')}</span>
+            {order.paintNotes}
+          </div>
+        )}
       </div>
 
       {(order.client || order.phone || order.email) && (
