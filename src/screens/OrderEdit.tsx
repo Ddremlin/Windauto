@@ -1,6 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { BODY_TYPES, getLayout } from '../body'
+import { MAKES, isKnownModel, modelsOf } from '../cars'
 import BodyMap from '../components/BodyMap'
+import Combo from '../components/Combo'
 import ElementSheet from '../components/ElementSheet'
 import Field from '../components/Field'
 import { PhotoStrip } from '../components/Photos'
@@ -27,6 +29,7 @@ export default function OrderEdit({ initial, onSave, onDelete, onBack }: Props) 
   const [order, setOrder] = useState(initial)
   const [sheet, setSheet] = useState<string | null>(null)
   const [share, setShare] = useState(false)
+  const modelRef = useRef<HTMLInputElement>(null)
 
   // заказ изменили на другом телефоне — показываем свежую версию
   useEffect(() => {
@@ -130,8 +133,18 @@ export default function OrderEdit({ initial, onSave, onDelete, onBack }: Props) 
               onBlur={() => order.vin && update({ vin: normalizeVin(order.vin) })}
               check={vinCheck}
             />
-            <Field label={t('order.make')} placeholder="Škoda" {...field('make')} />
-            <Field label={t('order.model')} placeholder="Octavia" {...field('model')} />
+            <Combo
+              label={t('order.make')}
+              placeholder="Škoda"
+              items={MAKES}
+              {...field('make')}
+              onPick={(make) => {
+                // модель от другой марки не подходит — очищаем и сразу переходим к выбору модели
+                if (order.model && !isKnownModel(make, order.model)) update({ make, model: '' })
+                if (!order.model || !isKnownModel(make, order.model)) modelRef.current?.focus()
+              }}
+            />
+            <Combo label={t('order.model')} placeholder="Octavia" items={modelsOf(order.make)} inputRef={modelRef} {...field('model')} />
             <Field label={t('order.year')} inputMode="numeric" placeholder="2019" {...field('year')} />
             <Field label={t('order.mileage')} inputMode="numeric" {...field('mileage')} />
           </div>

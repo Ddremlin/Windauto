@@ -312,3 +312,15 @@ input:disabled { opacity: 0.6; }
   .bodymap { max-width: 340px; }
   input, textarea { border: 0; padding: 0; background: none; }
 }
+
+.combo { position: relative; }
+.combo-list {
+  position: absolute; top: 100%; left: 0; right: 0; z-index: 10;
+  margin: 4px 0 0; padding: 4px 0; list-style: none;
+  max-height: 260px; overflow-y: auto; overscroll-behavior: contain;
+  background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.18);
+}
+.combo-list li { padding: 10px 12px; cursor: pointer; }
+.combo-list li.active, .combo-list li:hover { background: var(--bg); }
+.combo-list li.current { color: var(--accent); font-weight: 600; }
