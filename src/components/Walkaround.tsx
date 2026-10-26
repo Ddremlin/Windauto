@@ -1,6 +1,7 @@
 // Круговое видео при приёмке: запись камерой в приложении (MediaRecorder),
 // а если она недоступна — системной камерой или из галереи.
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useEffectEvent, useRef, useState } from 'react'
+import { classifyCameras, currentZoom, openCamera, setZoom, stopStream, trackLabel, zoomBase, zoomLevels, zoomRange, type Cameras, type ZoomRange } from '../camera'
 import { useSettings, useT } from '../settingsHooks'
 import type { Order, VideoRef } from '../types'
 import { addVideo, deleteVideos, formatDuration, useVideoUrl } from '../videos'
@@ -13,20 +14,6 @@ const BITRATE = 2_500_000
 const MIME = ['video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=vp9', 'video/webm;codecs=vp8', 'video/webm']
 
 const canRecord = () => typeof navigator.mediaDevices?.getUserMedia === 'function' && typeof MediaRecorder !== 'undefined'
-
-const isPortrait = () => window.matchMedia('(orientation: portrait)').matches
-
-// кадр в ориентации экрана: телефон вертикально — вертикальное видео 720×1280, боком — 1280×720
-async function openCamera(): Promise<MediaStream> {
-  const [w, h] = isPortrait() ? [720, 1280] : [1280, 720]
-  const video = { facingMode: { ideal: 'environment' }, width: { ideal: w }, height: { ideal: h }, aspectRatio: { ideal: w / h }, frameRate: { ideal: 30 } }
-  // со звуком мастер может проговаривать повреждения; без микрофона — только видео
-  try {
-    return await navigator.mediaDevices.getUserMedia({ video, audio: true })
-  } catch {
-    return navigator.mediaDevices.getUserMedia({ video, audio: false })
-  }
-}
 
 // длительность файла из галереи / системной камеры
 const fileDuration = (blob: Blob) =>
@@ -42,6 +29,13 @@ const fileDuration = (blob: Blob) =>
     v.onerror = () => done(0)
     v.src = url
   })
+
+// «0.5», «1×», «1.6×»; на неактивных кнопках — коротко, как в системной камере
+const zoomLabel = (l: number, short = false) => {
+  const v = Math.round(l * 10) / 10
+  const txt = String(v).replace('.', ',').replace(/,0$/, '')
+  return short ? txt : `${txt}×`
+}
 
 interface Taken {
   blob: Blob
@@ -65,27 +59,133 @@ function Recorder({ onSave, onClose }: { onSave: (r: VideoRef) => void; onClose:
   const [taken, setTaken] = useState<Taken | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  // зум: 'ultra' — включена отдельная сверхширокая камера; zoom — плавный зум текущей камеры
+  const alive = useRef(true)
+  const cams = useRef<Cameras | null>(null)
+  const lensRef = useRef<'main' | 'ultra'>('main')
+  // камера, выбранная перебором (Android); undefined — по умолчанию
+  const deviceRef = useRef<string | undefined>(undefined)
+  const levelRef = useRef(1)
+  const [lens, setLens] = useState<'main' | 'ultra'>('main')
+  const [zoom, setZoomInfo] = useState<{ range: ZoomRange; base: number } | null>(null)
+  const [level, setLevelState] = useState(1)
+  const [hasUltra, setHasUltra] = useState(false)
+  const [canCycle, setCanCycle] = useState(false)
+  const setLevel = (l: number) => {
+    levelRef.current = l
+    setLevelState(l)
+  }
 
   const stopCamera = () => {
-    streamRef.current?.getTracks().forEach((tr) => tr.stop())
+    stopStream(streamRef.current)
     streamRef.current = null
     setReady(false)
   }
 
-  const startCamera = () => {
+  const startCamera = async (want: 'main' | 'ultra' = lensRef.current, wantLevel = levelRef.current) => {
     if (!canRecord()) return
-    streamRef.current?.getTracks().forEach((tr) => tr.stop())
-    openCamera()
-      .then((s) => {
-        streamRef.current = s
-        if (liveRef.current) liveRef.current.srcObject = s
-        setReady(true)
-      })
-      .catch(() => setNoCamera(true))
+    stopCamera()
+    try {
+      let s: MediaStream
+      if (want === 'ultra' && cams.current?.ultra) s = await openCamera(cams.current.ultra)
+      else {
+        want = 'main'
+        s = await openCamera(deviceRef.current ?? cams.current?.multi)
+        // первое открытие: после разрешения видны названия камер — ищем составную с плавным зумом от 0.5×
+        if (!cams.current) {
+          cams.current = classifyCameras(await navigator.mediaDevices.enumerateDevices())
+          setHasUltra(Boolean(cams.current.ultra))
+          // перебор нужен, только если сверхширокую не нашли по названию
+          setCanCycle(!cams.current.ultra && !cams.current.multi && cams.current.backs.length > 1)
+          if (cams.current.multi) {
+            stopStream(s)
+            const multi = await openCamera(cams.current.multi).catch(() => null)
+            if (multi && zoomRange(multi)) s = multi
+            else {
+              stopStream(multi)
+              cams.current.multi = undefined
+              s = await openCamera()
+            }
+          }
+        }
+      }
+      if (!alive.current) return stopStream(s)
+      streamRef.current = s
+      if (liveRef.current) liveRef.current.srcObject = s
+      const range = want === 'main' ? zoomRange(s) : null
+      const base = zoomBase(trackLabel(s))
+      lensRef.current = want
+      setLens(want)
+      setZoomInfo(range && { range, base })
+      if (want === 'ultra') setLevel(0.5)
+      else if (range) {
+        const z = Math.min(range.max, Math.max(range.min, wantLevel * base))
+        await setZoom(s, z)?.catch(() => {})
+        setLevel((currentZoom(s) ?? z) / base)
+      } else setLevel(1)
+      setReady(true)
+    } catch {
+      if (!alive.current) return
+      // сверхширокая не открылась — возвращаемся к основной
+      if (want === 'ultra') return startCamera('main', 1)
+      setNoCamera(true)
+    }
   }
 
+  const levels = zoomLevels(lens === 'main' ? (zoom?.range ?? null) : null, zoom?.base ?? 1, hasUltra)
+  // на ultra-камере плавного зума нет: из неё — только обратно на 1×
+  const shownLevels = lens === 'ultra' ? [0.5, 1] : levels
+
+  const chooseLevel = (l: number) => {
+    const s = streamRef.current
+    if (!s) return
+    if (lens === 'main' && zoom && l * zoom.base >= zoom.range.min - 0.01 && l * zoom.base <= zoom.range.max + 0.01) {
+      setZoom(s, l * zoom.base)?.catch(() => {})
+      setLevel(l)
+    } else if (recording) return
+    else if (l === 0.5 && hasUltra) startCamera('ultra')
+    else if (lens === 'ultra') startCamera('main', l)
+  }
+  // кнопку нельзя нажать во время записи, если для неё нужно переключить камеру
+  const needsSwitch = (l: number) =>
+    !(lens === 'main' && zoom && l * zoom.base >= zoom.range.min - 0.01 && l * zoom.base <= zoom.range.max + 0.01)
+
+  // следующая задняя камера (до начала записи)
+  const cycleCamera = () => {
+    const backs = cams.current?.backs ?? []
+    const cur = deviceRef.current ?? backs.find((id) => id === streamRef.current?.getVideoTracks()[0]?.getSettings().deviceId) ?? backs[0]
+    deviceRef.current = backs[(backs.indexOf(cur) + 1) % backs.length]
+    void startCamera('main', 1)
+  }
+
+  // зум двумя пальцами
+  const pinch = useRef<{ dist: number; zoom: number } | null>(null)
+  const frame = useRef(0)
+  const touchDist = (e: React.TouchEvent) => Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY)
+  const onTouchStart = (e: React.TouchEvent) => {
+    if (e.touches.length === 2 && lens === 'main' && zoom) pinch.current = { dist: touchDist(e), zoom: levelRef.current * zoom.base }
+  }
+  const onTouchMove = (e: React.TouchEvent) => {
+    const p = pinch.current
+    const s = streamRef.current
+    if (!p || !zoom || !s || e.touches.length !== 2) return
+    const z = Math.min(zoom.range.max, Math.max(zoom.range.min, (p.zoom * touchDist(e)) / p.dist))
+    cancelAnimationFrame(frame.current)
+    frame.current = requestAnimationFrame(() => {
+      setZoom(s, z)?.catch(() => {})
+      setLevel(z / zoom.base)
+    })
+  }
+  const onTouchEnd = () => {
+    pinch.current = null
+  }
+
+  const openOnMount = useEffectEvent(() => void startCamera())
+  const reopen = useEffectEvent(() => void startCamera())
+
   useEffect(() => {
-    startCamera()
+    alive.current = true
+    openOnMount()
     const prev = document.body.style.overflow
     document.body.style.overflow = 'hidden'
     // на весь экран без панелей браузера (Android, планшеты); iPhone этого не умеет — остаётся окно во весь вид
@@ -93,8 +193,9 @@ function Recorder({ onSave, onClose }: { onSave: (r: VideoRef) => void; onClose:
     const full = Boolean(el?.requestFullscreen && !document.fullscreenElement)
     if (full) el!.requestFullscreen({ navigationUI: 'hide' }).catch(() => {})
     return () => {
+      alive.current = false
       if (recRef.current?.state === 'recording') recRef.current.stop()
-      streamRef.current?.getTracks().forEach((tr) => tr.stop())
+      stopStream(streamRef.current)
       document.body.style.overflow = prev
       if (full && document.fullscreenElement) document.exitFullscreen().catch(() => {})
     }
@@ -105,7 +206,7 @@ function Recorder({ onSave, onClose }: { onSave: (r: VideoRef) => void; onClose:
   useEffect(() => {
     if (!idle) return
     const mq = window.matchMedia('(orientation: portrait)')
-    const onTurn = () => startCamera()
+    const onTurn = () => reopen()
     mq.addEventListener('change', onTurn)
     return () => mq.removeEventListener('change', onTurn)
   }, [idle])
@@ -161,7 +262,7 @@ function Recorder({ onSave, onClose }: { onSave: (r: VideoRef) => void; onClose:
   const redo = () => {
     setTaken(null)
     setError(null)
-    if (canRecord() && !noCamera) startCamera()
+    if (canRecord() && !noCamera) void startCamera()
   }
 
   const save = async () => {
@@ -194,7 +295,41 @@ function Recorder({ onSave, onClose }: { onSave: (r: VideoRef) => void; onClose:
           <button className="btn" onClick={() => galRef.current?.click()}>{t('video.gallery')}</button>
         </div>
       ) : (
-        <video ref={liveRef} className="rec-video rec-live" muted playsInline autoPlay />
+        <video
+          ref={liveRef}
+          className="rec-video rec-live"
+          muted
+          playsInline
+          autoPlay
+          onTouchStart={onTouchStart}
+          onTouchMove={onTouchMove}
+          onTouchEnd={onTouchEnd}
+          onTouchCancel={onTouchEnd}
+        />
+      )}
+
+      {!taken && ready && (shownLevels.length > 1 || canCycle) && (
+        <div className="rec-zoom" role="group" aria-label={t('video.zoom')}>
+          {shownLevels.map((l) => {
+            // активная кнопка — ближайшая снизу к текущему зуму; на ней показываем точное значение
+            const active = l === [...shownLevels].reverse().find((x) => level >= x - 0.05)
+            return (
+              <button
+                key={l}
+                className={active ? 'active' : undefined}
+                disabled={recording && needsSwitch(l)}
+                onClick={() => chooseLevel(l)}
+              >
+                {active ? zoomLabel(level) : zoomLabel(l, true)}
+              </button>
+            )
+          })}
+          {canCycle && (
+            <button onClick={cycleCamera} disabled={recording} title={t('video.switchCam')} aria-label={t('video.switchCam')}>
+              ⟳
+            </button>
+          )}
+        </div>
       )}
 
       <div className="rec-top">
