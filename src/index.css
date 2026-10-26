@@ -513,9 +513,12 @@ input:disabled { opacity: 0.6; }
 .btn.wide-btn { width: 100%; margin-top: 8px; }
 .rec-overlay {
   position: fixed; inset: 0; z-index: 60; background: #000; color: #fff;
-  height: 100vh; height: 100dvh;
+  width: 100vw; height: 100vh; height: 100dvh; overflow: hidden;
 }
 .rec-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; }
+/* камера до и во время записи — на весь экран без чёрных полей; готовое видео показываем целиком */
+.rec-live { object-fit: cover; }
+.rec-overlay:fullscreen { width: 100vw; height: 100vh; }
 .rec-top {
   position: absolute; left: 0; right: 0; top: 0; display: flex; justify-content: center;
   padding: max(12px, env(safe-area-inset-top)) 16px 12px; pointer-events: none;

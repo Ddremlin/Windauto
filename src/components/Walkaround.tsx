@@ -14,8 +14,12 @@ const MIME = ['video/mp4;codecs=avc1', 'video/mp4', 'video/webm;codecs=vp9', 'vi
 
 const canRecord = () => typeof navigator.mediaDevices?.getUserMedia === 'function' && typeof MediaRecorder !== 'undefined'
 
+const isPortrait = () => window.matchMedia('(orientation: portrait)').matches
+
+// кадр в ориентации экрана: телефон вертикально — вертикальное видео 720×1280, боком — 1280×720
 async function openCamera(): Promise<MediaStream> {
-  const video = { facingMode: { ideal: 'environment' }, width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } }
+  const [w, h] = isPortrait() ? [720, 1280] : [1280, 720]
+  const video = { facingMode: { ideal: 'environment' }, width: { ideal: w }, height: { ideal: h }, aspectRatio: { ideal: w / h }, frameRate: { ideal: 30 } }
   // со звуком мастер может проговаривать повреждения; без микрофона — только видео
   try {
     return await navigator.mediaDevices.getUserMedia({ video, audio: true })
@@ -47,6 +51,7 @@ interface Taken {
 
 function Recorder({ onSave, onClose }: { onSave: (r: VideoRef) => void; onClose: () => void }) {
   const t = useT()
+  const overlayRef = useRef<HTMLDivElement>(null)
   const liveRef = useRef<HTMLVideoElement>(null)
   const streamRef = useRef<MediaStream | null>(null)
   const recRef = useRef<MediaRecorder | null>(null)
@@ -69,6 +74,7 @@ function Recorder({ onSave, onClose }: { onSave: (r: VideoRef) => void; onClose:
 
   const startCamera = () => {
     if (!canRecord()) return
+    streamRef.current?.getTracks().forEach((tr) => tr.stop())
     openCamera()
       .then((s) => {
         streamRef.current = s
@@ -82,12 +88,27 @@ function Recorder({ onSave, onClose }: { onSave: (r: VideoRef) => void; onClose:
     startCamera()
     const prev = document.body.style.overflow
     document.body.style.overflow = 'hidden'
+    // на весь экран без панелей браузера (Android, планшеты); iPhone этого не умеет — остаётся окно во весь вид
+    const el = overlayRef.current
+    const full = Boolean(el?.requestFullscreen && !document.fullscreenElement)
+    if (full) el!.requestFullscreen({ navigationUI: 'hide' }).catch(() => {})
     return () => {
       if (recRef.current?.state === 'recording') recRef.current.stop()
       streamRef.current?.getTracks().forEach((tr) => tr.stop())
       document.body.style.overflow = prev
+      if (full && document.fullscreenElement) document.exitFullscreen().catch(() => {})
     }
   }, [])
+
+  // повернули телефон до начала записи — переоткрываем камеру в новой ориентации
+  const idle = ready && !recording && !taken
+  useEffect(() => {
+    if (!idle) return
+    const mq = window.matchMedia('(orientation: portrait)')
+    const onTurn = () => startCamera()
+    mq.addEventListener('change', onTurn)
+    return () => mq.removeEventListener('change', onTurn)
+  }, [idle])
 
   // таймер записи и автостоп
   useEffect(() => {
@@ -163,7 +184,7 @@ function Recorder({ onSave, onClose }: { onSave: (r: VideoRef) => void; onClose:
   )
 
   return (
-    <div className="rec-overlay" role="dialog" aria-label={t('video.title')}>
+    <div ref={overlayRef} className="rec-overlay" role="dialog" aria-label={t('video.title')}>
       {taken ? (
         <video className="rec-video" src={taken.url} controls playsInline autoPlay />
       ) : noCamera ? (
@@ -173,7 +194,7 @@ function Recorder({ onSave, onClose }: { onSave: (r: VideoRef) => void; onClose:
           <button className="btn" onClick={() => galRef.current?.click()}>{t('video.gallery')}</button>
         </div>
       ) : (
-        <video ref={liveRef} className="rec-video" muted playsInline autoPlay />
+        <video ref={liveRef} className="rec-video rec-live" muted playsInline autoPlay />
       )}
 
       <div className="rec-top">
