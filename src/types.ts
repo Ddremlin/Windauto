@@ -37,6 +37,7 @@ export interface Order {
   color: string
   paintCode: string
   paintFormula: string
+  paintNotes: string
   bodyType: BodyType
   client: string
   phone: string

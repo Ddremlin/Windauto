@@ -22,7 +22,7 @@ interface Props {
 }
 
 const hasContent = (o: Order) =>
-  Boolean(o.plate || o.vin || o.make || o.model || o.client || o.phone || o.email || o.notes || Object.keys(o.elements).length)
+  Boolean(o.plate || o.vin || o.make || o.model || o.client || o.phone || o.email || o.notes || o.paintNotes || Object.keys(o.elements).length)
 
 export default function OrderEdit({ initial, onSave, onDelete, onBack }: Props) {
   const { t, locale } = useSettings()
@@ -164,6 +164,15 @@ export default function OrderEdit({ initial, onSave, onDelete, onBack }: Props) 
               placeholder={t('order.formulaPh')}
               value={order.paintFormula}
               onChange={(e) => update({ paintFormula: e.target.value })}
+            />
+          </label>
+          <label className="field wide formula">
+            <span className="field-label">{t('order.paintNotes')}</span>
+            <textarea
+              rows={2}
+              placeholder={t('order.paintNotesPh')}
+              value={order.paintNotes}
+              onChange={(e) => update({ paintNotes: e.target.value })}
             />
           </label>
         </section>
