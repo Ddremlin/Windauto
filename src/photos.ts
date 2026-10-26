@@ -84,9 +84,14 @@ export function orderPhotoIds(o: Order): string[] {
 const urlCache = new Map<string, string>()
 
 export function usePhotoUrl(id: string): string | undefined {
-  const [url, setUrl] = useState(() => urlCache.get(id))
+  const [url, setUrl] = useState<string | undefined>(() => urlCache.get(id))
+  const [loadedId, setLoadedId] = useState(id)
+  if (loadedId !== id) {
+    setLoadedId(id)
+    setUrl(urlCache.get(id))
+  }
   useEffect(() => {
-    if (urlCache.has(id)) return setUrl(urlCache.get(id))
+    if (urlCache.has(id)) return
     let alive = true
     getPhoto(id).then((b) => {
       if (!b || !alive) return
@@ -98,7 +103,7 @@ export function usePhotoUrl(id: string): string | undefined {
       alive = false
     }
   }, [id])
-  return url
+  return loadedId === id ? url : urlCache.get(id)
 }
 
 // Для резервной копии: фото в base64

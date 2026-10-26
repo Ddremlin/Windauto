@@ -1,6 +1,6 @@
 import { useEffect } from 'react'
 import { deletePhotos } from '../photos'
-import { useSettings } from '../settings'
+import { useSettings } from '../settingsHooks'
 import { PhotoStrip } from './Photos'
 import type { ElementWork, WorkId } from '../types'
 import { EXCLUSIVE, WORKS, elementTotal, formatMoney } from '../works'

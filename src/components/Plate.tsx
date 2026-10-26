@@ -2,7 +2,7 @@
 // Стили инлайновые — знак попадает и в PDF (html2canvas).
 import type { CSSProperties, ReactNode } from 'react'
 import { COUNTRIES, countryByCode, countryName } from '../countries'
-import { useSettings } from '../settings'
+import { useSettings } from '../settingsHooks'
 
 const FONT = "'Roboto Condensed', 'Arial Narrow', 'DIN Condensed', sans-serif-condensed, Arial, sans-serif"
 
