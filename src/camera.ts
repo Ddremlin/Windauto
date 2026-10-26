@@ -52,16 +52,19 @@ export function setZoom(stream: MediaStream, zoom: number) {
 
 export const isPortrait = () => window.matchMedia('(orientation: portrait)').matches
 
-// кадр в ориентации экрана: телефон вертикально — вертикальное видео 720×1280, боком — 1280×720
+// кадр в ориентации экрана: телефон вертикально — вертикальный, боком — горизонтальный.
+// Берём 1080p: при цифровом зуме есть запас по чёткости (размер файла задаёт битрейт, а не разрешение).
 export async function openCamera(deviceId?: string): Promise<MediaStream> {
-  const [w, h] = isPortrait() ? [720, 1280] : [1280, 720]
-  const video: MediaTrackConstraints = {
+  const [w, h] = isPortrait() ? [1080, 1920] : [1920, 1080]
+  const video = {
     ...(deviceId ? { deviceId: { exact: deviceId } } : { facingMode: { ideal: 'environment' } }),
     width: { ideal: w },
     height: { ideal: h },
     aspectRatio: { ideal: w / h },
     frameRate: { ideal: 30 },
-  }
+    // Chrome (Android, Pixel) отдаёт зум камеры, только если его запросить при открытии
+    zoom: true,
+  } as unknown as MediaTrackConstraints
   // со звуком мастер может проговаривать повреждения; без микрофона — только видео
   try {
     return await navigator.mediaDevices.getUserMedia({ video, audio: true })
@@ -75,8 +78,35 @@ export const stopStream = (s: MediaStream | null) => s?.getTracks().forEach((tr)
 
 export const trackLabel = (s: MediaStream) => s.getVideoTracks()[0]?.label ?? ''
 
-/** кнопки зума: 0.5×, 1×, 2×, 3× — какие из них доступны */
-export function zoomLevels(range: ZoomRange | null, base: number, hasUltra: boolean): number[] {
-  const inRange = (l: number) => range !== null && l * base >= range.min - 0.01 && l * base <= range.max + 0.01
-  return [0.5, 1, 2, 3].filter((l) => l === 1 || inRange(l) || (l === 0.5 && hasUltra))
+// Цифровой зум для телефонов, где камера его не отдаёт: пишем не саму камеру,
+// а холст, на который рисуем центр кадра с увеличением level (звук — с камеры как есть).
+export const DIGITAL_MAX = 4
+
+export function digitalZoomStream(video: HTMLVideoElement, level: () => number, audio: MediaStreamTrack[]) {
+  const vw = video.videoWidth || 1280
+  const vh = video.videoHeight || 720
+  // выход 720p в ориентации кадра — как и без зума
+  const k = Math.min(1, 1280 / Math.max(vw, vh))
+  const canvas = document.createElement('canvas')
+  canvas.width = Math.round(vw * k)
+  canvas.height = Math.round(vh * k)
+  const ctx = canvas.getContext('2d')!
+  let frame = 0
+  const draw = () => {
+    const l = Math.max(1, level())
+    const sw = vw / l
+    const sh = vh / l
+    ctx.drawImage(video, (vw - sw) / 2, (vh - sh) / 2, sw, sh, 0, 0, canvas.width, canvas.height)
+    frame = requestAnimationFrame(draw)
+  }
+  draw()
+  const stream = canvas.captureStream(30)
+  audio.forEach((tr) => stream.addTrack(tr))
+  return {
+    stream,
+    stop: () => {
+      cancelAnimationFrame(frame)
+      stream.getVideoTracks().forEach((tr) => tr.stop())
+    },
+  }
 }

@@ -545,16 +545,29 @@ input:disabled { opacity: 0.6; }
   position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; align-items: stretch;
   gap: 12px; padding: 24px; max-width: 420px; margin: 0 auto; text-align: center;
 }
-/* зум: 0.5 · 1× · 2 · 3 — как в системной камере */
+/* зум: вертикальный ползунок справа, сверху — больше */
 .rec-zoom {
-  position: absolute; left: 50%; transform: translateX(-50%);
-  bottom: calc(118px + env(safe-area-inset-bottom));
-  display: flex; gap: 6px; padding: 4px; border-radius: 22px; background: rgb(0 0 0 / 0.45);
+  position: absolute; right: max(10px, env(safe-area-inset-right)); top: 50%; transform: translateY(-50%);
+  display: flex; flex-direction: column; align-items: center; gap: 10px;
+  padding: 10px 6px; border-radius: 24px; background: rgb(0 0 0 / 0.4);
 }
-.rec-zoom button {
-  min-width: 38px; height: 38px; padding: 0 8px; border: 0; border-radius: 19px;
-  background: rgb(255 255 255 / 0.12); color: #fff; font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums;
+.rec-zoom-value { color: #ffd60a; font-weight: 700; font-size: 14px; font-variant-numeric: tabular-nums; min-width: 40px; text-align: center; }
+.rec-zoom-track { position: relative; height: min(46vh, 320px); width: 44px; }
+.rec-zoom-slider {
+  position: absolute; inset: 0; width: 100%; height: 100%; margin: 0; padding: 0; border: 0; background: none;
+  writing-mode: vertical-lr; direction: rtl; /* снизу вверх */
+  accent-color: #ffd60a; cursor: pointer;
 }
-.rec-zoom button.active { background: rgb(0 0 0 / 0.55); color: #ffd60a; font-size: 14px; }
-.rec-zoom button:disabled { opacity: 0.35; }
-.rec-live { touch-action: none; }
+.rec-zoom-mark {
+  position: absolute; right: calc(100% + 4px); transform: translateY(50%);
+  min-width: 30px; height: 26px; padding: 0 6px; border: 0; border-radius: 13px;
+  background: rgb(0 0 0 / 0.5); color: #fff; font-size: 12px; font-weight: 600;
+}
+.rec-zoom-mark:disabled { opacity: 0.35; }
+.rec-zoom-cycle { width: 38px; height: 38px; border: 0; border-radius: 50%; background: rgb(255 255 255 / 0.15); color: #fff; font-size: 18px; }
+.rec-zoom-cycle:disabled { opacity: 0.35; }
+/* телефон боком: ползунок не заходит на кнопку записи */
+@media (orientation: landscape) and (max-height: 560px) {
+  .rec-zoom-track { height: 52vh; }
+}
+.rec-live { touch-action: none; transition: transform 0.08s linear; }

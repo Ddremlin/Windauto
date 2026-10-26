@@ -1,7 +1,20 @@
 // Круговое видео при приёмке: запись камерой в приложении (MediaRecorder),
 // а если она недоступна — системной камерой или из галереи.
 import { useEffect, useEffectEvent, useRef, useState } from 'react'
-import { classifyCameras, currentZoom, openCamera, setZoom, stopStream, trackLabel, zoomBase, zoomLevels, zoomRange, type Cameras, type ZoomRange } from '../camera'
+import {
+  DIGITAL_MAX,
+  classifyCameras,
+  currentZoom,
+  digitalZoomStream,
+  openCamera,
+  setZoom,
+  stopStream,
+  trackLabel,
+  zoomBase,
+  zoomRange,
+  type Cameras,
+  type ZoomRange,
+} from '../camera'
 import { useSettings, useT } from '../settingsHooks'
 import type { Order, VideoRef } from '../types'
 import { addVideo, deleteVideos, formatDuration, useVideoUrl } from '../videos'
@@ -29,6 +42,8 @@ const fileDuration = (blob: Blob) =>
     v.onerror = () => done(0)
     v.src = url
   })
+
+const clamp = (v: number, min: number, max: number) => Math.min(max, Math.max(min, v))
 
 // «0.5», «1×», «1.6×»; на неактивных кнопках — коротко, как в системной камере
 const zoomLabel = (l: number, short = false) => {
@@ -59,18 +74,23 @@ function Recorder({ onSave, onClose }: { onSave: (r: VideoRef) => void; onClose:
   const [taken, setTaken] = useState<Taken | null>(null)
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  // зум: 'ultra' — включена отдельная сверхширокая камера; zoom — плавный зум текущей камеры
+  // зум: lens 'ultra' — включена отдельная сверхширокая камера;
+  // zoom — зум текущей камеры: свой у камеры (native) или цифровой (кадр обрезается при записи)
   const alive = useRef(true)
   const cams = useRef<Cameras | null>(null)
   const lensRef = useRef<'main' | 'ultra'>('main')
   // камера, выбранная перебором (Android); undefined — по умолчанию
   const deviceRef = useRef<string | undefined>(undefined)
   const levelRef = useRef(1)
+  // предел зума основной камеры — чтобы с ultra можно было сразу уйти на 2×, 3×
+  const digitalRef = useRef<{ stop: () => void } | null>(null)
   const [lens, setLens] = useState<'main' | 'ultra'>('main')
-  const [zoom, setZoomInfo] = useState<{ range: ZoomRange; base: number } | null>(null)
+  const [zoom, setZoomInfo] = useState<{ range: ZoomRange; base: number; digital: boolean } | null>(null)
   const [level, setLevelState] = useState(1)
   const [hasUltra, setHasUltra] = useState(false)
   const [canCycle, setCanCycle] = useState(false)
+  // предел зума основной камеры — чтобы с ultra ползунком сразу уйти на 2×, 3×
+  const [ultraMax, setUltraMax] = useState(DIGITAL_MAX)
   const setLevel = (l: number) => {
     levelRef.current = l
     setLevelState(l)
@@ -112,17 +132,21 @@ function Recorder({ onSave, onClose }: { onSave: (r: VideoRef) => void; onClose:
       if (!alive.current) return stopStream(s)
       streamRef.current = s
       if (liveRef.current) liveRef.current.srcObject = s
-      const range = want === 'main' ? zoomRange(s) : null
-      const base = zoomBase(trackLabel(s))
       lensRef.current = want
       setLens(want)
-      setZoomInfo(range && { range, base })
-      if (want === 'ultra') setLevel(0.5)
-      else if (range) {
-        const z = Math.min(range.max, Math.max(range.min, wantLevel * base))
-        await setZoom(s, z)?.catch(() => {})
-        setLevel((currentZoom(s) ?? z) / base)
-      } else setLevel(1)
+      if (want === 'ultra') {
+        setZoomInfo(null)
+        setLevel(0.5)
+      } else {
+        const native = zoomRange(s)
+        const base = native ? zoomBase(trackLabel(s)) : 1
+        const range = native ?? { min: 1, max: DIGITAL_MAX }
+        setUltraMax(range.max / base)
+        setZoomInfo({ range, base, digital: !native })
+        const z = clamp(wantLevel * base, range.min, range.max)
+        if (native) await setZoom(s, z)?.catch(() => {})
+        setLevel((native ? (currentZoom(s) ?? z) : z) / base)
+      }
       setReady(true)
     } catch {
       if (!alive.current) return
@@ -132,23 +156,40 @@ function Recorder({ onSave, onClose }: { onSave: (r: VideoRef) => void; onClose:
     }
   }
 
-  const levels = zoomLevels(lens === 'main' ? (zoom?.range ?? null) : null, zoom?.base ?? 1, hasUltra)
-  // на ultra-камере плавного зума нет: из неё — только обратно на 1×
-  const shownLevels = lens === 'ultra' ? [0.5, 1] : levels
+  // что умеет текущая камера, без переключения
+  const curMin = zoom ? zoom.range.min / zoom.base : lens === 'ultra' ? 0.5 : 1
+  const curMax = zoom ? zoom.range.max / zoom.base : lens === 'ultra' ? 0.5 : 1
+  // ползунок: от 0.5 (если есть сверхширокая) до предела основной камеры
+  const sliderMin = Math.min(curMin, hasUltra ? 0.5 : curMin)
+  const sliderMax = lens === 'ultra' ? ultraMax : curMax
 
-  const chooseLevel = (l: number) => {
+  const frame = useRef(0)
+  // зум в пределах текущей камеры — сразу (и во время записи)
+  const applyLevel = (l: number) => {
     const s = streamRef.current
-    if (!s) return
-    if (lens === 'main' && zoom && l * zoom.base >= zoom.range.min - 0.01 && l * zoom.base <= zoom.range.max + 0.01) {
-      setZoom(s, l * zoom.base)?.catch(() => {})
-      setLevel(l)
-    } else if (recording) return
-    else if (l === 0.5 && hasUltra) startCamera('ultra')
-    else if (lens === 'ultra') startCamera('main', l)
+    if (!s || !zoom) return setLevel(l)
+    const v = clamp(l, curMin, curMax)
+    setLevel(v)
+    if (!zoom.digital) {
+      cancelAnimationFrame(frame.current)
+      frame.current = requestAnimationFrame(() => void setZoom(s, v * zoom.base)?.catch(() => {}))
+    }
   }
-  // кнопку нельзя нажать во время записи, если для неё нужно переключить камеру
-  const needsSwitch = (l: number) =>
-    !(lens === 'main' && zoom && l * zoom.base >= zoom.range.min - 0.01 && l * zoom.base <= zoom.range.max + 0.01)
+  // отпустили ползунок: если значение вне текущей камеры — переключаем (только до записи)
+  const commitLevel = () => {
+    const l = levelRef.current
+    if (recording) return applyLevel(clamp(l, curMin, curMax))
+    if (lens === 'main' && l < curMin - 0.01) {
+      if (hasUltra) void startCamera('ultra')
+      else applyLevel(curMin)
+    } else if (lens === 'ultra' && l >= 0.75) void startCamera('main', Math.max(1, l))
+    else if (lens === 'ultra') setLevel(0.5)
+  }
+  const onSlider = (l: number) => {
+    // в пределах текущей камеры — применяем на лету; иначе только показываем до отпускания
+    if (l >= curMin - 0.01 && l <= curMax + 0.01) applyLevel(l)
+    else if (!recording) setLevel(l)
+  }
 
   // следующая задняя камера (до начала записи)
   const cycleCamera = () => {
@@ -158,23 +199,15 @@ function Recorder({ onSave, onClose }: { onSave: (r: VideoRef) => void; onClose:
     void startCamera('main', 1)
   }
 
-  // зум двумя пальцами
-  const pinch = useRef<{ dist: number; zoom: number } | null>(null)
-  const frame = useRef(0)
+  // зум двумя пальцами — в пределах текущей камеры
+  const pinch = useRef<{ dist: number; level: number } | null>(null)
   const touchDist = (e: React.TouchEvent) => Math.hypot(e.touches[0].clientX - e.touches[1].clientX, e.touches[0].clientY - e.touches[1].clientY)
   const onTouchStart = (e: React.TouchEvent) => {
-    if (e.touches.length === 2 && lens === 'main' && zoom) pinch.current = { dist: touchDist(e), zoom: levelRef.current * zoom.base }
+    if (e.touches.length === 2 && zoom) pinch.current = { dist: touchDist(e), level: levelRef.current }
   }
   const onTouchMove = (e: React.TouchEvent) => {
     const p = pinch.current
-    const s = streamRef.current
-    if (!p || !zoom || !s || e.touches.length !== 2) return
-    const z = Math.min(zoom.range.max, Math.max(zoom.range.min, (p.zoom * touchDist(e)) / p.dist))
-    cancelAnimationFrame(frame.current)
-    frame.current = requestAnimationFrame(() => {
-      setZoom(s, z)?.catch(() => {})
-      setLevel(z / zoom.base)
-    })
+    if (p && e.touches.length === 2) applyLevel((p.level * touchDist(e)) / p.dist)
   }
   const onTouchEnd = () => {
     pinch.current = null
@@ -195,6 +228,7 @@ function Recorder({ onSave, onClose }: { onSave: (r: VideoRef) => void; onClose:
     return () => {
       alive.current = false
       if (recRef.current?.state === 'recording') recRef.current.stop()
+      digitalRef.current?.stop()
       stopStream(streamRef.current)
       document.body.style.overflow = prev
       if (full && document.fullscreenElement) document.exitFullscreen().catch(() => {})
@@ -231,7 +265,10 @@ function Recorder({ onSave, onClose }: { onSave: (r: VideoRef) => void; onClose:
     const stream = streamRef.current
     if (!stream) return
     const mimeType = MIME.find((m) => MediaRecorder.isTypeSupported(m))
-    const rec = new MediaRecorder(stream, { ...(mimeType ? { mimeType } : {}), videoBitsPerSecond: BITRATE })
+    // цифровой зум: пишем холст с увеличенным центром кадра
+    const digital = zoom?.digital && liveRef.current ? digitalZoomStream(liveRef.current, () => levelRef.current, stream.getAudioTracks()) : null
+    digitalRef.current = digital
+    const rec = new MediaRecorder(digital?.stream ?? stream, { ...(mimeType ? { mimeType } : {}), videoBitsPerSecond: BITRATE })
     const chunks: Blob[] = []
     rec.ondataavailable = (e) => {
       if (e.data.size) chunks.push(e.data)
@@ -240,6 +277,8 @@ function Recorder({ onSave, onClose }: { onSave: (r: VideoRef) => void; onClose:
       setRecording(false)
       const duration = (Date.now() - startedAt.current) / 1000
       const blob = new Blob(chunks, { type: rec.mimeType || mimeType || 'video/mp4' })
+      digitalRef.current?.stop()
+      digitalRef.current = null
       stopCamera()
       setTaken({ blob, duration, url: URL.createObjectURL(blob) })
     }
@@ -298,6 +337,7 @@ function Recorder({ onSave, onClose }: { onSave: (r: VideoRef) => void; onClose:
         <video
           ref={liveRef}
           className="rec-video rec-live"
+          style={zoom?.digital && level > 1 ? { transform: `scale(${level})` } : undefined}
           muted
           playsInline
           autoPlay
@@ -308,24 +348,44 @@ function Recorder({ onSave, onClose }: { onSave: (r: VideoRef) => void; onClose:
         />
       )}
 
-      {!taken && ready && (shownLevels.length > 1 || canCycle) && (
+      {!taken && ready && (sliderMax > sliderMin || canCycle) && (
         <div className="rec-zoom" role="group" aria-label={t('video.zoom')}>
-          {shownLevels.map((l) => {
-            // активная кнопка — ближайшая снизу к текущему зуму; на ней показываем точное значение
-            const active = l === [...shownLevels].reverse().find((x) => level >= x - 0.05)
-            return (
-              <button
-                key={l}
-                className={active ? 'active' : undefined}
-                disabled={recording && needsSwitch(l)}
-                onClick={() => chooseLevel(l)}
-              >
-                {active ? zoomLabel(level) : zoomLabel(l, true)}
-              </button>
-            )
-          })}
+          <span className="rec-zoom-value">{zoomLabel(level)}</span>
+          {sliderMax > sliderMin && (
+            <div className="rec-zoom-track">
+              <input
+                type="range"
+                className="rec-zoom-slider"
+                aria-label={t('video.zoom')}
+                min={Math.log2(sliderMin)}
+                max={Math.log2(sliderMax)}
+                step={0.01}
+                value={Math.log2(clamp(level, sliderMin, sliderMax))}
+                onChange={(e) => onSlider(2 ** Number(e.target.value))}
+                onPointerUp={commitLevel}
+                onTouchEnd={commitLevel}
+                onKeyUp={commitLevel}
+              />
+              {/* отметки 0.5 · 1 · 2 · 3 — нажатием сразу на нужный зум */}
+              {[0.5, 1, 2, 3].filter((m) => m >= sliderMin - 0.01 && m <= sliderMax + 0.01).map((m) => (
+                <button
+                  key={m}
+                  className="rec-zoom-mark"
+                  style={{ bottom: `${(100 * Math.log2(m / sliderMin)) / Math.log2(sliderMax / sliderMin)}%` }}
+                  disabled={recording && (m < curMin - 0.01 || m > curMax + 0.01)}
+                  onClick={() => {
+                    onSlider(m)
+                    levelRef.current = m
+                    commitLevel()
+                  }}
+                >
+                  {zoomLabel(m, true)}
+                </button>
+              ))}
+            </div>
+          )}
           {canCycle && (
-            <button onClick={cycleCamera} disabled={recording} title={t('video.switchCam')} aria-label={t('video.switchCam')}>
+            <button className="rec-zoom-cycle" onClick={cycleCamera} disabled={recording} title={t('video.switchCam')} aria-label={t('video.switchCam')}>
               ⟳
             </button>
           )}

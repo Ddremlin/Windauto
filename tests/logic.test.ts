@@ -62,8 +62,8 @@ test('отпечаток подписи меняется от работ, но �
   assert.notEqual(signedDigest({ ...o, mileage: '100' }), d)
 })
 
-test('камеры: составная iPhone, отдельная сверхширокая, кнопки зума', async () => {
-  const { classifyCameras, zoomBase, zoomLevels } = await import('../src/camera.ts')
+test('камеры: составная iPhone, отдельная сверхширокая', async () => {
+  const { classifyCameras, zoomBase } = await import('../src/camera.ts')
   const dev = (label: string, deviceId = label) => ({ kind: 'videoinput' as MediaDeviceKind, deviceId, label })
   // iPhone (английский и русский интерфейс)
   assert.deepEqual(classifyCameras([dev('Front Camera'), dev('Back Camera'), dev('Back Ultra Wide Camera'), dev('Back Triple Camera')]), {
@@ -80,11 +80,4 @@ test('камеры: составная iPhone, отдельная сверхши
   })
   assert.equal(zoomBase('Back Dual Wide Camera'), 2)
   assert.equal(zoomBase('camera2 0, facing back'), 1)
-  // составная камера: zoom 1…15 при базе 2 → 0.5×, 1×, 2×, 3×
-  assert.deepEqual(zoomLevels({ min: 1, max: 15 }, 2, false), [0.5, 1, 2, 3])
-  // Android с зумом от 1 до 8 и без сверхширокой
-  assert.deepEqual(zoomLevels({ min: 1, max: 8 }, 1, false), [1, 2, 3])
-  // без зума, но есть отдельная сверхширокая
-  assert.deepEqual(zoomLevels(null, 1, true), [0.5, 1])
-  assert.deepEqual(zoomLevels(null, 1, false), [1])
 })
