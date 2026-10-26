@@ -122,6 +122,26 @@ test('распознавание без ключа — понятная ошиб
   assert.equal(r.status, 503)
 })
 
+test('круговое видео: загрузка, Range, неверный id и вход', async () => {
+  const id = 'a1b2c3d4-e5f6.mp4'
+  const data = new Uint8Array(1000).map((_, i) => i % 256)
+  const put = await fetch(`${URL_}/api/videos/${id}`, { method: 'PUT', headers: { Authorization: `Bearer ${staff}`, 'Content-Type': 'video/mp4' }, body: data })
+  assert.equal(put.status, 200)
+
+  const full = await fetch(`${URL_}/api/videos/${id}`, { headers: { Authorization: `Bearer ${admin}` } })
+  assert.equal(full.headers.get('content-type'), 'video/mp4')
+  assert.deepEqual(new Uint8Array(await full.arrayBuffer()), data)
+
+  const part = await fetch(`${URL_}/api/videos/${id}`, { headers: { Authorization: `Bearer ${admin}`, Range: 'bytes=10-19' } })
+  assert.equal(part.status, 206)
+  assert.equal(part.headers.get('content-range'), 'bytes 10-19/1000')
+  assert.deepEqual(new Uint8Array(await part.arrayBuffer()), data.slice(10, 20))
+
+  const bad = await fetch(`${URL_}/api/videos/..%2Fwindauto.db`, { method: 'PUT', headers: { Authorization: `Bearer ${admin}` }, body: 'x' })
+  assert.equal(bad.status, 400)
+  assert.equal((await fetch(`${URL_}/api/videos/${id}`)).status, 401)
+})
+
 test('блокировка подбора пароля переживает перезапуск', async () => {
   for (let i = 0; i < 10; i++) await api('/api/login', '', { login: 'jan', password: 'wrong' })
   assert.equal((await api('/api/login', '', { login: 'jan', password: 'secret2' })).status, 429)

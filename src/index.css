@@ -414,12 +414,40 @@ input:disabled { opacity: 0.6; }
 .sig-preview { display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 6px 10px; border: 1px solid var(--line); border-radius: 10px; background: #fff; }
 .sig-preview img { max-height: 70px; max-width: 70%; }
 .sig-overlay {
-  position: fixed; inset: 0; z-index: 50; background: var(--panel); display: flex; flex-direction: column; gap: 10px;
-  padding: max(12px, env(safe-area-inset-top)) 16px calc(12px + env(safe-area-inset-bottom));
+  position: fixed; inset: 0; z-index: 50; background: var(--panel);
+  /* на весь видимый экран: dvh учитывает панели браузера и клавиатуру */
+  height: 100vh; height: 100dvh; width: 100vw;
+  display: grid; grid-template-columns: minmax(0, 1fr); grid-template-rows: auto minmax(0, 1fr) auto auto;
+  grid-template-areas: 'head' 'area' 'name' 'actions';
+  gap: 10px;
+  padding: max(12px, env(safe-area-inset-top)) max(16px, env(safe-area-inset-right)) calc(12px + env(safe-area-inset-bottom)) max(16px, env(safe-area-inset-left));
+}
+.sig-head { grid-area: head; }
+.sig-area { grid-area: area; }
+.sig-name { grid-area: name; }
+.sig-actions { grid-area: actions; }
+/* длинный текст подтверждения не съедает поле подписи */
+.sig-statement { max-height: 5.6em; overflow-y: auto; }
+/* телефон боком: поле подписи на всю высоту, текст и кнопки — колонкой справа */
+@media (orientation: landscape) and (max-height: 560px) {
+  .sig-overlay {
+    grid-template-columns: minmax(0, 1fr) clamp(220px, 32vw, 320px);
+    grid-template-rows: auto minmax(0, 1fr) auto;
+    grid-template-areas: 'area head' 'area name' 'area actions';
+    align-items: start;
+  }
+  .sig-area { align-self: stretch; }
+  .sig-statement { max-height: none; }
+  .sig-actions { flex-wrap: wrap; }
+  .sig-actions .btn { padding: 10px 12px; }
+}
+/* планшет и компьютер: поле во всю ширину экрана, но в разумных пропорциях */
+@media (min-width: 900px) and (min-height: 600px) {
+  .sig-overlay { padding-left: max(16px, calc((100vw - 1100px) / 2)); padding-right: max(16px, calc((100vw - 1100px) / 2)); }
 }
 .sig-head h2 { margin: 0; font-size: 18px; }
 .sig-statement { margin: 6px 0 0; font-size: 14px; color: var(--muted); }
-.sig-area { position: relative; flex: 1; min-height: 180px; border: 1px dashed var(--body-stroke); border-radius: 12px; background: #fff; overflow: hidden; }
+.sig-area { position: relative; min-height: 140px; border: 1px dashed var(--body-stroke); border-radius: 12px; background: #fff; overflow: hidden; }
 .sig-canvas { position: absolute; inset: 0; width: 100%; height: 100%; touch-action: none; cursor: crosshair; }
 .sig-line { position: absolute; left: 24px; right: 24px; bottom: 28%; border-bottom: 1px solid #c3c8d0; pointer-events: none; }
 .sig-placeholder { position: absolute; left: 0; right: 0; bottom: calc(28% + 8px); text-align: center; color: #9aa0a8; pointer-events: none; }
@@ -478,3 +506,39 @@ input:disabled { opacity: 0.6; }
 .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
 .vat-row { margin-top: 4px; }
 .month-bars + .hint { margin-top: 12px; }
+
+/* круговое видео */
+.walk-video { width: 100%; max-height: 60vh; border-radius: 10px; background: #000; display: block; }
+.walk-meta { display: flex; justify-content: space-between; align-items: center; gap: 8px; flex-wrap: wrap; margin-top: 8px; }
+.btn.wide-btn { width: 100%; margin-top: 8px; }
+.rec-overlay {
+  position: fixed; inset: 0; z-index: 60; background: #000; color: #fff;
+  height: 100vh; height: 100dvh;
+}
+.rec-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: contain; background: #000; }
+.rec-top {
+  position: absolute; left: 0; right: 0; top: 0; display: flex; justify-content: center;
+  padding: max(12px, env(safe-area-inset-top)) 16px 12px; pointer-events: none;
+}
+.rec-tip { background: rgb(0 0 0 / 0.55); padding: 8px 14px; border-radius: 12px; text-align: center; display: flex; flex-direction: column; gap: 2px; }
+.rec-tip small { opacity: 0.75; }
+.rec-badge { background: #d32f2f; padding: 6px 14px; border-radius: 20px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.rec-bar {
+  position: absolute; left: 0; right: 0; bottom: 0;
+  display: grid; grid-template-columns: 1fr auto 1fr; align-items: center; justify-items: center; gap: 12px;
+  padding: 16px 16px calc(20px + env(safe-area-inset-bottom));
+  background: linear-gradient(transparent, rgb(0 0 0 / 0.6));
+}
+.rec-bar:has(.btn.primary) { grid-template-columns: 1fr 1fr; }
+.rec-bar .btn { width: 100%; }
+.rec-bar .btn.rec-light { color: #fff; border-color: rgb(255 255 255 / 0.5); width: auto; }
+.rec-error { grid-column: 1 / -1; margin: 0; color: #ffb4a9; text-align: center; }
+.rec-btn {
+  width: 74px; height: 74px; border-radius: 50%; border: 5px solid #fff; background: #e53935; padding: 0;
+}
+.rec-btn:disabled { opacity: 0.4; }
+.rec-btn.stop { background: #fff; border-color: #e53935; border-radius: 18px; width: 64px; height: 64px; grid-column: 2; }
+.rec-nocam {
+  position: absolute; inset: 0; display: flex; flex-direction: column; justify-content: center; align-items: stretch;
+  gap: 12px; padding: 24px; max-width: 420px; margin: 0 auto; text-align: center;
+}

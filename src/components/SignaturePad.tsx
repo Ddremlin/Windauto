@@ -11,6 +11,33 @@ interface Props {
   onClose: () => void
 }
 
+interface Pt {
+  x: number
+  y: number
+  w: number
+}
+
+const INK = '#0b1d51'
+
+function segment(ctx: CanvasRenderingContext2D, a: Pt, b: Pt) {
+  ctx.strokeStyle = INK
+  ctx.lineCap = 'round'
+  ctx.lineJoin = 'round'
+  ctx.lineWidth = b.w
+  ctx.beginPath()
+  ctx.moveTo(a.x, a.y)
+  ctx.lineTo(b.x, b.y)
+  ctx.stroke()
+}
+
+function drawStroke(ctx: CanvasRenderingContext2D, st: Pt[]) {
+  ctx.beginPath()
+  ctx.arc(st[0].x, st[0].y, 1.2, 0, Math.PI * 2)
+  ctx.fillStyle = INK
+  ctx.fill()
+  for (let i = 1; i < st.length; i++) segment(ctx, st[i - 1], st[i])
+}
+
 // Подпись пальцем: рисуем на canvas, сохраняем обрезанный PNG (до 600 px по ширине).
 export default function SignaturePad({ title, statement, defaultName = '', onSave, onClose }: Props) {
   const t = useT()
@@ -18,32 +45,34 @@ export default function SignaturePad({ title, statement, defaultName = '', onSav
   const [name, setName] = useState(defaultName)
   const [empty, setEmpty] = useState(true)
   const drawing = useRef(false)
-  const last = useRef<{ x: number; y: number } | null>(null)
+  // штрихи в CSS-пикселях холста: при смене размера (поворот, клавиатура) пересчитываем и рисуем заново
+  const strokes = useRef<Pt[][]>([])
+  const size = useRef<{ w: number; h: number } | null>(null)
 
   // размер canvas = размер на экране × плотность пикселей
   useEffect(() => {
     const c = canvasRef.current!
     const fit = () => {
       const r = c.getBoundingClientRect()
+      if (!r.width || !r.height) return
+      const prev = size.current
+      if (prev && (prev.w !== r.width || prev.h !== r.height)) {
+        // равномерный масштаб — подпись не растягивается и остаётся в поле
+        const k = Math.min(r.width / prev.w, r.height / prev.h)
+        strokes.current = strokes.current.map((st) => st.map((p) => ({ ...p, x: p.x * k, y: p.y * k })))
+      }
+      size.current = { w: r.width, h: r.height }
       const dpr = window.devicePixelRatio || 1
-      // перерисовываем то, что уже нарисовано (пустой холст даёт пустой снимок)
-      const snapshot = c.toDataURL()
       c.width = Math.round(r.width * dpr)
       c.height = Math.round(r.height * dpr)
       const ctx = c.getContext('2d')!
       ctx.scale(dpr, dpr)
-      ctx.lineCap = 'round'
-      ctx.lineJoin = 'round'
-      ctx.strokeStyle = '#0b1d51'
-      if (snapshot) {
-        const img = new Image()
-        img.onload = () => ctx.drawImage(img, 0, 0, r.width, r.height)
-        img.src = snapshot
-      }
+      strokes.current.forEach((st) => drawStroke(ctx, st))
     }
     fit()
-    window.addEventListener('resize', fit)
-    return () => window.removeEventListener('resize', fit)
+    const ro = new ResizeObserver(fit)
+    ro.observe(c)
+    return () => ro.disconnect()
   }, [])
 
   useEffect(() => {
@@ -58,49 +87,43 @@ export default function SignaturePad({ title, statement, defaultName = '', onSav
     }
   }, [onClose])
 
-  const point = (e: React.PointerEvent) => {
+  const pointOf = (ev: PointerEvent): Pt => {
     const r = canvasRef.current!.getBoundingClientRect()
-    return { x: e.clientX - r.left, y: e.clientY - r.top }
+    // нажим (стилус) или 2.4 px для пальца
+    const w = ev.pressure && ev.pointerType === 'pen' ? 1 + ev.pressure * 3 : 2.4
+    return { x: ev.clientX - r.left, y: ev.clientY - r.top, w }
   }
 
   const down = (e: React.PointerEvent) => {
     e.preventDefault()
     canvasRef.current!.setPointerCapture(e.pointerId)
     drawing.current = true
-    last.current = point(e)
-    const ctx = canvasRef.current!.getContext('2d')!
-    ctx.beginPath()
-    ctx.arc(last.current.x, last.current.y, 1.2, 0, Math.PI * 2)
-    ctx.fillStyle = '#0b1d51'
-    ctx.fill()
+    const st = [pointOf(e.nativeEvent)]
+    strokes.current.push(st)
+    drawStroke(canvasRef.current!.getContext('2d')!, st)
     setEmpty(false)
   }
 
   const move = (e: React.PointerEvent) => {
-    if (!drawing.current || !last.current) return
+    const st = strokes.current.at(-1)
+    if (!drawing.current || !st) return
     const ctx = canvasRef.current!.getContext('2d')!
     const events = e.nativeEvent.getCoalescedEvents?.() ?? [e.nativeEvent]
     for (const ev of events) {
-      const r = canvasRef.current!.getBoundingClientRect()
-      const p = { x: ev.clientX - r.left, y: ev.clientY - r.top }
-      // нажим (стилус) или 2.4 px для пальца
-      ctx.lineWidth = ev.pressure && ev.pointerType === 'pen' ? 1 + ev.pressure * 3 : 2.4
-      ctx.beginPath()
-      ctx.moveTo(last.current.x, last.current.y)
-      ctx.lineTo(p.x, p.y)
-      ctx.stroke()
-      last.current = p
+      const p = pointOf(ev)
+      segment(ctx, st[st.length - 1], p)
+      st.push(p)
     }
   }
 
   const up = () => {
     drawing.current = false
-    last.current = null
   }
 
   const clear = () => {
     const c = canvasRef.current!
     c.getContext('2d')!.clearRect(0, 0, c.width, c.height)
+    strokes.current = []
     setEmpty(true)
   }
 

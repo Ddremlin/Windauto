@@ -5,6 +5,7 @@ import { orderNo } from '../docNumber'
 import { rodoClause } from '../rodo'
 import { useSettings } from '../settingsHooks'
 import type { Order, Signature } from '../types'
+import { formatDuration } from '../videos'
 import { formatPlate } from '../validate'
 import { WORKS, WORK_BY_ID, elementLabor, elementTotal, formatMoney, fuelLabel, orderTotals } from '../works'
 import BodyMap, { DAMAGE_COLOR } from './BodyMap'
@@ -125,7 +126,7 @@ export default function AcceptanceDoc({ order, photoUrls, kind = 'acceptance' }:
   )
 
   const intake = order.intake
-  const hasIntake = intake.fuel !== undefined || intake.keys !== undefined || intake.items.length > 0 || intake.belongings
+  const hasIntake = intake.fuel !== undefined || intake.keys !== undefined || intake.items.length > 0 || intake.belongings || Boolean(order.walkaround)
 
   return (
     <div className="doc">
@@ -187,6 +188,8 @@ export default function AcceptanceDoc({ order, photoUrls, kind = 'acceptance' }:
           <div className="doc-grid">
             {kv(t('intake.fuel'), intake.fuel !== undefined ? fuelLabel(intake.fuel) : '')}
             {kv(t('intake.keys'), intake.keys !== undefined ? String(intake.keys) : '')}
+            {order.walkaround &&
+              kv(t('video.title'), t('video.recorded', { date: new Date(order.walkaround.at).toLocaleString(locale, dateStyle), dur: formatDuration(order.walkaround.duration) }))}
           </div>
           {intake.items.length > 0 && (
             <div className="doc-intake">

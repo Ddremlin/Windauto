@@ -3,7 +3,7 @@
 // для распознавания VIN и номера по фото (нужен ANTHROPIC_API_KEY, без него распознавание выключено).
 import Anthropic from '@anthropic-ai/sdk'
 import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto'
-import { createReadStream, existsSync, mkdirSync, statSync, writeFileSync, renameSync } from 'node:fs'
+import { createReadStream, createWriteStream, existsSync, mkdirSync, statSync, writeFileSync, renameSync, unlinkSync } from 'node:fs'
 import { createServer } from 'node:http'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
@@ -17,12 +17,15 @@ const ORIGINS = (process.env.ALLOWED_ORIGINS ?? 'https://ddremlin.github.io,http
   .filter(Boolean)
 const MAX_JSON = 20 * 1024 * 1024
 const MAX_PHOTO = 15 * 1024 * 1024
+// круговое видео при приёмке: ~2,5 Мбит/с × 3 мин ≈ 60 МБ, с запасом под видео из галереи
+const MAX_VIDEO = 300 * 1024 * 1024
 const SESSION_DAYS = 180
 const MAX_RECOGNIZE = 8 * 1024 * 1024
 const AI_MODEL = process.env.AI_MODEL || 'claude-opus-5-5'
 const ai = process.env.ANTHROPIC_API_KEY ? new Anthropic() : null
 
 mkdirSync(join(DATA, 'photos'), { recursive: true })
+mkdirSync(join(DATA, 'videos'), { recursive: true })
 const db = new DatabaseSync(join(DATA, 'windauto.db'))
 db.exec(`
   PRAGMA journal_mode = WAL;
@@ -221,6 +224,45 @@ const photoPath = (id) => {
   if (!PHOTO_ID.test(id)) throw new HttpError(400, 'Неверный id фото')
   return join(DATA, 'photos', `${id}.jpg`)
 }
+
+const VIDEO_TYPES = { mp4: 'video/mp4', webm: 'video/webm', mov: 'video/quicktime' }
+const videoPath = (id) => {
+  const m = id.match(/^([A-Za-z0-9_-]{8,64})\.(mp4|webm|mov)$/)
+  if (!m) throw new HttpError(400, 'Неверный id видео')
+  return { path: join(DATA, 'videos', id), type: VIDEO_TYPES[m[2]] }
+}
+
+// тело запроса сразу в файл (видео не держим в памяти), через временный — без обрезков
+const saveStream = (req, path, limit) =>
+  new Promise((resolve, reject) => {
+    if (Number(req.headers['content-length'] ?? 0) > limit) return reject(new HttpError(413, 'Слишком большое видео'))
+    const tmp = path + '.tmp'
+    const out = createWriteStream(tmp)
+    let size = 0
+    const fail = (e) => {
+      out.destroy()
+      try {
+        unlinkSync(tmp)
+      } catch {
+        /* уже нет */
+      }
+      reject(e)
+    }
+    req.on('data', (c) => {
+      size += c.length
+      if (size > limit) {
+        req.destroy()
+        fail(new HttpError(413, 'Слишком большое видео'))
+      }
+    })
+    req.on('error', fail)
+    out.on('error', fail)
+    out.on('finish', () => {
+      renameSync(tmp, path)
+      resolve(size)
+    })
+    req.pipe(out)
+  })
 
 
 // --- распознавание VIN / номера по фото ---
@@ -506,7 +548,7 @@ const routes = {
   },
 }
 
-// /api/users/:id и /api/photos/:id
+// /api/users/:id, /api/photos/:id и /api/videos/:id
 async function dynamicRoute(req, res, url) {
   let m = url.pathname.match(/^\/api\/users\/([\w-]+)$/)
   if (m) {
@@ -569,6 +611,36 @@ async function dynamicRoute(req, res, url) {
       return createReadStream(p).pipe(res)
     }
   }
+  m = url.pathname.match(/^\/api\/videos\/([^/]+)$/)
+  if (m) {
+    auth(req, url)
+    const { path, type } = videoPath(m[1])
+    if (req.method === 'PUT') {
+      await saveStream(req, path, MAX_VIDEO)
+      return send(res, 200, { ok: true })
+    }
+    if (req.method === 'GET' || req.method === 'HEAD') {
+      if (!existsSync(path)) throw new HttpError(404, 'Нет видео')
+      const size = statSync(path).size
+      const headers = { 'Content-Type': type, 'Accept-Ranges': 'bytes', 'Cache-Control': 'private, max-age=31536000, immutable' }
+      // Range — чтобы плеер мог перематывать без загрузки целиком
+      const range = req.headers.range?.match(/^bytes=(\d*)-(\d*)$/)
+      if (range && (range[1] || range[2])) {
+        const start = range[1] ? Number(range[1]) : Math.max(0, size - Number(range[2]))
+        const end = range[1] && range[2] ? Math.min(Number(range[2]), size - 1) : size - 1
+        if (start >= size || start > end) {
+          res.writeHead(416, { 'Content-Range': `bytes */${size}` })
+          return res.end()
+        }
+        res.writeHead(206, { ...headers, 'Content-Range': `bytes ${start}-${end}/${size}`, 'Content-Length': end - start + 1 })
+        if (req.method === 'HEAD') return res.end()
+        return createReadStream(path, { start, end }).pipe(res)
+      }
+      res.writeHead(200, { ...headers, 'Content-Length': size })
+      if (req.method === 'HEAD') return res.end()
+      return createReadStream(path).pipe(res)
+    }
+  }
   throw new HttpError(404, 'Не найдено')
 }
 
@@ -577,7 +649,7 @@ const server = createServer(async (req, res) => {
   if (origin && ORIGINS.includes(origin)) {
     res.setHeader('Access-Control-Allow-Origin', origin)
     res.setHeader('Vary', 'Origin')
-    res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type')
+    res.setHeader('Access-Control-Allow-Headers', 'Authorization, Content-Type, Range')
     res.setHeader('Access-Control-Allow-Methods', 'GET, HEAD, POST, PUT, PATCH, DELETE, OPTIONS')
     res.setHeader('Access-Control-Max-Age', '86400')
   }

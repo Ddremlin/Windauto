@@ -153,6 +153,8 @@ export function SignaturesPanel({ order, master, onChange }: { order: Order; mas
   // лист изменили после подписи клиента (работы, цены, данные авто) — предупреждаем
   const accept = order.signatures.acceptClient
   const changedAfter = Boolean(accept?.hash && accept.hash !== signedDigest(order))
+  // подписи приёмки — только после кругового видео
+  const needVideo = (k: SignatureKind) => k !== 'issueClient' && !order.walkaround
   return (
     <section className="panel">
       <h2>{t('sig.title')}</h2>
@@ -177,6 +179,11 @@ export function SignaturesPanel({ order, master, onChange }: { order: Order; mas
                     {t('sig.remove')}
                   </button>
                 </div>
+              ) : needVideo(k) ? (
+                <>
+                  <button className="btn" disabled>✍ {t('sig.sign')}</button>
+                  <small className="warn-text">{t('video.needFirst')}</small>
+                </>
               ) : (
                 <button className="btn" onClick={() => setPad(k)}>✍ {t('sig.sign')}</button>
               )}
@@ -233,6 +240,7 @@ export function ReadyNotice({ order }: { order: Order }) {
 const FIELD_LABEL: Record<string, string> = {
   number: 'order.number',
   status: 'order.status',
+  walkaround: 'video.title',
   plate: 'order.plate',
   plateCountry: 'order.plateCountry',
   vin: 'order.vin',

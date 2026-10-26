@@ -58,6 +58,15 @@ export type IntakeItem =
   | 'radio_panel'
   | 'charging_cable'
 
+// круговое видео автомобиля при приёмке; сам файл — в IndexedDB и на сервере
+export interface VideoRef {
+  // имя файла: <uuid>.mp4 / .webm / .mov
+  id: string
+  at: number
+  // длительность, с (0 — неизвестна)
+  duration: number
+}
+
 export interface Intake {
   // уровень топлива / заряда в восьмых: 0 — пусто, 8 — полный бак
   fuel?: number
@@ -106,6 +115,7 @@ export interface Order {
   intake: Intake
   consent: Consent
   signatures: Partial<Record<SignatureKind, Signature>>
+  walkaround?: VideoRef
   elements: Record<string, ElementWork>
   // время последнего изменения каждого поля (для слияния правок с разных телефонов):
   // ключ — имя поля или «el:<id элемента>»

@@ -3,6 +3,7 @@
 // когда есть связь. Конфликты: побеждает более позднее изменение заказа.
 import { useSyncExternalStore } from 'react'
 import { deletePhotos, getLocalPhoto, markRemoteSource, orderPhotoIds } from './photos'
+import { deleteVideos, getLocalVideo, markRemoteVideoSource, orderVideoIds, videoType } from './videos'
 import { applyRemoteShared, getSettings, hasShared, onSharedChange, pickShared, setSharedStamp, type SharedSettings } from './settingsStore'
 import { mergeOrders } from './merge'
 import { getOrders, migrate, onLocalChange, removeOrder, setServerNumbering, upsertOrder } from './storage'
@@ -131,6 +132,14 @@ markRemoteSource(async (id) => {
   return res?.ok ? res.blob() : undefined
 })
 
+markRemoteVideoSource(async (id) => {
+  if (!state.token) return undefined
+  const res = await fetch(`${state.server}/api/videos/${encodeURIComponent(id)}`, {
+    headers: { Authorization: `Bearer ${state.token}` },
+  }).catch(() => null)
+  return res?.ok ? res.blob() : undefined
+})
+
 // --- цикл синхронизации ---
 let running = false
 let again = false
@@ -153,6 +162,7 @@ function applyRemote(r: RemoteOrder) {
     if (state.dirty[r.id] && local && local.updatedAt > r.updatedAt) return
     if (local) {
       deletePhotos(orderPhotoIds(local))
+      deleteVideos(orderVideoIds(local))
       removeOrder(r.id, { remote: true })
     }
     delete state.dirty[r.id]
@@ -161,7 +171,7 @@ function applyRemote(r: RemoteOrder) {
   }
   if (!r.data) return
   const remote = migrate({ ...r.data, updatedAt: r.updatedAt })
-  orderPhotoIds(remote).forEach((id) => (state.uploaded[id] = true))
+  ;[...orderPhotoIds(remote), ...orderVideoIds(remote)].forEach((id) => (state.uploaded[id] = true))
   // заказ удалён здесь, но ещё не отправлено: чужая правка новее удаления — побеждает она
   if (state.deleted[r.id]) {
     if (state.deleted[r.id] >= r.updatedAt) return
@@ -192,6 +202,15 @@ export async function syncNow(): Promise<void> {
       const blob = await getLocalPhoto(id)
       if (!blob) continue
       await api(`/api/photos/${encodeURIComponent(id)}`, { method: 'PUT', body: blob, headers: { 'Content-Type': 'image/jpeg' } })
+      state.uploaded[id] = true
+      persist()
+    }
+    // круговые видео — после фото: они большие и грузятся дольше
+    for (const id of getOrders().flatMap(orderVideoIds)) {
+      if (state.uploaded[id]) continue
+      const blob = await getLocalVideo(id)
+      if (!blob) continue
+      await api(`/api/videos/${encodeURIComponent(id)}`, { method: 'PUT', body: blob, headers: { 'Content-Type': videoType(id) } })
       state.uploaded[id] = true
       persist()
     }

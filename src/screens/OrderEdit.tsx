@@ -11,12 +11,14 @@ import { PhotoStrip } from '../components/Photos'
 import { PlateInput } from '../components/Plate'
 import { useDocScan, useScan } from '../components/Scan'
 import ShareSheet from '../components/ShareSheet'
+import { WalkaroundPanel } from '../components/Walkaround'
 import { COUNTRIES } from '../countries'
 import { deletePhotos, elementPhotoIds, orderPhotoIds } from '../photos'
 import { useSettings } from '../settingsHooks'
 import { listStaff, useSyncStatus, type RecognizedDoc } from '../sync'
 import type { BodyType, ElementWork, Order, Signature, SignatureKind } from '../types'
 import { checkEmail, checkPlate, checkVin, formatPlate, normalizePlate, normalizeVin } from '../validate'
+import { deleteVideos, orderVideoIds } from '../videos'
 import { decodeVin } from '../vin'
 import { STATUSES, WORKS, WORK_BY_ID, elementTotal, formatMoney, orderTotals } from '../works'
 
@@ -157,6 +159,7 @@ export default function OrderEdit({ initial, onSave, onDelete, onBack }: Props) 
   const remove = () => {
     if (confirm(t('order.deleteConfirm'))) {
       deletePhotos(orderPhotoIds(order))
+      deleteVideos(orderVideoIds(order))
       onDelete(order.id)
       onBack()
     }
@@ -424,6 +427,8 @@ export default function OrderEdit({ initial, onSave, onDelete, onBack }: Props) 
           <h2>{t('order.notes')}</h2>
           <textarea rows={3} placeholder={t('order.notesPh')} value={order.notes} onChange={(e) => update({ notes: e.target.value })} />
         </section>
+
+        <WalkaroundPanel order={order} onChange={(walkaround) => update({ walkaround })} />
 
         <SignaturesPanel order={order} master={sync.user?.name || sync.user?.login || ''} onChange={setSignature} />
 
