@@ -14,6 +14,9 @@ interface Props {
   width?: number
 }
 
+// отметка «повреждение было до приёмки»
+export const DAMAGE_COLOR = '#ff8f00'
+
 const INLINE = {
   el: { fill: '#f2f4f7', stroke: '#8a94a3', strokeWidth: 1.5 },
   marked: { stroke: '#15181d', strokeWidth: 1.8 },
@@ -21,6 +24,8 @@ const INLINE = {
   labelMarked: { fill: '#fff', fontWeight: 700, stroke: 'rgba(0,0,0,.55)', strokeWidth: 2.2, paintOrder: 'stroke' },
   caption: { fontSize: 10, fill: '#666', textAnchor: 'middle', letterSpacing: '0.12em', fontWeight: 600, fontFamily: 'sans-serif' },
   wheel: { fill: '#3a3f47' },
+  damageOnly: { fill: '#e6e9ee', strokeDasharray: '4 3' },
+  damage: { fill: DAMAGE_COLOR, stroke: '#fff', strokeWidth: 1.2 },
 } as const
 
 export default function BodyMap({ elements, onSelect, selected, bodyType, inline, width = VIEW_W }: Props) {
@@ -65,14 +70,16 @@ export default function BodyMap({ elements, onSelect, selected, bodyType, inline
 
       {BODY.map((e) => {
         const works = elements[e.id]?.works ?? []
+        const damaged = Boolean(elements[e.id]?.damage?.length)
         const fill = works.length === 0 ? undefined : works.length === 1 ? WORK_BY_ID[works[0]].color : `url(#g-${e.id})`
-        const cls = ['bm-el', works.length ? 'bm-marked' : '', selected === e.id ? 'bm-selected' : ''].join(' ')
+        const cls = ['bm-el', works.length ? 'bm-marked' : '', damaged && !works.length ? 'bm-damaged' : '', selected === e.id ? 'bm-selected' : ''].join(' ')
+        const inlineStyle = { ...INLINE.el, ...(works.length ? INLINE.marked : damaged ? INLINE.damageOnly : {}), ...(fill ? { fill } : {}) }
         return (
           <g key={e.id} onClick={() => onSelect?.(e.id)} className={onSelect ? 'bm-click' : undefined}>
             <path
               d={e.d}
               className={cls}
-              style={inline ? { ...INLINE.el, ...(works.length ? INLINE.marked : {}), ...(fill ? { fill } : {}) } : fill ? { fill } : undefined}
+              style={inline ? inlineStyle : fill ? { fill } : undefined}
             >
               <title>{t(`el.${e.key}`)}</title>
             </path>
@@ -85,6 +92,11 @@ export default function BodyMap({ elements, onSelect, selected, bodyType, inline
             >
               {t(`els.${e.key}`)}
             </text>
+            {damaged ? (
+              <circle cx={e.cx + (e.vertical ? 9 : 0)} cy={e.cy - (e.vertical ? 0 : 10)} r={4} className="bm-damage" style={inline ? INLINE.damage : undefined}>
+                <title>{t('damage.legend')}</title>
+              </circle>
+            ) : null}
             {!inline && elements[e.id]?.note ? <circle cx={e.cx - 5} cy={e.cy + 10} r={2.5} className="bm-note-dot" /> : null}
             {!inline && elements[e.id]?.photos?.length ? (
               <g className="bm-photo" transform={`translate(${e.cx + 1} ${e.cy + 6})`}>

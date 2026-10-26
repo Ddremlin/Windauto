@@ -1,33 +1,13 @@
 // Фото повреждений хранятся в IndexedDB (localStorage для них мал),
 // в заказе — только их id.
 import { useEffect, useState } from 'react'
-import type { Order } from './types'
+import { tx as idbTx } from './idb'
+import type { ElementWork, Order } from './types'
 
-const DB = 'windauto'
-const STORE = 'photos'
 const MAX_SIDE = 1600
 const QUALITY = 0.82
 
-let dbPromise: Promise<IDBDatabase> | null = null
-
-function db(): Promise<IDBDatabase> {
-  dbPromise ??= new Promise((resolve, reject) => {
-    const req = indexedDB.open(DB, 1)
-    req.onupgradeneeded = () => req.result.createObjectStore(STORE)
-    req.onsuccess = () => resolve(req.result)
-    req.onerror = () => reject(req.error)
-  })
-  return dbPromise
-}
-
-async function tx<T>(mode: IDBTransactionMode, fn: (s: IDBObjectStore) => IDBRequest<T>): Promise<T> {
-  const d = await db()
-  return new Promise((resolve, reject) => {
-    const req = fn(d.transaction(STORE, mode).objectStore(STORE))
-    req.onsuccess = () => resolve(req.result)
-    req.onerror = () => reject(req.error)
-  })
-}
+const tx = <T,>(mode: IDBTransactionMode, fn: (s: IDBObjectStore) => IDBRequest<T>) => idbTx<T>('photos', mode, fn)
 
 const newId = () => crypto.randomUUID?.() ?? Date.now().toString(36) + Math.random().toString(36).slice(2)
 
@@ -76,8 +56,10 @@ export async function deletePhotos(ids: string[]) {
   await Promise.all(ids.map((id) => tx('readwrite', (s) => s.delete(id)).catch(() => {})))
 }
 
+export const elementPhotoIds = (e: ElementWork | undefined): string[] => [...(e?.photos ?? []), ...(e?.photosAfter ?? [])]
+
 export function orderPhotoIds(o: Order): string[] {
-  return Object.values(o.elements).flatMap((e) => e.photos ?? [])
+  return Object.values(o.elements).flatMap(elementPhotoIds)
 }
 
 // небольшой кэш object URL, чтобы миниатюры не мигали при перерисовке

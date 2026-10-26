@@ -80,3 +80,24 @@ export function suggest(items: string[], query: string, limit = 50): string[] {
   }
   return [...head, ...word].slice(0, limit)
 }
+
+/** «VOLKSWAGEN» → «Volkswagen», «SKODA» → «Škoda»; неизвестная марка — как есть, с заглавной */
+export function canonMake(raw: string): string {
+  const s = raw.trim()
+  if (!s) return ''
+  const k = norm(s)
+  const alias: Record<string, string> = { vw: 'Volkswagen', mercedes: 'Mercedes-Benz', mercedesbenz: 'Mercedes-Benz', landrover: 'Land Rover', alfa: 'Alfa Romeo' }
+  return MAKES.find((m) => norm(m) === k) ?? alias[k] ?? s.charAt(0).toUpperCase() + s.slice(1).toLowerCase()
+}
+
+/** Модель из документа — к написанию из справочника, если такая есть */
+export function canonModel(make: string, raw: string): string {
+  const s = raw.trim()
+  if (!s) return ''
+  const k = norm(s)
+  const list = modelsOf(make)
+  const exact = list.find((m) => norm(m) === k)
+  if (exact) return exact
+  // «GOLF VARIANT» → «Golf Variant»; короткие части с цифрами (A4, CX-5) не трогаем
+  return s === s.toUpperCase() ? s.replace(/\p{L}+/gu, (w) => (w.length > 2 ? w[0] + w.slice(1).toLowerCase() : w)) : s
+}

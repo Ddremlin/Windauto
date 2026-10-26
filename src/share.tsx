@@ -1,27 +1,27 @@
-// PDF листа приёмки и текст для WhatsApp
+// PDF листа приёмки / акта выдачи и тексты для WhatsApp, SMS, e-mail
 import { flushSync } from 'react-dom'
 import { createRoot } from 'react-dom/client'
 import { getLayout } from './body'
-import AcceptanceDoc, { DOC_WIDTH } from './components/AcceptanceDoc'
-import { docNumber } from './docNumber'
-import { makeT, type Lang } from './i18n'
+import AcceptanceDoc, { DOC_WIDTH, type DocKind } from './components/AcceptanceDoc'
+import { orderNo } from './docNumber'
+import { LOCALE, makeT, type Lang } from './i18n'
 import { getPhoto, orderPhotoIds } from './photos'
 import { LangOverride, SettingsProvider } from './settings'
 import type { Settings } from './settingsStore'
 import type { Order } from './types'
 import { formatPlate, normalizePlate } from './validate'
-import { elementTotal, formatMoney, orderTotal } from './works'
+import { elementTotal, formatMoney, orderTotals } from './works'
 
 const A4_H = (DOC_WIDTH * 297) / 210
 const MARGIN_MM = 12
 const MARGIN_PX = (MARGIN_MM / 210) * DOC_WIDTH
 
-export function pdfFileName(o: Order): string {
-  const plate = normalizePlate(o.plate) || docNumber(o)
-  return `protokol_${plate}_${new Date(o.createdAt).toISOString().slice(0, 10)}.pdf`
+export function pdfFileName(o: Order, kind: DocKind = 'acceptance'): string {
+  const plate = normalizePlate(o.plate) || orderNo(o).replace(/\W+/g, '-')
+  return `${kind === 'handover' ? 'wydanie' : 'protokol'}_${plate}_${new Date(o.createdAt).toISOString().slice(0, 10)}.pdf`
 }
 
-export async function makePdf(order: Order, lang: Lang): Promise<Blob> {
+export async function makePdf(order: Order, lang: Lang, kind: DocKind = 'acceptance'): Promise<Blob> {
   const [{ jsPDF }, { default: html2canvas }] = await Promise.all([import('jspdf'), import('html2canvas-pro')])
 
   // фото — в object URL на время рендера
@@ -40,7 +40,7 @@ export async function makePdf(order: Order, lang: Lang): Promise<Blob> {
       root.render(
         <SettingsProvider>
           <LangOverride lang={lang}>
-            <AcceptanceDoc order={order} photoUrls={urls} />
+            <AcceptanceDoc order={order} photoUrls={urls} kind={kind} />
           </LangOverride>
         </SettingsProvider>,
       ),
@@ -113,23 +113,40 @@ export function downloadBlob(blob: Blob, name: string) {
   setTimeout(() => URL.revokeObjectURL(a.href), 2000)
 }
 
+const carName = (o: Order) => [o.make, o.model, o.plate && formatPlate(o.plate, o.plateCountry)].filter(Boolean).join(' ')
+
 export function orderText(o: Order, lang: Lang, s: Settings): string {
   const t = makeT(lang)
   const layout = getLayout(o.bodyType)
-  const marked = layout.elements.filter((e) => o.elements[e.id]?.works.length)
-  const car = [o.make, o.model, o.plate && formatPlate(o.plate, o.plateCountry)].filter(Boolean).join(' ')
-  const lines = [t('doc.textHeader', { car }), '']
+  const marked = layout.elements.filter((e) => o.elements[e.id]?.works.length || o.elements[e.id]?.parts)
+  const lines = [t('doc.textHeader', { car: carName(o) }), t('doc.number', { n: orderNo(o) }), '']
   if (o.vin) lines.push(`VIN: ${o.vin}`)
   for (const e of marked) {
     const v = o.elements[e.id]
     // «Замена» → «замена», но аббревиатуры (PDR) не трогаем
     const lower = (s: string) => (/^\p{Lu}\p{Ll}/u.test(s) ? s[0].toLowerCase() + s.slice(1) : s)
-    const works = v.works.map((w) => lower(t(`work.${w}`))).join(', ')
+    const works = [...v.works.map((w) => lower(t(`work.${w}`))), ...(v.parts ? [lower(t('tot.parts'))] : [])].join(', ')
     const sum = elementTotal(v)
     lines.push(`• ${t(`el.${e.key}`)}: ${works}${sum ? ` — ${formatMoney(sum)}` : ''}`)
   }
-  const total = orderTotal(o.elements, marked.map((e) => e.id))
-  if (total) lines.push('', `${t('order.total')}: ${formatMoney(total)}`, t('doc.disclaimer'))
+  const tot = orderTotals(o, s, marked.map((e) => e.id))
+  if (tot.gross) {
+    lines.push('')
+    if (tot.discount) lines.push(`${t('tot.discountSum', { p: tot.discountPct })}: −${formatMoney(tot.discount)}`)
+    lines.push(`${tot.vatRate ? t('tot.gross') : t('order.total')}: ${formatMoney(tot.gross)}`, t('doc.disclaimer'))
+  }
+  if (o.dueDate) lines.push(t('doc.dueText', { d: new Date(o.dueDate + 'T12:00').toLocaleDateString(LOCALE[lang]) }))
+  if (s.shopName || s.shopPhone) lines.push('', [s.shopName, s.shopPhone].filter(Boolean).join(', '))
+  return lines.join('\n')
+}
+
+/** «Машина готова» — короткое сообщение клиенту */
+export function readyText(o: Order, lang: Lang, s: Settings): string {
+  const t = makeT(lang)
+  const tot = orderTotals(o, s)
+  const lines = [t('ready.text', { car: carName(o) }).replace(/\s+([,.!])/g, '$1').replace(/\s{2,}/g, ' ')]
+  if (tot.gross) lines.push(t('ready.sum', { sum: formatMoney(tot.gross) }))
+  if (s.shopAddress) lines.push(t('ready.where', { addr: s.shopAddress }))
   if (s.shopName || s.shopPhone) lines.push('', [s.shopName, s.shopPhone].filter(Boolean).join(', '))
   return lines.join('\n')
 }

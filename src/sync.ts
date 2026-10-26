@@ -4,7 +4,8 @@
 import { useSyncExternalStore } from 'react'
 import { deletePhotos, getLocalPhoto, markRemoteSource, orderPhotoIds } from './photos'
 import { applyRemoteShared, getSettings, hasShared, onSharedChange, pickShared, setSharedStamp, type SharedSettings } from './settingsStore'
-import { getOrders, migrate, onLocalChange, removeOrder, upsertOrder } from './storage'
+import { mergeOrders } from './merge'
+import { getOrders, migrate, onLocalChange, removeOrder, setServerNumbering, upsertOrder } from './storage'
 import type { Order } from './types'
 
 export interface SyncUser {
@@ -147,20 +148,33 @@ type RemoteOrder = { id: string; updatedAt: number; deleted: boolean; data: Orde
 
 function applyRemote(r: RemoteOrder) {
   const local = getOrders().find((o) => o.id === r.id)
-  // своё несохранённое изменение новее — оставляем его
-  if (state.dirty[r.id] && local && local.updatedAt > r.updatedAt) return
   if (r.deleted) {
+    // своё изменение новее удаления — заказ остаётся и уйдёт на сервер снова
+    if (state.dirty[r.id] && local && local.updatedAt > r.updatedAt) return
     if (local) {
       deletePhotos(orderPhotoIds(local))
       removeOrder(r.id, { remote: true })
     }
-  } else if (r.data) {
-    const o = migrate({ ...r.data, updatedAt: r.updatedAt })
-    orderPhotoIds(o).forEach((id) => (state.uploaded[id] = true))
-    if (!local || local.updatedAt < r.updatedAt) upsertOrder(o, { remote: true })
+    delete state.dirty[r.id]
+    delete state.deleted[r.id]
+    return
   }
+  if (!r.data) return
+  const remote = migrate({ ...r.data, updatedAt: r.updatedAt })
+  orderPhotoIds(remote).forEach((id) => (state.uploaded[id] = true))
+  // заказ удалён здесь, но ещё не отправлено: чужая правка новее удаления — побеждает она
+  if (state.deleted[r.id]) {
+    if (state.deleted[r.id] >= r.updatedAt) return
+    delete state.deleted[r.id]
+  }
+  if (state.dirty[r.id] && local) {
+    // есть неотправленные свои правки — сливаем по полям и отправим результат
+    upsertOrder(mergeOrders(local, remote), { remote: true })
+    scheduleSync(300)
+    return
+  }
+  if (!local || local.updatedAt < remote.updatedAt) upsertOrder(remote, { remote: true })
   delete state.dirty[r.id]
-  delete state.deleted[r.id]
 }
 
 export async function syncNow(): Promise<void> {
@@ -209,7 +223,7 @@ export async function syncNow(): Promise<void> {
     const s = getSettings()
     const sharedSent = state.sharedDirty ? s.sharedUpdatedAt : 0
     if (payload.length || sharedSent) {
-      const res = await api<{ accepted: string[]; rejected: RemoteOrder[]; rev: number }>('/api/sync', {
+      const res = await api<{ accepted: string[]; rejected?: RemoteOrder[]; merged?: RemoteOrder[]; rev: number }>('/api/sync', {
         method: 'POST',
         body: JSON.stringify({ orders: payload, settings: sharedSent ? { data: pickShared(s), updatedAt: sharedSent } : undefined }),
       })
@@ -219,8 +233,12 @@ export async function syncNow(): Promise<void> {
         if (!cur || cur.updatedAt === sent.get(id)) delete state.dirty[id]
         if (state.deleted[id] === sent.get(id)) delete state.deleted[id]
       }
-      for (const r of res.rejected) {
-        delete state.dirty[r.id]
+      // сервер слил нашу версию с чужой (или выдал номер) — берём его результат,
+      // если заказ не меняли во время отправки; иначе сливаем ещё раз у себя
+      for (const r of [...(res.merged ?? []), ...(res.rejected ?? [])]) {
+        const cur = getOrders().find((x) => x.id === r.id)
+        if (!cur || cur.updatedAt === sent.get(r.id)) delete state.dirty[r.id]
+        if (state.deleted[r.id] === sent.get(r.id)) delete state.deleted[r.id]
         applyRemote(r)
       }
       if (sharedSent && getSettings().sharedUpdatedAt === sharedSent) state.sharedDirty = false
@@ -288,6 +306,7 @@ export async function connect(server: string, login: string, password: string) {
   if (!isAdmin) setSharedStamp(0)
   state = { ...EMPTY, server: url, token: res.token, user: res.user, dirty, sharedDirty: isAdmin && getSettings().sharedUpdatedAt > 0 }
   persist()
+  setServerNumbering(true)
   setStatus({ error: null, authError: false })
   startLive()
   await syncNow()
@@ -298,6 +317,8 @@ export async function disconnect() {
   stopLive()
   state = { ...EMPTY, server: state.server }
   persist()
+  setServerNumbering(false)
+  staffCache = []
   setStatus({ error: null, authError: false })
 }
 
@@ -311,8 +332,31 @@ export const deleteUser = (id: string) => api(`/api/users/${id}`, { method: 'DEL
 export const changePassword = (oldPassword: string, newPassword: string) =>
   api('/api/password', { method: 'POST', body: JSON.stringify({ oldPassword, newPassword }) })
 
+// --- сотрудники для выбора ответственного (доступно всем) ---
+let staffCache: SyncUser[] = []
+export async function listStaff(): Promise<SyncUser[]> {
+  if (!state.token) return []
+  try {
+    staffCache = (await api<{ users: SyncUser[] }>('/api/staff')).users
+  } catch {
+    /* офлайн — последний известный список */
+  }
+  return staffCache
+}
+
+// --- история изменений заказа ---
+export interface HistoryEntry {
+  at: number
+  user: string
+  action: 'create' | 'update' | 'delete' | 'merge'
+  changes: { key: string; from?: string; to?: string }[]
+}
+export const getHistory = (id: string) =>
+  api<{ history: HistoryEntry[] }>(`/api/orders/${encodeURIComponent(id)}/history`).then((r) => r.history)
+
 // --- запуск ---
 export function initSync() {
+  setServerNumbering(Boolean(state.token))
   onLocalChange((c) => {
     if (!state.token) return
     if (c.type === 'upsert') state.dirty[c.order.id] = true
@@ -343,4 +387,45 @@ export function initSync() {
     startLive()
     scheduleSync(300)
   }
+}
+
+// --- распознавание VIN / номера / техпаспорта по фото (на сервере, через Claude) ---
+export type ScanKind = 'vin' | 'plate' | 'doc'
+
+export interface Recognized {
+  value: string
+  country?: string
+  confident: boolean
+}
+
+// техпаспорт (dowód rejestracyjny): пустая строка — поле не прочитано
+export interface RecognizedDoc {
+  plate: string
+  vin: string
+  make: string
+  model: string
+  year: string
+  owner: string
+  confident: boolean
+}
+
+export const canRecognize = () => Boolean(state.token)
+
+// для чтения мелких символов хватает 1600 px по большей стороне (техпаспорт — 2000)
+async function toJpegBase64(file: Blob, maxSide = 1600): Promise<string> {
+  const bmp = await createImageBitmap(file, { imageOrientation: 'from-image' })
+  const k = Math.min(1, maxSide / Math.max(bmp.width, bmp.height))
+  const canvas = document.createElement('canvas')
+  canvas.width = Math.round(bmp.width * k)
+  canvas.height = Math.round(bmp.height * k)
+  canvas.getContext('2d')!.drawImage(bmp, 0, 0, canvas.width, canvas.height)
+  bmp.close()
+  return canvas.toDataURL('image/jpeg', 0.9).split(',')[1]
+}
+
+export async function recognize(kind: 'vin' | 'plate', file: Blob): Promise<Recognized>
+export async function recognize(kind: 'doc', file: Blob): Promise<RecognizedDoc>
+export async function recognize(kind: ScanKind, file: Blob): Promise<Recognized | RecognizedDoc> {
+  const image = await toJpegBase64(file, kind === 'doc' ? 2000 : 1600)
+  return api('/api/recognize', { method: 'POST', body: JSON.stringify({ kind, image }) })
 }

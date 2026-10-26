@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type InputHTMLAttributes } from 'react'
 import SyncSection from '../components/SyncSection'
 import { LANGS } from '../i18n'
+import { rodoClause } from '../rodo'
 import { useSettings } from '../settingsHooks'
 import type { Settings as S } from '../settingsStore'
 import { exportJson, importJson } from '../storage'
@@ -94,12 +95,46 @@ export default function Settings({ orders, onImport, onBack }: Props) {
               {text('shopPhone', t('set.shopPhone'), { type: 'tel', inputMode: 'tel' })}
               {text('shopNip', t('set.shopNip'), { inputMode: 'numeric' })}
             </div>
+            <label className="field">
+              <span className="field-label">{t('set.rodo')}</span>
+              <textarea
+                rows={4}
+                placeholder={rodoClause({ ...settings, rodoText: '' }, settings.docLang)}
+                value={settings.rodoText}
+                onChange={(e) => update({ rodoText: e.target.value })}
+                disabled={locked}
+              />
+              <span className="field-hint muted">{t('set.rodoHint')}</span>
+            </label>
           </div>
         </section>
 
         <section className="panel">
           <h2>{t('set.prices')}</h2>
           <p className="hint">{locked ? t('sync.sharedLocked') : t('set.pricesHint')}</p>
+          <div className="seg-row two">
+            {[true, false].map((g) => (
+              <button key={String(g)} className={'seg' + (settings.pricesGross === g ? ' active' : '')} onClick={() => update({ pricesGross: g })} disabled={locked}>
+                {t(g ? 'set.gross' : 'set.net')}
+              </button>
+            ))}
+          </div>
+          <label className="price-row vat-row" key={'vat' + (locked ? settings.sharedUpdatedAt : 0)}>
+            <span className="price-name">{t('set.vat')}</span>
+            <span className="price">
+              <input
+                inputMode="numeric"
+                defaultValue={String(settings.vatRate)}
+                onChange={(e) => {
+                  const n = Number(e.target.value.replace(',', '.'))
+                  if (e.target.value.trim() === '' || (Number.isFinite(n) && n >= 0 && n <= 50)) update({ vatRate: e.target.value.trim() === '' ? 0 : n })
+                }}
+                disabled={locked}
+              />
+              <span>%</span>
+            </span>
+          </label>
+          <p className="hint">{t('set.vatHint')}</p>
           {/* key: поля без контроля — пересоздаём, когда цены пришли с сервера */}
           <div className="price-list" key={sync.connected && locked ? settings.sharedUpdatedAt : 0}>
             {WORKS.map((w) => (

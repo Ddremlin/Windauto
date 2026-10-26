@@ -9,6 +9,12 @@ export interface SharedSettings {
   shopPhone: string
   shopNip: string
   defaultPrices: Partial<Record<WorkId, number>>
+  // ставка VAT, %; 0 — без VAT
+  vatRate: number
+  // цены вводятся брутто (с VAT)
+  pricesGross: boolean
+  // свой текст информации RODO; пусто — стандартный
+  rodoText: string
 }
 
 export interface Settings extends SharedSettings {
@@ -17,7 +23,16 @@ export interface Settings extends SharedSettings {
   sharedUpdatedAt: number
 }
 
-export const SHARED_KEYS: (keyof SharedSettings)[] = ['shopName', 'shopAddress', 'shopPhone', 'shopNip', 'defaultPrices']
+export const SHARED_KEYS: (keyof SharedSettings)[] = [
+  'shopName',
+  'shopAddress',
+  'shopPhone',
+  'shopNip',
+  'defaultPrices',
+  'vatRate',
+  'pricesGross',
+  'rodoText',
+]
 
 const KEY = 'windauto.settings.v1'
 
@@ -29,6 +44,9 @@ const DEFAULTS: Settings = {
   shopPhone: '',
   shopNip: '',
   defaultPrices: {},
+  vatRate: 23,
+  pricesGross: true,
+  rodoText: '',
   sharedUpdatedAt: 0,
 }
 
@@ -68,12 +86,14 @@ export function updateSettings(patch: Partial<Settings>) {
 /** Общие настройки, пришедшие с сервера */
 export function applyRemoteShared(data: SharedSettings, updatedAt: number) {
   if (updatedAt <= settings.sharedUpdatedAt) return
-  commit({ ...settings, ...data, sharedUpdatedAt: updatedAt })
+  // старый сервер может не знать новых полей — оставляем значения по умолчанию
+  const known = Object.fromEntries(Object.entries(data).filter(([, v]) => v !== undefined))
+  commit({ ...settings, ...known, sharedUpdatedAt: updatedAt })
 }
 
 /** Есть ли в общих настройках что-то заполненное */
 export const hasShared = (s: Settings) =>
-  Boolean(s.shopName || s.shopAddress || s.shopPhone || s.shopNip || Object.keys(s.defaultPrices).length)
+  Boolean(s.shopName || s.shopAddress || s.shopPhone || s.shopNip || s.rodoText || Object.keys(s.defaultPrices).length)
 
 /** Поставить отметку времени общим настройкам без уведомления (0 — уступить серверу) */
 export function setSharedStamp(at: number) {

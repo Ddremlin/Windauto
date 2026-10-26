@@ -1,8 +1,9 @@
 import { useEffect, useState } from 'react'
 import { LANGS, makeT, type Lang } from '../i18n'
 import { useSettings } from '../settingsHooks'
-import { downloadBlob, mailtoUrl, makePdf, orderText, pdfFileName, sharePdf, shareText, smsUrl, whatsappUrl } from '../share'
+import { downloadBlob, mailtoUrl, makePdf, orderText, pdfFileName, readyText, sharePdf, shareText, smsUrl, whatsappUrl } from '../share'
 import type { Order } from '../types'
+import type { DocKind } from './AcceptanceDoc'
 
 interface Props {
   order: Order
@@ -12,10 +13,14 @@ interface Props {
 export default function ShareSheet({ order, onClose }: Props) {
   const { t, settings } = useSettings()
   const [lang, setLang] = useState<Lang>(settings.docLang)
-  const [pdf, setPdf] = useState<{ blob: Blob; lang: Lang } | null>(null)
+  // после ремонта по умолчанию — акт выдачи
+  const [kind, setKind] = useState<DocKind>(order.status === 'done' || order.status === 'issued' ? 'handover' : 'acceptance')
+  const [pdf, setPdf] = useState<{ blob: Blob; lang: Lang; kind: DocKind; at: number } | null>(null)
   const [busy, setBusy] = useState(false)
-  const ready = pdf && pdf.lang === lang ? pdf.blob : null
-  const name = pdfFileName(order)
+  // PDF устарел, если заказ изменили после его создания
+  const ready = pdf && pdf.lang === lang && pdf.kind === kind && pdf.at >= order.updatedAt ? pdf.blob : null
+  const name = pdfFileName(order, kind)
+  const docTitle = makeT(lang)(kind === 'handover' ? 'doc.handoverTitle' : 'doc.title')
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
@@ -28,7 +33,7 @@ export default function ShareSheet({ order, onClose }: Props) {
   const generate = async () => {
     setBusy(true)
     try {
-      setPdf({ blob: await makePdf(order, lang), lang })
+      setPdf({ blob: await makePdf(order, lang, kind), lang, kind, at: order.updatedAt })
     } catch (e) {
       alert(t('share.error', { e: (e as Error).message }))
     } finally {
@@ -36,7 +41,7 @@ export default function ShareSheet({ order, onClose }: Props) {
     }
   }
 
-  const text = () => orderText(order, lang, settings)
+  const text = () => (kind === 'handover' ? readyText(order, lang, settings) : orderText(order, lang, settings))
 
   const whatsapp = () => {
     if (!order.phone) alert(t('share.noPhone'))
@@ -48,9 +53,8 @@ export default function ShareSheet({ order, onClose }: Props) {
   }
 
   const email = () => {
-    const tt = makeT(lang)
     const car = [order.make, order.model, order.plate].filter(Boolean).join(' ')
-    window.location.href = mailtoUrl(order.email, `${tt('doc.title')}${car ? ' — ' + car : ''}`, text())
+    window.location.href = mailtoUrl(order.email, `${docTitle}${car ? ' — ' + car : ''}`, text())
   }
 
   const copy = async () => {
@@ -63,7 +67,7 @@ export default function ShareSheet({ order, onClose }: Props) {
   }
 
   const message = async () => {
-    if (!(await shareText(text(), makeT(lang)('doc.title')))) copy()
+    if (!(await shareText(text(), docTitle))) copy()
   }
 
   return (
@@ -71,6 +75,14 @@ export default function ShareSheet({ order, onClose }: Props) {
       <div className="sheet" onClick={(e) => e.stopPropagation()} role="dialog" aria-label={t('app.share')}>
         <div className="sheet-handle" />
         <h2>{t('share.title')}</h2>
+
+        <div className="seg-row two">
+          {(['acceptance', 'handover'] as DocKind[]).map((k) => (
+            <button key={k} className={'seg' + (kind === k ? ' active' : '')} onClick={() => setKind(k)}>
+              {t(k === 'handover' ? 'share.handover' : 'share.acceptance')}
+            </button>
+          ))}
+        </div>
 
         <div className="seg-row two">
           {LANGS.map((l) => (
@@ -82,7 +94,7 @@ export default function ShareSheet({ order, onClose }: Props) {
 
         <div className="share-list">
           {ready ? (
-            <button className="share-item primary" onClick={() => sharePdf(ready, name, makeT(lang)('doc.title'))}>
+            <button className="share-item primary" onClick={() => sharePdf(ready, name, docTitle)}>
               <span className="share-icon">📤</span>
               <span>
                 <b>{t('share.pdf')}</b>

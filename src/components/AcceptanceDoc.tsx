@@ -1,13 +1,16 @@
-// Лист приёмки для клиента — рендерится вне экрана и снимается в PDF.
+// Лист приёмки и акт выдачи для клиента — рендерятся вне экрана и снимаются в PDF.
 // Стили простые (без var/color-mix), чтобы html2canvas отрисовал их точно.
 import { getLayout } from '../body'
-import { docNumber } from '../docNumber'
+import { orderNo } from '../docNumber'
+import { rodoClause } from '../rodo'
 import { useSettings } from '../settingsHooks'
-import type { Order } from '../types'
+import type { Order, Signature } from '../types'
 import { formatPlate } from '../validate'
-import { WORKS, WORK_BY_ID, elementTotal, formatMoney, orderTotal } from '../works'
-import BodyMap from './BodyMap'
+import { WORKS, WORK_BY_ID, elementLabor, elementTotal, formatMoney, fuelLabel, orderTotals } from '../works'
+import BodyMap, { DAMAGE_COLOR } from './BodyMap'
 import { PlateBadge } from './Plate'
+
+export type DocKind = 'acceptance' | 'handover'
 
 export const DOC_WIDTH = 794 // A4 при 96 dpi
 
@@ -46,23 +49,41 @@ const css = `
 .doc-photos-el { font-weight: 600; margin: 8px 0 4px; }
 .doc-photos { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; }
 .doc-photos img { width: 100%; height: 170px; object-fit: cover; border-radius: 4px; border: 1px solid #ddd; display: block; }
-.doc-sign { display: flex; justify-content: space-between; gap: 40px; margin-top: 36px; padding-bottom: 8px; }
-.doc-sign div { flex: 1; border-top: 1px solid #111; padding-top: 4px; font-size: 11px; color: #444; }
+.doc-sign { display: flex; justify-content: space-between; gap: 40px; margin-top: 28px; padding-bottom: 8px; }
+.doc-sign > div { flex: 1; display: flex; flex-direction: column; justify-content: flex-end; }
+.doc-sign-img { height: 64px; display: flex; align-items: flex-end; }
+.doc-sign-img img { max-height: 64px; max-width: 100%; }
+.doc-sign-line { border-top: 1px solid #111; padding-top: 4px; font-size: 11px; color: #444; }
+.doc-statement { font-size: 12px; margin-top: 18px; }
+.doc-totals { margin-left: auto; width: 55%; }
+.doc-totals div { display: flex; justify-content: space-between; padding: 3px 6px; }
+.doc-intake { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 2px 16px; margin-top: 8px; font-size: 12px; }
+.doc-check { display: inline-block; width: 11px; height: 11px; border: 1px solid #333; border-radius: 2px; margin-right: 5px; vertical-align: -1px; text-align: center; line-height: 9px; font-size: 10px; font-weight: 700; }
+.doc-rodo { font-size: 10.5px; color: #444; line-height: 1.35; }
+.doc-consent { font-size: 12px; margin-top: 6px; display: flex; flex-direction: column; gap: 3px; }
+.doc-damage { color: #8a3b00; }
+.doc-photos-label { font-size: 11px; color: #666; margin: 4px 0 2px; }
 `
 
 interface Props {
   order: Order
   photoUrls: Record<string, string>
+  kind?: DocKind
 }
 
-export default function AcceptanceDoc({ order, photoUrls }: Props) {
+export default function AcceptanceDoc({ order, photoUrls, kind = 'acceptance' }: Props) {
   const { t, locale, settings } = useSettings()
+  const handover = kind === 'handover'
   const layout = getLayout(order.bodyType)
   const marked = layout.elements.filter((e) => order.elements[e.id])
-  const withWorks = marked.filter((e) => order.elements[e.id].works.length || order.elements[e.id].note)
-  const withPhotos = marked.filter((e) => order.elements[e.id].photos?.some((id) => photoUrls[id]))
+  const withWorks = marked.filter((e) => {
+    const v = order.elements[e.id]
+    return v.works.length || v.parts || (v.note && !v.damage?.length)
+  })
+  const withDamage = marked.filter((e) => order.elements[e.id].damage?.length)
   const usedWorks = WORKS.filter((w) => marked.some((e) => order.elements[e.id].works.includes(w.id)))
-  const total = orderTotal(order.elements, marked.map((e) => e.id))
+  const totals = orderTotals(order, settings, marked.map((e) => e.id))
+  const dateStyle = { dateStyle: 'medium', timeStyle: 'short' } as const
   const kv = (label: string, value: string, mono = false) =>
     value ? (
       <div className="doc-kv">
@@ -70,14 +91,41 @@ export default function AcceptanceDoc({ order, photoUrls }: Props) {
         <b className={mono ? 'doc-mono' : undefined}>{value}</b>
       </div>
     ) : null
+  const check = (on: boolean) => <span className="doc-check">{on ? '✓' : ''}</span>
 
   // фото по 3 в ряд — каждый ряд отдельный блок для разбивки на страницы
-  const photoRows = withPhotos.flatMap((e) => {
-    const ids = (order.elements[e.id].photos ?? []).filter((id) => photoUrls[id])
-    const rows: string[][] = []
-    for (let i = 0; i < ids.length; i += 3) rows.push(ids.slice(i, i + 3))
-    return rows.map((r, i) => ({ el: e, ids: r, first: i === 0 }))
+  type Row = { el: (typeof marked)[number]; ids: string[]; first: boolean; label?: string }
+  const rowsOf = (e: Row['el'], ids: string[], label?: string): Row[] => {
+    const ok = ids.filter((id) => photoUrls[id])
+    const rows: Row[] = []
+    for (let i = 0; i < ok.length; i += 3) rows.push({ el: e, ids: ok.slice(i, i + 3), first: false, label: i === 0 ? label : undefined })
+    return rows
+  }
+  const photoRows = marked.flatMap((e) => {
+    const v = order.elements[e.id]
+    const rows = handover
+      ? [...rowsOf(e, v.photos ?? [], t('doc.before')), ...rowsOf(e, v.photosAfter ?? [], t('doc.after'))]
+      : rowsOf(e, v.photos ?? [])
+    if (rows[0]) rows[0].first = true
+    return rows
   })
+
+  const sign = (s: Signature | undefined, label: string) => (
+    <div>
+      <div className="doc-sign-img">{s && <img src={s.img} alt="" />}</div>
+      <div className="doc-sign-line">
+        {label}
+        {s && (
+          <>
+            {s.name ? `: ${s.name}` : ''} · {new Date(s.at).toLocaleString(locale, dateStyle)}
+          </>
+        )}
+      </div>
+    </div>
+  )
+
+  const intake = order.intake
+  const hasIntake = intake.fuel !== undefined || intake.keys !== undefined || intake.items.length > 0 || intake.belongings
 
   return (
     <div className="doc">
@@ -90,9 +138,17 @@ export default function AcceptanceDoc({ order, photoUrls }: Props) {
           {settings.shopNip && <div>NIP {settings.shopNip}</div>}
         </div>
         <div className="doc-title">
-          <h1>{t('doc.title')}</h1>
-          <div>{t('doc.number', { n: docNumber(order) })}</div>
-          <div>{new Date(order.createdAt).toLocaleString(locale, { dateStyle: 'medium', timeStyle: 'short' })}</div>
+          <h1>{t(handover ? 'doc.handoverTitle' : 'doc.title')}</h1>
+          <div>{t('doc.number', { n: orderNo(order) })}</div>
+          <div>
+            {handover && t('doc.accepted') + ' '}
+            {new Date(order.createdAt).toLocaleString(locale, dateStyle)}
+          </div>
+          {handover && (
+            <div>
+              {t('doc.issued')} {new Date(order.signatures.issueClient?.at ?? Date.now()).toLocaleString(locale, dateStyle)}
+            </div>
+          )}
         </div>
       </div>
 
@@ -114,15 +170,42 @@ export default function AcceptanceDoc({ order, photoUrls }: Props) {
           {kv(t('order.body'), t(`body.${order.bodyType}`))}
           {kv(t('order.color'), order.color)}
           {kv(t('order.paintCode'), order.paintCode, true)}
+          {!handover && kv(t('order.dueDate'), order.dueDate ? new Date(order.dueDate + 'T12:00').toLocaleDateString(locale) : '')}
         </div>
-        {order.paintFormula && <div className="doc-formula">{order.paintFormula}</div>}
-        {order.paintNotes && (
+        {!handover && order.paintFormula && <div className="doc-formula">{order.paintFormula}</div>}
+        {!handover && order.paintNotes && (
           <div className="doc-paint-notes">
             <span>{t('order.paintNotes')}</span>
             {order.paintNotes}
           </div>
         )}
       </div>
+
+      {!handover && hasIntake && (
+        <div data-block>
+          <h2>{t('intake.title')}</h2>
+          <div className="doc-grid">
+            {kv(t('intake.fuel'), intake.fuel !== undefined ? fuelLabel(intake.fuel) : '')}
+            {kv(t('intake.keys'), intake.keys !== undefined ? String(intake.keys) : '')}
+          </div>
+          {intake.items.length > 0 && (
+            <div className="doc-intake">
+              {intake.items.map((id) => (
+                <div key={id}>
+                  {check(true)}
+                  {t(`intake.${id}`)}
+                </div>
+              ))}
+            </div>
+          )}
+          {intake.belongings && (
+            <div className="doc-paint-notes">
+              <span>{t('intake.belongings')}</span>
+              {intake.belongings}
+            </div>
+          )}
+        </div>
+      )}
 
       {(order.client || order.phone || order.email) && (
         <div data-block>
@@ -146,14 +229,39 @@ export default function AcceptanceDoc({ order, photoUrls }: Props) {
                 {t(`work.${w.id}`)}
               </div>
             ))}
+            {withDamage.length > 0 && (
+              <div>
+                <span className="doc-sw" style={{ background: DAMAGE_COLOR, borderRadius: '50%' }} />
+                {t('damage.legend')}
+              </div>
+            )}
           </div>
         </div>
       </div>
 
+      {withDamage.length > 0 && (
+        <div data-block>
+          <h2>{t('damage.title')}</h2>
+          <table className="doc-table">
+            <tbody>
+              {withDamage.map((e) => (
+                <tr key={e.id}>
+                  <td style={{ width: '38%' }}>
+                    <b>{t(`el.${e.key}`)}</b>
+                  </td>
+                  <td className="doc-damage">{order.elements[e.id].damage!.map((d) => t(`damage.${d}`)).join(', ')}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+          <div className="doc-small">{t('damage.docNote')}</div>
+        </div>
+      )}
+
       {withWorks.length > 0 && (
         <>
           <div data-block>
-            <h2>{t('order.works')}</h2>
+            <h2>{t(handover ? 'doc.worksDone' : 'order.works')}</h2>
           </div>
           <table className="doc-table">
             <thead>
@@ -183,19 +291,42 @@ export default function AcceptanceDoc({ order, photoUrls }: Props) {
                           {v.prices?.[w] ? <span>{formatMoney(v.prices[w])}</span> : null}
                         </div>
                       ))}
+                      {v.parts ? (
+                        <div className="doc-work">
+                          <span>{t('tot.parts')}</span>
+                          <span>{formatMoney(v.parts)}</span>
+                        </div>
+                      ) : null}
                     </td>
-                    <td className="num">{sum > 0 ? <b>{formatMoney(sum)}</b> : '—'}</td>
+                    <td className="num">{sum > 0 ? <b>{formatMoney(sum)}</b> : elementLabor(v) ? '' : '—'}</td>
                   </tr>
                 )
               })}
             </tbody>
           </table>
           <div data-block>
-            <div className="doc-total">
-              <span>{t('order.total')}</span>
-              <b>{formatMoney(total)}</b>
+            <div className="doc-totals">
+              {totals.parts > 0 && (
+                <>
+                  <div><span>{t('tot.labor')}</span><span>{formatMoney(totals.labor)}</span></div>
+                  <div><span>{t('tot.parts')}</span><span>{formatMoney(totals.parts)}</span></div>
+                </>
+              )}
+              {totals.discount > 0 && (
+                <div><span>{t('tot.discountSum', { p: totals.discountPct })}</span><span>−{formatMoney(totals.discount)}</span></div>
+              )}
+              {totals.vatRate > 0 && (
+                <>
+                  <div><span>{t('tot.net')}</span><span>{formatMoney(totals.net)}</span></div>
+                  <div><span>{t('tot.vat', { r: totals.vatRate })}</span><span>{formatMoney(totals.vat)}</span></div>
+                </>
+              )}
             </div>
-            <div className="doc-small">{t('doc.disclaimer')}</div>
+            <div className="doc-total">
+              <span>{totals.vatRate > 0 ? t('tot.gross') : t('order.total')}</span>
+              <b>{formatMoney(totals.gross)}</b>
+            </div>
+            {!handover && <div className="doc-small">{t('doc.disclaimer')}</div>}
           </div>
         </>
       )}
@@ -209,12 +340,13 @@ export default function AcceptanceDoc({ order, photoUrls }: Props) {
 
       {photoRows.length > 0 && (
         <div data-block>
-          <h2>{t('doc.photos')}</h2>
+          <h2>{t(handover ? 'doc.photosBeforeAfter' : 'doc.photos')}</h2>
         </div>
       )}
       {photoRows.map((r, i) => (
         <div data-block key={i}>
           {r.first && <div className="doc-photos-el">{t(`el.${r.el.key}`)}</div>}
+          {r.label && <div className="doc-photos-label">{r.label}</div>}
           <div className="doc-photos">
             {r.ids.map((id) => (
               <img key={id} src={photoUrls[id]} alt="" />
@@ -223,9 +355,29 @@ export default function AcceptanceDoc({ order, photoUrls }: Props) {
         </div>
       ))}
 
-      <div data-block className="doc-sign">
-        <div>{t('doc.signClient')}</div>
-        <div>{t('doc.signMaster')}</div>
+      {!handover && (
+        <div data-block>
+          <h2>{t('consent.title')}</h2>
+          <div className="doc-rodo">{rodoClause(settings, locale.startsWith('ru') ? 'ru' : 'pl')}</div>
+          <div className="doc-consent">
+            <div>
+              {check(order.consent.rodo)}
+              {t('consent.rodoDoc')}
+            </div>
+            <div>
+              {check(order.consent.contact)}
+              {t('consent.contactDoc')}
+            </div>
+          </div>
+        </div>
+      )}
+
+      <div data-block>
+        <div className="doc-statement">{t(handover ? 'sig.statement.issueClient' : 'sig.statement.acceptClient')}</div>
+        <div className="doc-sign">
+          {handover ? sign(order.signatures.issueClient, t('sig.issueClient')) : sign(order.signatures.acceptClient, t('doc.signClient'))}
+          {sign(handover ? undefined : order.signatures.acceptMaster, t('doc.signMaster'))}
+        </div>
       </div>
     </div>
   )

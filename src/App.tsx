@@ -2,10 +2,11 @@ import { useEffect, useState } from 'react'
 import OrderEdit from './screens/OrderEdit'
 import OrderList from './screens/OrderList'
 import Settings from './screens/Settings'
+import Stats from './screens/Stats'
 import { newOrder, useOrders } from './storage'
 import type { Order } from './types'
 
-// Простая навигация через hash: #/ — список, #/order/<id> — заказ, #/new — новый, #/settings
+// Простая навигация через hash: #/ — список, #/order/<id> — заказ, #/new — новый, #/settings, #/stats
 function useRoute() {
   const [hash, setHash] = useState(location.hash)
   useEffect(() => {
@@ -45,9 +46,10 @@ export default function App() {
         key={d.id}
         initial={d}
         onSave={(o) => {
-          upsert(o)
+          const saved = upsert(o)
           // после первого сохранения заказ живёт по своему адресу
           history.replaceState(null, '', `#/order/${o.id}`)
+          return saved
         }}
         onDelete={remove}
         onBack={() => {
@@ -57,6 +59,8 @@ export default function App() {
       />
     )
   }
+
+  if (route === '/stats') return <Stats orders={orders} onOpen={(id) => go(`/order/${id}`)} onBack={() => go('/')} />
 
   if (route === '/settings') return <Settings orders={orders} onImport={replaceAll} onBack={() => go('/')} />
 
@@ -87,6 +91,7 @@ export default function App() {
         go('/new')
       }}
       onSettings={() => go('/settings')}
+      onStats={() => go('/stats')}
     />
   )
 }

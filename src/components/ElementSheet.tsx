@@ -1,9 +1,9 @@
 import { useEffect } from 'react'
-import { deletePhotos } from '../photos'
+import { deletePhotos, elementPhotoIds } from '../photos'
 import { useSettings } from '../settingsHooks'
 import { PhotoStrip } from './Photos'
-import type { ElementWork, WorkId } from '../types'
-import { EXCLUSIVE, WORKS, elementTotal, formatMoney } from '../works'
+import type { DamageId, ElementWork, WorkId } from '../types'
+import { DAMAGES, EXCLUSIVE, WORKS, elementTotal, formatMoney } from '../works'
 
 interface Props {
   label: string
@@ -23,6 +23,9 @@ export default function ElementSheet({ label, value, onChange, onClose }: Props)
   const prices = value?.prices ?? {}
   const note = value?.note ?? ''
   const photos = value?.photos ?? []
+  const photosAfter = value?.photosAfter ?? []
+  const damage = value?.damage ?? []
+  const allPhotos = elementPhotoIds(value)
 
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose()
@@ -31,20 +34,24 @@ export default function ElementSheet({ label, value, onChange, onClose }: Props)
   }, [onClose])
 
   const commit = (next: Partial<ElementWork>) => {
-    const v: ElementWork = { works, prices, note, photos, ...next }
-    if (v.works.length === 0 && !v.note?.trim() && !v.photos?.length) return onChange(undefined)
+    const v: ElementWork = { works, prices, note, photos, photosAfter, damage, parts: value?.parts, ...next }
+    if (v.works.length === 0 && !v.note?.trim() && !v.photos?.length && !v.photosAfter?.length && !v.damage?.length && !v.parts)
+      return onChange(undefined)
     // цены снятых работ запоминаем — вдруг галочку вернут
     onChange({
       works: v.works,
       prices: Object.keys(v.prices ?? {}).length ? v.prices : undefined,
+      parts: v.parts || undefined,
+      damage: v.damage?.length ? v.damage : undefined,
       note: v.note || undefined,
       photos: v.photos?.length ? v.photos : undefined,
+      photosAfter: v.photosAfter?.length ? v.photosAfter : undefined,
     })
   }
 
   const clear = () => {
-    if (photos.length && !confirm(t('sheet.clearConfirm', { n: photos.length }))) return
-    deletePhotos(photos)
+    if (allPhotos.length && !confirm(t('sheet.clearConfirm', { n: allPhotos.length }))) return
+    deletePhotos(allPhotos)
     onChange(undefined)
   }
 
@@ -71,6 +78,9 @@ export default function ElementSheet({ label, value, onChange, onClose }: Props)
     else next[id] = n
     commit({ prices: next })
   }
+
+  const toggleDamage = (id: DamageId) =>
+    commit({ damage: damage.includes(id) ? damage.filter((d) => d !== id) : DAMAGES.filter((d) => d === id || damage.includes(d)) })
 
   const total = elementTotal(value)
 
@@ -105,9 +115,36 @@ export default function ElementSheet({ label, value, onChange, onClose }: Props)
             )
           })}
         </div>
+        <div className="work-item parts-item">
+          <span className="work-check">
+            <span className="swatch parts-swatch" />
+            <span>{t('sheet.parts')}</span>
+          </span>
+          <label className="price">
+            <input
+              inputMode="decimal"
+              placeholder="0"
+              defaultValue={value?.parts != null ? String(value.parts).replace('.', ',') : ''}
+              onChange={(e) => commit({ parts: parsePrice(e.target.value) })}
+              aria-label={t('sheet.parts')}
+            />
+            <span>zł</span>
+          </label>
+        </div>
         <div className="sheet-total">
           <span>{t('sheet.elementTotal')}</span>
           <strong>{formatMoney(total)}</strong>
+        </div>
+        <div className="sheet-section">
+          <span className="field-label">{t('damage.sheet')}</span>
+          <div className="check-grid">
+            {DAMAGES.map((d) => (
+              <label key={d} className={'check-chip damage' + (damage.includes(d) ? ' on' : '')}>
+                <input type="checkbox" checked={damage.includes(d)} onChange={() => toggleDamage(d)} />
+                {t(`damage.${d}`)}
+              </label>
+            ))}
+          </div>
         </div>
         <div className="sheet-section">
           <span className="field-label">{t('sheet.photos')} {photos.length ? `(${photos.length})` : ''}</span>
@@ -117,6 +154,17 @@ export default function ElementSheet({ label, value, onChange, onClose }: Props)
             onDelete={(id) => {
               deletePhotos([id])
               commit({ photos: photos.filter((p) => p !== id) })
+            }}
+          />
+        </div>
+        <div className="sheet-section">
+          <span className="field-label">{t('sheet.photosAfter')} {photosAfter.length ? `(${photosAfter.length})` : ''}</span>
+          <PhotoStrip
+            ids={photosAfter}
+            onAdd={(ids) => commit({ photosAfter: [...photosAfter, ...ids] })}
+            onDelete={(id) => {
+              deletePhotos([id])
+              commit({ photosAfter: photosAfter.filter((p) => p !== id) })
             }}
           />
         </div>

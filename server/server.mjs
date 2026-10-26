@@ -1,10 +1,13 @@
 // Windauto — сервер синхронизации.
-// Node 24, без внешних зависимостей: node:http + node:sqlite, фото — файлы на диске.
+// Node 24: node:http + node:sqlite, фото — файлы на диске. Единственная зависимость — Anthropic SDK
+// для распознавания VIN и номера по фото (нужен ANTHROPIC_API_KEY, без него распознавание выключено).
+import Anthropic from '@anthropic-ai/sdk'
 import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto'
 import { createReadStream, existsSync, mkdirSync, statSync, writeFileSync, renameSync } from 'node:fs'
 import { createServer } from 'node:http'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
+import { changedKeys, getField, mergeOrders, sameOrder } from './merge.mjs'
 
 const PORT = Number(process.env.PORT ?? 8080)
 const DATA = process.env.DATA_DIR ?? './data'
@@ -15,6 +18,9 @@ const ORIGINS = (process.env.ALLOWED_ORIGINS ?? 'https://ddremlin.github.io,http
 const MAX_JSON = 20 * 1024 * 1024
 const MAX_PHOTO = 15 * 1024 * 1024
 const SESSION_DAYS = 180
+const MAX_RECOGNIZE = 8 * 1024 * 1024
+const AI_MODEL = process.env.AI_MODEL || 'claude-opus-5-5'
+const ai = process.env.ANTHROPIC_API_KEY ? new Anthropic() : null
 
 mkdirSync(join(DATA, 'photos'), { recursive: true })
 const db = new DatabaseSync(join(DATA, 'windauto.db'))
@@ -37,6 +43,12 @@ db.exec(`
     key TEXT PRIMARY KEY, data TEXT NOT NULL, updated_at INTEGER NOT NULL, rev INTEGER NOT NULL
   );
   CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+  CREATE TABLE IF NOT EXISTS history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT, order_id TEXT NOT NULL, at INTEGER NOT NULL,
+    user_id TEXT, action TEXT NOT NULL, changes TEXT NOT NULL DEFAULT '[]'
+  );
+  CREATE INDEX IF NOT EXISTS history_order ON history(order_id, at);
+  CREATE TABLE IF NOT EXISTS login_attempts (ip TEXT PRIMARY KEY, count INTEGER NOT NULL, first INTEGER NOT NULL);
 `)
 
 const log = (...a) => console.log(new Date().toISOString(), ...a)
@@ -82,16 +94,73 @@ setInterval(() => {
   for (const res of listeners) res.write(': ping\n\n')
 }, 25_000)
 
-// --- защита входа от перебора ---
-const attempts = new Map()
+// --- защита входа от перебора (в базе — переживает перезапуск сервера) ---
+const ATTEMPT_WINDOW = 15 * 60_000
+const MAX_ATTEMPTS = 10
 const tooMany = (ip) => {
-  const a = attempts.get(ip)
-  return a && a.count >= 10 && now() - a.first < 15 * 60_000
+  const a = db.prepare('SELECT count, first FROM login_attempts WHERE ip = ?').get(ip)
+  return Boolean(a && a.count >= MAX_ATTEMPTS && now() - a.first < ATTEMPT_WINDOW)
 }
 const fail = (ip) => {
-  const a = attempts.get(ip)
-  if (!a || now() - a.first > 15 * 60_000) attempts.set(ip, { count: 1, first: now() })
-  else a.count++
+  const a = db.prepare('SELECT count, first FROM login_attempts WHERE ip = ?').get(ip)
+  if (!a || now() - a.first > ATTEMPT_WINDOW)
+    db.prepare('INSERT INTO login_attempts (ip, count, first) VALUES (?, 1, ?) ON CONFLICT(ip) DO UPDATE SET count = 1, first = excluded.first').run(ip, now())
+  else db.prepare('UPDATE login_attempts SET count = count + 1 WHERE ip = ?').run(ip)
+}
+const clearAttempts = (ip) => db.prepare('DELETE FROM login_attempts WHERE ip = ?').run(ip)
+// старые записи и просроченные сессии — раз в час
+const cleanup = () => {
+  db.prepare('DELETE FROM login_attempts WHERE first < ?').run(now() - ATTEMPT_WINDOW)
+  db.prepare('DELETE FROM sessions WHERE created < ?').run(now() - SESSION_DAYS * 86400_000)
+}
+cleanup()
+setInterval(cleanup, 3600_000).unref()
+
+// --- номера заказов «2026/0142»: единая нумерация на сервере ---
+const NUMBER_RE = /^(\d{4})\/(\d+)$/
+const numberKey = (year) => `num:${year}`
+const getCounter = (year) => Number(db.prepare('SELECT value FROM meta WHERE key = ?').get(numberKey(year))?.value ?? 0)
+const setCounter = (year, n) =>
+  db.prepare('INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value').run(numberKey(year), String(n))
+const nextNumber = (year) => {
+  const n = getCounter(year) + 1
+  setCounter(year, n)
+  return `${year}/${String(n).padStart(4, '0')}`
+}
+// номер, выданный телефоном без сервера, — счётчик не должен его повторить
+const noteNumber = (number) => {
+  const m = String(number).match(NUMBER_RE)
+  if (m && Number(m[2]) > getCounter(m[1])) setCounter(m[1], Number(m[2]))
+}
+
+// --- история изменений ---
+const HISTORY_MERGE_MS = 10 * 60_000
+const shortValue = (v) => (v == null ? '' : typeof v === 'object' ? undefined : String(v).slice(0, 120))
+function describeChanges(prev, next) {
+  return changedKeys(prev, next).map((key) => {
+    const from = shortValue(getField(prev, key))
+    const to = shortValue(getField(next, key))
+    return from === undefined || to === undefined ? { key } : { key, from, to }
+  })
+}
+function addHistory(orderId, userId, action, changes) {
+  // автосохранение идёт на каждое нажатие — правки одного человека подряд склеиваем
+  const last = db.prepare('SELECT id, at, user_id, action, changes FROM history WHERE order_id = ? ORDER BY id DESC LIMIT 1').get(orderId)
+  if (action === 'update' && last && last.action === 'update' && last.user_id === userId && now() - last.at < HISTORY_MERGE_MS) {
+    const merged = JSON.parse(last.changes)
+    for (const c of changes) {
+      const i = merged.findIndex((m) => m.key === c.key)
+      if (i < 0) merged.push(c)
+      else merged[i] = { ...c, from: merged[i].from }
+    }
+    // поле вернули как было — убираем из записи
+    const kept = merged.filter((c) => !('from' in c) || c.from !== c.to)
+    db.prepare('UPDATE history SET at = ?, changes = ? WHERE id = ?').run(now(), JSON.stringify(kept), last.id)
+    return
+  }
+  db.prepare('INSERT INTO history (order_id, at, user_id, action, changes) VALUES (?, ?, ?, ?, ?)').run(
+    orderId, now(), userId, action, JSON.stringify(changes),
+  )
 }
 
 // --- HTTP ---
@@ -153,6 +222,84 @@ const photoPath = (id) => {
   return join(DATA, 'photos', `${id}.jpg`)
 }
 
+
+// --- распознавание VIN / номера по фото ---
+const RECOGNIZE = {
+  vin: {
+    prompt:
+      'На фото — VIN автомобиля (табличка, наклейка на стойке, под лобовым стеклом, техпаспорт). ' +
+      'Прочитай VIN: 17 символов, буквы I, O, Q в VIN не встречаются (это 1 и 0). ' +
+      'Верни его без пробелов. Если VIN не виден или читается ненадёжно — value пустая строка.',
+    schema: {
+      type: 'object',
+      properties: { value: { type: 'string' }, confident: { type: 'boolean' } },
+      required: ['value', 'confident'],
+      additionalProperties: false,
+    },
+  },
+  plate: {
+    prompt:
+      'На фото — автомобиль или его номерной знак. Прочитай регистрационный номер так, как он написан на знаке ' +
+      '(польский пример: «WA 12345», «KR 1AB23» — сохрани пробел между частями). ' +
+      'country — код страны с полосы слева на знаке (PL, D, UA, LT, CZ…), пусто, если не видно. ' +
+      'Если номер не виден — value пустая строка.',
+    schema: {
+      type: 'object',
+      properties: { value: { type: 'string' }, country: { type: 'string' }, confident: { type: 'boolean' } },
+      required: ['value', 'country', 'confident'],
+      additionalProperties: false,
+    },
+  },
+  doc: {
+    prompt:
+      'На фото — свидетельство о регистрации автомобиля (польский dowód rejestracyjny или другой документ ЕС ' +
+      'с полями по общему образцу). Прочитай: plate — поле A (регистрационный номер, сохрани пробел, напр. «WA 12345»); ' +
+      'vin — поле E (17 символов, без I, O, Q); make — D.1 (марка, напр. «VOLKSWAGEN» → «Volkswagen», «SKODA» → «Škoda»); ' +
+      'model — D.3 (модель; если D.3 нет — коммерческое название из D.2), с обычным написанием, напр. «Octavia»; ' +
+      'year — год выпуска («rok produkcji»), а если его нет — год из поля B (первая регистрация); ' +
+      'owner — владелец/держатель из C.1.1 и C.1.2 (или C.2.1, C.2.2): «Имя Фамилия» или название фирмы. ' +
+      'Поле, которое не видно или читается ненадёжно, — пустая строка. confident — false, если что-то читалось с трудом.',
+    schema: {
+      type: 'object',
+      properties: {
+        plate: { type: 'string' },
+        vin: { type: 'string' },
+        make: { type: 'string' },
+        model: { type: 'string' },
+        year: { type: 'string' },
+        owner: { type: 'string' },
+        confident: { type: 'boolean' },
+      },
+      required: ['plate', 'vin', 'make', 'model', 'year', 'owner', 'confident'],
+      additionalProperties: false,
+    },
+  },
+}
+
+async function recognize(kind, image) {
+  const task = RECOGNIZE[kind]
+  const response = await ai.beta.messages.create({
+    model: AI_MODEL,
+    max_tokens: 2000,
+    betas: ['server-side-fallback-2026-07-01'],
+    fallbacks: 'default',
+    output_config: { effort: 'low', format: { type: 'json_schema', schema: task.schema } },
+    messages: [
+      {
+        role: 'user',
+        content: [
+          { type: 'image', source: { type: 'base64', media_type: 'image/jpeg', data: image } },
+          { type: 'text', text: task.prompt },
+        ],
+      },
+    ],
+  })
+  if (response.stop_reason === 'refusal') throw new HttpError(422, 'Не удалось распознать')
+  const text = response.content.find((b) => b.type === 'text')?.text
+  if (!text) throw new HttpError(502, 'Пустой ответ распознавания')
+  return JSON.parse(text)
+}
+
 const publicUser = (u) => ({ id: u.id, login: u.login, name: u.name, role: u.role, disabled: !!u.disabled })
 
 const routes = {
@@ -167,7 +314,7 @@ const routes = {
       fail(ip)
       throw new HttpError(401, 'Неверный логин или пароль')
     }
-    attempts.delete(ip)
+    clearAttempts(ip)
     const token = randomBytes(32).toString('base64url')
     db.prepare('INSERT INTO sessions (token, user_id, created, last_seen) VALUES (?, ?, ?, ?)').run(token, u.id, now(), now())
     log(`вход: ${u.login}`)
@@ -196,6 +343,28 @@ const routes = {
     return { ok: true }
   },
 
+  // фото (JPEG base64) → VIN или номер
+  'POST /api/recognize': async (req, url) => {
+    const u = auth(req, url)
+    if (!ai) throw new HttpError(503, 'Распознавание не настроено на сервере (нет ANTHROPIC_API_KEY)')
+    const { kind, image } = JSON.parse((await readBody(req, MAX_RECOGNIZE)).toString('utf8') || '{}')
+    if (!Object.hasOwn(RECOGNIZE, kind)) throw new HttpError(400, 'kind: vin, plate или doc')
+    if (typeof image !== 'string' || !image) throw new HttpError(400, 'Нет фото')
+    try {
+      const out = await recognize(kind, image)
+      log(`распознавание ${kind}: ${u.login} → ${kind === 'doc' ? out.vin || out.plate || '—' : out.value || '—'}`)
+      return out
+    } catch (e) {
+      if (e instanceof HttpError) throw e
+      if (e instanceof Anthropic.RateLimitError) throw new HttpError(429, 'Распознавание перегружено, попробуйте через минуту')
+      if (e instanceof Anthropic.APIError) {
+        log('ошибка распознавания', e.status, e.message)
+        throw new HttpError(502, 'Сервис распознавания недоступен')
+      }
+      throw e
+    }
+  },
+
   // забрать изменения, новее since
   'GET /api/sync': (req, url) => {
     auth(req, url)
@@ -208,13 +377,17 @@ const routes = {
     return { rev: currentRev(), orders, settings: s ? { data: JSON.parse(s.data), updatedAt: s.updated_at } : null }
   },
 
-  // отправить свои изменения; при конфликте побеждает более позднее updatedAt
+  // отправить свои изменения. Если на сервере версия, которую телефон ещё не видел, —
+  // сливаем по полям (у каждого поля своё время изменения) и возвращаем результат в merged.
+  // Там же — заказы, которым сервер выдал номер.
   'POST /api/sync': async (req, url) => {
     const u = auth(req, url)
     const { orders = [], settings } = await readJson(req)
     const accepted = []
     const rejected = []
+    const merged = []
     let changed = false
+    const asRemote = (row) => ({ id: row.id, updatedAt: row.updated_at, deleted: !!row.deleted, data: row.deleted ? null : JSON.parse(row.data) })
     db.exec('BEGIN')
     try {
       const get = db.prepare('SELECT id, data, updated_at, deleted FROM orders WHERE id = ?')
@@ -226,13 +399,52 @@ const routes = {
       for (const o of orders) {
         if (typeof o?.id !== 'string' || !o.id || typeof o.updatedAt !== 'number') continue
         const cur = get.get(o.id)
-        if (cur && cur.updated_at > o.updatedAt) {
-          rejected.push({ id: cur.id, updatedAt: cur.updated_at, deleted: !!cur.deleted, data: cur.deleted ? null : JSON.parse(cur.data) })
+        const curData = cur && !cur.deleted ? { ...JSON.parse(cur.data), updatedAt: cur.updated_at } : null
+
+        if (o.deleted) {
+          // заказ правили после того, как телефон его удалил, — удаление отклоняем
+          if (cur && cur.updated_at > o.updatedAt) {
+            rejected.push(asRemote(cur))
+            continue
+          }
+          if (!cur?.deleted) {
+            put.run(o.id, null, o.updatedAt, 1, nextRev(), u.id)
+            addHistory(o.id, u.id, 'delete', [])
+            changed = true
+          }
+          accepted.push(o.id)
           continue
         }
-        put.run(o.id, o.deleted ? null : JSON.stringify(o.data), o.updatedAt, o.deleted ? 1 : 0, nextRev(), u.id)
-        accepted.push(o.id)
+
+        if (!o.data || typeof o.data !== 'object') continue
+        // удалён на сервере позже этой правки
+        if (cur?.deleted && cur.updated_at > o.updatedAt) {
+          rejected.push(asRemote(cur))
+          continue
+        }
+        const incoming = { ...o.data, id: o.id, updatedAt: o.updatedAt }
+        let data = curData ? mergeOrders(curData, incoming) : incoming
+        let byServer = !sameOrder(data, incoming)
+        if (!data.number) {
+          data.number = nextNumber(new Date(data.createdAt || now()).getFullYear())
+          data._ft = { ...data._ft, number: now() }
+          byServer = true
+        } else noteNumber(data.number)
+
+        // ничего нового — не пишем и не будим другие телефоны
+        if (curData && sameOrder(curData, data)) {
+          if (byServer) merged.push({ id: o.id, updatedAt: cur.updated_at, deleted: false, data: curData })
+          else accepted.push(o.id)
+          continue
+        }
+        // результат отличается от присланного — новая отметка, чтобы его забрали все
+        if (byServer) data.updatedAt = Math.max(data.updatedAt, cur?.updated_at ?? 0) + 1
+        put.run(o.id, JSON.stringify(data), data.updatedAt, 0, nextRev(), u.id)
+        if (curData) addHistory(o.id, u.id, byServer && cur.updated_at > o.updatedAt ? 'merge' : 'update', describeChanges(curData, data))
+        else addHistory(o.id, u.id, 'create', [])
         changed = true
+        if (byServer) merged.push({ id: o.id, updatedAt: data.updatedAt, deleted: false, data })
+        else accepted.push(o.id)
       }
       if (settings && typeof settings.updatedAt === 'number' && u.role === 'admin') {
         const cur = db.prepare("SELECT updated_at FROM shared WHERE key = 'settings'").get()
@@ -251,7 +463,18 @@ const routes = {
     }
     const rev = currentRev()
     if (changed) broadcast(rev)
-    return { accepted, rejected, rev }
+    return { accepted, rejected, merged, rev }
+  },
+
+  // сотрудники для выбора ответственного — доступно всем
+  'GET /api/staff': (req, url) => {
+    auth(req, url)
+    return {
+      users: db
+        .prepare('SELECT id, login, name, role, disabled FROM users WHERE disabled = 0 ORDER BY name, login')
+        .all()
+        .map(publicUser),
+    }
   },
 
   'GET /api/events': (req, url, res) => {
@@ -313,6 +536,19 @@ async function dynamicRoute(req, res, url) {
       db.prepare('DELETE FROM users WHERE id = ?').run(target.id)
       return send(res, 200, { ok: true })
     }
+  }
+
+  m = url.pathname.match(/^\/api\/orders\/([^/]+)\/history$/)
+  if (m && req.method === 'GET') {
+    auth(req, url)
+    const history = db
+      .prepare(
+        `SELECT h.at, h.action, h.changes, COALESCE(NULLIF(u.name, ''), u.login, '—') AS user
+         FROM history h LEFT JOIN users u ON u.id = h.user_id WHERE h.order_id = ? ORDER BY h.id DESC LIMIT 200`,
+      )
+      .all(decodeURIComponent(m[1]))
+      .map((r) => ({ at: r.at, user: r.user, action: r.action, changes: JSON.parse(r.changes) }))
+    return send(res, 200, { history })
   }
 
   m = url.pathname.match(/^\/api\/photos\/([^/]+)$/)
