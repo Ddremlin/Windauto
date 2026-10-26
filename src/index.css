@@ -324,3 +324,22 @@ input:disabled { opacity: 0.6; }
 .combo-list li { padding: 10px 12px; cursor: pointer; }
 .combo-list li.active, .combo-list li:hover { background: var(--bg); }
 .combo-list li.current { color: var(--accent); font-weight: 600; }
+
+.contents { display: contents; }
+.field-row { display: flex; align-items: center; gap: 8px; }
+.field-row > input,
+.field-row > :first-child { flex: 1; min-width: 0; }
+.field-row > input { width: auto; }
+.scan-btn {
+  flex: none; width: 44px; height: 44px; display: grid; place-items: center;
+  border: 1px solid var(--line); border-radius: 10px; background: var(--panel); color: var(--accent);
+}
+.scan-btn:active { background: var(--bg); }
+.scan-btn:disabled { opacity: 0.7; }
+.field-note { color: var(--muted); }
+.spinner {
+  width: 20px; height: 20px; border-radius: 50%;
+  border: 2px solid var(--line); border-top-color: var(--accent);
+  animation: spin 0.8s linear infinite;
+}
+@keyframes spin { to { transform: rotate(360deg); } }

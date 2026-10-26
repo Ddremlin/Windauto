@@ -13,7 +13,8 @@
     "html2canvas-pro": "^1.6.7",
     "jspdf": "^4.2.1",
     "react": "^19.3.1",
-    "react-dom": "^19.3.1"
+    "react-dom": "^19.3.1",
+    "tesseract.js": "^7.0.0"
   },
   "devDependencies": {
     "@types/node": "^24.19.2",

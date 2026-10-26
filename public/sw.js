@@ -1,8 +1,12 @@
 // Сеть в приоритете, кэш — запасной вариант без интернета
-const CACHE = 'windauto-v4'
+const CACHE = 'windauto-v5'
 
 self.addEventListener('install', () => self.skipWaiting())
-self.addEventListener('activate', (e) => e.waitUntil(self.clients.claim()))
+self.addEventListener('activate', (e) => e.waitUntil((async () => {
+  const keys = await caches.keys()
+  await Promise.all(keys.filter((k) => k !== CACHE).map((k) => caches.delete(k)))
+  await self.clients.claim()
+})()))
 
 self.addEventListener('fetch', (e) => {
   if (e.request.method !== 'GET' || new URL(e.request.url).origin !== location.origin) return

@@ -107,16 +107,19 @@ interface InputProps {
   label: string
   hint?: string
   level: string
+  action?: ReactNode
+  note?: string | null
 }
 
 /** Поле ввода номера; страна — нажатием на полосу */
-export function PlateInput({ value, country, onChange, onCountry, onBlur, label, hint, level }: InputProps) {
+export function PlateInput({ value, country, onChange, onCountry, onBlur, label, hint, level, action, note }: InputProps) {
   const { locale, t } = useSettings()
   const h = 60
   const border = level === 'error' ? '#c62828' : level === 'warn' ? '#b26a00' : '#111'
   return (
     <label className={`field wide plate-field lvl-${level}`}>
       <span className="field-label">{label}</span>
+      <span className="field-row">
       <span style={plateBox(h, { display: 'flex', width: '100%', maxWidth: 360, borderColor: border })}>
         <span style={{ position: 'relative', display: 'flex' }}>
           <Band code={country} height={h} />
@@ -157,7 +160,10 @@ export function PlateInput({ value, country, onChange, onCountry, onBlur, label,
           }}
         />
       </span>
+      {action}
+      </span>
       {hint ? <span className="field-hint">{hint}</span> : null}
+      {note ? <span className="field-hint field-note">{note}</span> : null}
     </label>
   )
 }

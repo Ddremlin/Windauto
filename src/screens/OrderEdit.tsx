@@ -7,7 +7,9 @@ import ElementSheet from '../components/ElementSheet'
 import Field from '../components/Field'
 import { PhotoStrip } from '../components/Photos'
 import { PlateInput } from '../components/Plate'
+import { useScan } from '../components/Scan'
 import ShareSheet from '../components/ShareSheet'
+import { COUNTRIES } from '../countries'
 import { deletePhotos, orderPhotoIds } from '../photos'
 import { useSettings } from '../settingsHooks'
 import type { BodyType, ElementWork, Order } from '../types'
@@ -54,6 +56,13 @@ export default function OrderEdit({ initial, onSave, onDelete, onBack }: Props) 
   const field = (key: keyof Order) => ({
     value: order[key] as string,
     onChange: (v: string) => update({ [key]: v } as Partial<Order>),
+  })
+
+  const vinScan = useScan('vin', (r) => update({ vin: normalizeVin(r.value) }))
+  const plateScan = useScan('plate', (r) => {
+    const c = COUNTRIES.find((c) => c.code === r.country?.toUpperCase() || c.iso === r.country?.toUpperCase())
+    const country = c?.code ?? order.plateCountry
+    update({ plate: formatPlate(r.value.toUpperCase(), country), plateCountry: country })
   })
 
   const plateCheck = checkPlate(order.plate, order.plateCountry)
@@ -124,6 +133,8 @@ export default function OrderEdit({ initial, onSave, onDelete, onBack }: Props) 
               onBlur={() => order.plate && update({ plate: formatPlate(order.plate, order.plateCountry) })}
               level={plateCheck.level}
               hint={plateCheck.message ? t(plateCheck.message, plateCheck.vars) : undefined}
+              action={plateScan.button}
+              note={plateScan.message}
             />
             <Field
               label={t('order.vin')}
@@ -134,6 +145,8 @@ export default function OrderEdit({ initial, onSave, onDelete, onBack }: Props) 
               {...field('vin')}
               onBlur={() => order.vin && update({ vin: normalizeVin(order.vin) })}
               check={vinCheck}
+              action={vinScan.button}
+              note={vinScan.message}
             />
             <Combo
               label={t('order.make')}
