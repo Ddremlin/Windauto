@@ -39,7 +39,7 @@
 
 * { box-sizing: border-box; }
 
-html, body { margin: 0; }
+html, body { margin: 0; overflow-x: clip; }
 
 body {
   background: var(--bg);
@@ -224,10 +224,11 @@ textarea { resize: vertical; }
 .sheet-backdrop {
   position: fixed; inset: 0; z-index: 20; background: rgb(0 0 0 / 0.45);
   display: flex; align-items: flex-end; justify-content: center;
+  width: 100vw; overflow: hidden;
   animation: fade 0.15s;
 }
 .sheet {
-  width: 100%; max-width: 560px; max-height: 92dvh; overflow-y: auto;
+  width: 100%; max-width: min(560px, 100vw); max-height: 92dvh; overflow-y: auto; overflow-x: hidden;
   background: var(--panel); border-radius: 18px 18px 0 0;
   padding: 8px 16px calc(16px + env(safe-area-inset-bottom));
   animation: up 0.2s ease-out;
@@ -239,7 +240,7 @@ textarea { resize: vertical; }
   display: flex; align-items: center; gap: 8px; padding: 6px 8px 6px 12px; min-height: 48px;
   border: 1px solid var(--line); border-radius: 10px;
 }
-.work-check { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; cursor: pointer; padding: 5px 0; }
+.work-check { display: flex; align-items: center; gap: 12px; flex: 1; min-width: 0; cursor: pointer; padding: 5px 0; overflow-wrap: anywhere; }
 .price { display: flex; align-items: center; gap: 4px; flex: none; color: var(--muted); font-size: 14px; }
 .price input { width: 92px; padding: 7px 8px; text-align: right; background: var(--panel); }
 .sheet-total, .grand-total {
