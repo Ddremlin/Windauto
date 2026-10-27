@@ -386,7 +386,8 @@ input:disabled { opacity: 0.6; }
   display: inline-flex; align-items: center; gap: 6px; padding: 7px 12px; border-radius: 99px;
   border: 1px solid var(--line); font-size: 14px; cursor: pointer; user-select: none;
 }
-.check-chip input { position: absolute; opacity: 0; pointer-events: none; }
+.check-chip { position: relative; }
+.check-chip input { position: absolute; inset: 0; width: 1px; height: 1px; padding: 0; border: 0; opacity: 0; pointer-events: none; }
 .check-chip.on { border-color: var(--accent); background: color-mix(in srgb, var(--accent) 10%, transparent); font-weight: 600; }
 .check-chip.on::before { content: '✓'; }
 .check-chip.damage.on { border-color: var(--damage); background: color-mix(in srgb, var(--damage) 14%, transparent); }
