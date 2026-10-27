@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import AppUpdate from './components/AppUpdate'
 import OrderEdit from './screens/OrderEdit'
 import OrderList from './screens/OrderList'
 import Settings from './screens/Settings'
@@ -83,7 +84,9 @@ export default function App() {
   }
 
   return (
-    <OrderList
+    <>
+      <AppUpdate />
+      <OrderList
       orders={orders}
       onOpen={(id) => go(`/order/${id}`)}
       onCreate={() => {
@@ -92,6 +95,7 @@ export default function App() {
       }}
       onSettings={() => go('/settings')}
       onStats={() => go('/stats')}
-    />
+      />
+    </>
   )
 }

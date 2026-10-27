@@ -5,6 +5,7 @@ import { BODY_TYPES, getLayout } from '../body'
 import { rodoClause } from '../rodo'
 import { signedDigest } from '../signed'
 import { useSettings } from '../settingsHooks'
+import { openExternal } from '../native'
 import { mailtoUrl, readyText, smsUrl, whatsappUrl } from '../share'
 import { getHistory, useSyncStatus, type HistoryEntry } from '../sync'
 import type { Consent, Intake, IntakeItem, Order, Signature, SignatureKind } from '../types'
@@ -217,7 +218,7 @@ export function ReadyNotice({ order }: { order: Order }) {
     <div className="ready-notice no-print">
       <span>{t('ready.title')}</span>
       <div className="ready-actions">
-        <button className="btn small" onClick={() => window.open(whatsappUrl(order.phone, text()), '_blank')} disabled={!order.phone}>
+        <button className="btn small" onClick={() => openExternal(whatsappUrl(order.phone, text()))} disabled={!order.phone}>
           💬 WhatsApp
         </button>
         <button className="btn small" onClick={() => (window.location.href = smsUrl(order.phone, text()))} disabled={!order.phone}>

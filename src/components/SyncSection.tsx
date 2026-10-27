@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { isNative, UPDATE_SERVER } from '../native'
 import { useSettings } from '../settingsHooks'
 import {
   changePassword,
@@ -16,7 +17,8 @@ import {
 export default function SyncSection() {
   const { t, locale } = useSettings()
   const st = useSyncStatus()
-  const [server, setServer] = useState(st.server)
+  // в Android-приложении сразу подставляем свой сервер
+  const [server, setServer] = useState(st.server || (isNative ? UPDATE_SERVER.replace(/^https:\/\//, '') : ''))
   const [login, setLogin] = useState(st.user?.login ?? '')
   const [password, setPassword] = useState('')
   const [busy, setBusy] = useState(false)

@@ -3,7 +3,7 @@
 // для распознавания VIN и номера по фото (нужен ANTHROPIC_API_KEY, без него распознавание выключено).
 import Anthropic from '@anthropic-ai/sdk'
 import { randomBytes, scryptSync, timingSafeEqual } from 'node:crypto'
-import { createReadStream, createWriteStream, existsSync, mkdirSync, statSync, writeFileSync, renameSync, unlinkSync } from 'node:fs'
+import { createReadStream, createWriteStream, existsSync, mkdirSync, readFileSync, statSync, writeFileSync, renameSync, unlinkSync } from 'node:fs'
 import { createServer } from 'node:http'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
@@ -15,6 +15,9 @@ const ORIGINS = (process.env.ALLOWED_ORIGINS ?? 'https://ddremlin.github.io,http
   .split(',')
   .map((s) => s.trim())
   .filter(Boolean)
+// Android-приложение (Capacitor) открывает страницы с https://localhost
+ORIGINS.push('https://localhost')
+const APP_DIR = join(DATA, 'app')
 const MAX_JSON = 20 * 1024 * 1024
 const MAX_PHOTO = 15 * 1024 * 1024
 // круговое видео при приёмке: ~2,5 Мбит/с × 3 мин ≈ 60 МБ, с запасом под видео из галереи
@@ -628,6 +631,28 @@ const routes = {
     res.write(`event: rev\ndata: ${currentRev()}\n\n`)
     listeners.add(res)
     req.on('close', () => listeners.delete(res))
+    return undefined
+  },
+
+  // Android-приложение: какая версия APK лежит на сервере (data/app/latest.json) — без входа,
+  // чтобы обновиться мог и телефон, ещё не подключённый к базе
+  'GET /api/app': () => {
+    const info = join(APP_DIR, 'latest.json')
+    if (!existsSync(info) || !existsSync(join(APP_DIR, 'windauto.apk'))) return {}
+    const { versionCode, versionName } = JSON.parse(readFileSync(info, 'utf8'))
+    return { versionCode, versionName, size: statSync(join(APP_DIR, 'windauto.apk')).size }
+  },
+
+  'GET /api/app/apk': (req, url, res) => {
+    const path = join(APP_DIR, 'windauto.apk')
+    if (!existsSync(path)) throw new HttpError(404, 'APK не выложен')
+    res.writeHead(200, {
+      'Content-Type': 'application/vnd.android.package-archive',
+      'Content-Length': statSync(path).size,
+      'Content-Disposition': 'attachment; filename="windauto.apk"',
+      'Cache-Control': 'no-cache',
+    })
+    createReadStream(path).pipe(res)
     return undefined
   },
 

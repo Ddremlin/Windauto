@@ -46,6 +46,19 @@ docker compose up -d --build      # обновление после замены
 Восстановление: остановить (`docker compose down`), распаковать архив в `data/`
 (`backup.db` переименовать в `windauto.db`), запустить снова.
 
+## Android-приложение
+
+APK раздаёт этот сервер: `GET /api/app` — версия, `GET /api/app/apk` — файл (оба без входа).
+Приложение само проверяет версию при открытии и предлагает «Обновить».
+Выпуск новой версии: поднять `version` в `package.json`, собрать `npm run apk`, выложить:
+
+```bash
+scp release-apk/windauto.apk release-apk/latest.json root@<IP>:/opt/windauto/data/app/
+```
+
+Первую установку на новый телефон — открыть `https://<домен>/api/app/apk` в браузере телефона
+и разрешить установку из этого источника.
+
 ## API
 
 | Метод | Путь | Назначение |

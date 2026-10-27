@@ -4,6 +4,7 @@
 import { useSyncExternalStore } from 'react'
 import { stampChanges } from './merge'
 import { tx, writeMany } from './idb'
+import { isNative, shareFileNative } from './native'
 import { orderPhotoIds, photosToDataUrls, restorePhotos } from './photos'
 import type { Order, OrderStatus } from './types'
 
@@ -200,9 +201,12 @@ export function useOrders() {
 export async function exportJson(list: Order[]) {
   const photos = await photosToDataUrls(list.flatMap(orderPhotoIds))
   const blob = new Blob([JSON.stringify({ app: 'windauto', version: 3, orders: list, photos })], { type: 'application/json' })
+  const name = `windauto-backup-${new Date().toISOString().slice(0, 10)}.json`
+  // в приложении — через «Поделиться»: сразу на Диск, в почту или в «Файлы»
+  if (isNative) return shareFileNative(blob, name, name)
   const a = document.createElement('a')
   a.href = URL.createObjectURL(blob)
-  a.download = `windauto-backup-${new Date().toISOString().slice(0, 10)}.json`
+  a.download = name
   a.click()
   setTimeout(() => URL.revokeObjectURL(a.href), 1000)
 }

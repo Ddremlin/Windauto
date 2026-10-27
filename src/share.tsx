@@ -5,6 +5,7 @@ import { getLayout } from './body'
 import AcceptanceDoc, { DOC_WIDTH, type DocKind } from './components/AcceptanceDoc'
 import { orderNo } from './docNumber'
 import { LOCALE, makeT, type Lang } from './i18n'
+import { isNative, saveFileNative, shareFileNative, shareTextNative } from './native'
 import { getPhoto, orderPhotoIds } from './photos'
 import { LangOverride, SettingsProvider } from './settings'
 import type { Settings } from './settingsStore'
@@ -92,6 +93,10 @@ export async function makePdf(order: Order, lang: Lang, kind: DocKind = 'accepta
 }
 
 export async function sharePdf(blob: Blob, name: string, title: string): Promise<'shared' | 'downloaded'> {
+  if (isNative) {
+    await shareFileNative(blob, name, title)
+    return 'shared'
+  }
   const file = new File([blob], name, { type: 'application/pdf' })
   if (navigator.canShare?.({ files: [file] })) {
     try {
@@ -105,7 +110,9 @@ export async function sharePdf(blob: Blob, name: string, title: string): Promise
   return 'downloaded'
 }
 
-export function downloadBlob(blob: Blob, name: string) {
+/** Сохраняет файл; в приложении — в «Документы» телефона, возвращает путь */
+export async function downloadBlob(blob: Blob, name: string): Promise<string | undefined> {
+  if (isNative) return saveFileNative(blob, name)
   const a = document.createElement('a')
   a.href = URL.createObjectURL(blob)
   a.download = name
@@ -175,6 +182,10 @@ export function mailtoUrl(email: string, subject: string, text: string): string 
 
 /** Текст через системное меню «Поделиться»; false — если меню нет */
 export async function shareText(text: string, title: string): Promise<boolean> {
+  if (isNative) {
+    await shareTextNative(text, title)
+    return true
+  }
   if (!navigator.share) return false
   try {
     await navigator.share({ title, text })

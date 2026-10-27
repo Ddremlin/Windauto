@@ -1,7 +1,7 @@
 // Сервер целиком: запускаем server.mjs на временной папке и ходим в API.
 import assert from 'node:assert/strict'
 import { spawn, type ChildProcess } from 'node:child_process'
-import { mkdtempSync, rmSync } from 'node:fs'
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, before, test } from 'node:test'
@@ -158,4 +158,19 @@ test('блокировка подбора пароля переживает пе
   assert.equal((await api('/api/login', '', { login: 'jan', password: 'secret2' })).status, 429)
   // токены после перезапуска живы
   assert.equal((await api('/api/me', staff)).status, 200)
+})
+
+test('обновление приложения: пока APK нет — пусто; после выкладки — версия и файл без входа', async () => {
+  assert.deepEqual((await api('/api/app')).body, {})
+  assert.equal((await fetch(URL_ + '/api/app/apk')).status, 404)
+  mkdirSync(join(dir, 'app'), { recursive: true })
+  writeFileSync(join(dir, 'app', 'windauto.apk'), 'apk-bytes')
+  writeFileSync(join(dir, 'app', 'latest.json'), JSON.stringify({ versionCode: 10400, versionName: '1.4.0' }))
+  assert.deepEqual((await api('/api/app')).body, { versionCode: 10400, versionName: '1.4.0', size: 9 })
+  const apk = await fetch(URL_ + '/api/app/apk')
+  assert.equal(apk.headers.get('content-type'), 'application/vnd.android.package-archive')
+  assert.equal(await apk.text(), 'apk-bytes')
+  // приложение ходит с https://localhost
+  const cors = await fetch(URL_ + '/api/app', { headers: { Origin: 'https://localhost' } })
+  assert.equal(cors.headers.get('access-control-allow-origin'), 'https://localhost')
 })

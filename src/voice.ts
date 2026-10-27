@@ -1,7 +1,9 @@
 // Голосовой ввод. Речь в текст переводит сам телефон (Web Speech API: Google на Android, Apple на iPhone);
 // разбор текста по полям заказа — Claude на сервере (sync.parseVoice). Здесь — распознавание речи
 // и применение результата к заказу.
+import { SpeechRecognition } from '@capacitor-community/speech-recognition'
 import { COUNTRIES } from './countries'
+import { isNative } from './native'
 import type { VoiceResult } from './sync'
 import type { DamageId, ElementWork, Order, WorkId } from './types'
 import { formatPlate, normalizeVin } from './validate'
@@ -33,7 +35,7 @@ const ctor = (): RecognitionCtor | undefined => {
   return w.SpeechRecognition ?? w.webkitSpeechRecognition
 }
 
-export const speechSupported = () => Boolean(ctor())
+export const speechSupported = () => isNative || Boolean(ctor())
 
 export const SPEECH_LANG = { ru: 'ru-RU', pl: 'pl-PL' } as const
 
@@ -53,6 +55,7 @@ export function listen(
   onText: (final: string, interim: string) => void,
   onEnd: (final: string, error?: string) => void,
 ): Listening {
+  if (isNative) return listenNative(lang, onText, onEnd)
   const Ctor = ctor()
   if (!Ctor) {
     onEnd('', 'unsupported')
@@ -105,6 +108,86 @@ export function listen(
       active = false
       rec.onend = null
       rec.abort()
+    },
+  }
+}
+
+/**
+ * То же в Android-приложении: распознаёт система Android (в WebView Web Speech API нет).
+ * После паузы Android замолкает, а об ошибке «ничего не услышал» плагин не сообщает —
+ * поэтому раз в полсекунды проверяем, слушает ли он ещё, и перезапускаем.
+ */
+function listenNative(
+  lang: string,
+  onText: (final: string, interim: string) => void,
+  onEnd: (final: string, error?: string) => void,
+): Listening {
+  let finalText = ''
+  let session = ''
+  let active = true
+  let restarting = false
+  let stopping = false
+  let watchdog: ReturnType<typeof setInterval> | undefined
+
+  const join = (a: string, b: string) => (a && b ? `${a} ${b}` : a || b).trim()
+  const finish = (error?: string) => {
+    if (!active) return
+    active = false
+    clearInterval(watchdog)
+    SpeechRecognition.removeAllListeners()
+    SpeechRecognition.stop().catch(() => {})
+    onEnd(join(finalText, session), error)
+  }
+  const begin = () =>
+    SpeechRecognition.start({ language: lang, partialResults: true, popup: false, maxResults: 1 }).catch(() => {})
+
+  // сессия закончилась: забираем её текст и слушаем дальше
+  const restart = async () => {
+    if (restarting || stopping || !active) return
+    restarting = true
+    // финальный результат приходит чуть позже сигнала «замолчал»
+    await new Promise((r) => setTimeout(r, 400))
+    finalText = join(finalText, session)
+    session = ''
+    if (active && !stopping) await begin()
+    restarting = false
+  }
+
+  void (async () => {
+    const perm = await SpeechRecognition.requestPermissions().catch(() => undefined)
+    if (perm?.speechRecognition !== 'granted') return finish('not-allowed')
+    if (!(await SpeechRecognition.available().catch(() => ({ available: false }))).available) return finish('unsupported')
+    if (!active) return
+    await SpeechRecognition.addListener('partialResults', ({ matches }) => {
+      if (!active || !matches?.[0]) return
+      session = matches[0]
+      onText(finalText, session)
+    })
+    await SpeechRecognition.addListener('listeningState', ({ status }) => {
+      if (status === 'stopped') void restart()
+    })
+    await begin()
+    watchdog = setInterval(async () => {
+      if (!active || restarting || stopping) return
+      const { listening } = await SpeechRecognition.isListening().catch(() => ({ listening: false }))
+      if (!listening) void restart()
+    }, 500)
+  })()
+
+  return {
+    stop: () => {
+      if (!active || stopping) return
+      // больше не перезапускаем, но даём долететь последнему результату
+      stopping = true
+      clearInterval(watchdog)
+      SpeechRecognition.stop().catch(() => {})
+      setTimeout(() => finish(), 400)
+    },
+    cancel: () => {
+      active = false
+      clearInterval(watchdog)
+      SpeechRecognition.removeAllListeners()
+      SpeechRecognition.stop().catch(() => {})
     },
   }
 }

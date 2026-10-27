@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { LANGS, makeT, type Lang } from '../i18n'
 import { useSettings } from '../settingsHooks'
+import { isNative, openExternal, printNative } from '../native'
 import { downloadBlob, mailtoUrl, makePdf, orderText, pdfFileName, readyText, sharePdf, shareText, smsUrl, whatsappUrl } from '../share'
 import type { Order } from '../types'
 import type { DocKind } from './AcceptanceDoc'
@@ -45,7 +46,7 @@ export default function ShareSheet({ order, onClose }: Props) {
 
   const whatsapp = () => {
     if (!order.phone) alert(t('share.noPhone'))
-    window.open(whatsappUrl(order.phone, text()), '_blank')
+    openExternal(whatsappUrl(order.phone, text()))
   }
 
   const sms = () => {
@@ -111,7 +112,10 @@ export default function ShareSheet({ order, onClose }: Props) {
             </button>
           )}
           {ready && (
-            <button className="share-item" onClick={() => downloadBlob(ready, name)}>
+            <button className="share-item" onClick={async () => {
+              const path = await downloadBlob(ready, name)
+              if (path) alert(t('share.saved', { path }))
+            }}>
               <span className="share-icon">⬇️</span>
               <span>
                 <b>{t('share.download')}</b>
@@ -156,7 +160,7 @@ export default function ShareSheet({ order, onClose }: Props) {
             className="share-item"
             onClick={() => {
               onClose()
-              setTimeout(() => window.print(), 100)
+              setTimeout(() => (isNative ? printNative(docTitle) : window.print()), 100)
             }}
           >
             <span className="share-icon">🖨</span>
