@@ -1,0 +1,52 @@
+plugins {
+    id 'com.android.application'
+}
+
+// Ключ подписи хранится вне репозитория: android/keystore.properties → ~/.android-keys/windauto.jks
+def keystoreProps = new Properties()
+def keystoreFile = rootProject.file('keystore.properties')
+if (keystoreFile.exists()) keystoreFile.withInputStream { keystoreProps.load(it) }
+
+android {
+    namespace 'io.github.ddremlin.windauto'
+    compileSdk 36
+
+    defaultConfig {
+        applicationId 'io.github.ddremlin.windauto'
+        minSdk 24
+        targetSdk 36
+        versionCode 1
+        versionName '1.0'
+        manifestPlaceholders = [
+            hostName: 'ddremlin.github.io',
+            launchUrl: 'https://ddremlin.github.io/Windauto/',
+        ]
+    }
+
+    signingConfigs {
+        release {
+            if (keystoreProps['storeFile']) {
+                storeFile file(keystoreProps['storeFile'])
+                storePassword keystoreProps['storePassword']
+                keyAlias keystoreProps['keyAlias']
+                keyPassword keystoreProps['keyPassword']
+            }
+        }
+    }
+
+    buildTypes {
+        release {
+            minifyEnabled false
+            signingConfig signingConfigs.release
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility JavaVersion.VERSION_17
+        targetCompatibility JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    implementation 'com.google.androidbrowserhelper:androidbrowserhelper:2.5.0'
+}
