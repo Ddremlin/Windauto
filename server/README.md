@@ -55,6 +55,7 @@ docker compose up -d --build      # обновление после замены
 | POST | /api/sync | отправка изменений; если заказ меняли параллельно — слияние по полям (`_ft`), результат в `merged`; там же номер для новых заказов |
 | GET | /api/events | SSE-уведомления об изменениях |
 | PUT/GET | /api/photos/:id | фото |
+| POST | /api/voice | `{text, elements, works, damages}` (речь, уже переведённая телефоном в текст) → поля заказа и работы по элементам |
 | PUT/GET | /api/videos/:id.mp4 | круговое видео приёмки (до 300 МБ, GET поддерживает Range) |
 | POST | /api/recognize | `{kind: 'vin'\|'plate'\|'doc', image: base64 JPEG}` → `{value, country?, confident}`, для doc — `{plate, vin, make, model, year, owner, confident}` |
 | GET | /api/orders/:id/history | история изменений заказа (кто, когда, какие поля) |

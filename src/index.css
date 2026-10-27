@@ -571,3 +571,28 @@ input:disabled { opacity: 0.6; }
   .rec-zoom-track { height: 52vh; }
 }
 .rec-live { touch-action: none; transition: transform 0.08s linear; }
+
+/* голосовой ввод: плавающая кнопка справа внизу */
+.voice-fab {
+  display: grid; place-items: center; z-index: 15;
+  bottom: calc(20px + env(safe-area-inset-bottom));
+}
+.voice-fab.on { background: #e53935; animation: voice-pulse 1.2s ease-in-out infinite; }
+@keyframes voice-pulse {
+  0%, 100% { box-shadow: 0 0 0 0 rgb(229 57 53 / 0.5), 0 6px 18px rgb(0 0 0 / 0.25); }
+  50% { box-shadow: 0 0 0 14px rgb(229 57 53 / 0), 0 6px 18px rgb(0 0 0 / 0.25); }
+}
+.voice-bubble {
+  position: fixed; z-index: 15; right: max(16px, calc(50% - 344px)); bottom: calc(92px + env(safe-area-inset-bottom));
+  max-width: min(420px, calc(100vw - 32px)); padding: 10px 14px; border-radius: 14px;
+  background: var(--panel); border: 1px solid var(--line); box-shadow: 0 6px 18px rgb(0 0 0 / 0.18); font-size: 15px;
+}
+.voice-bubble.error { color: var(--danger); }
+.voice-head { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+.voice-head h2 { margin: 6px 0; }
+.voice-lang { width: 110px; margin: 0; }
+.voice-text { font-size: 17px; line-height: 1.45; min-height: 3em; max-height: 40vh; overflow-y: auto; }
+.voice-changes { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; max-height: 55vh; overflow-y: auto; }
+.voice-changes li { display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border: 1px solid var(--line); border-radius: 10px; }
+.voice-changes li b { font-size: 13px; color: var(--muted); font-weight: 600; }
+.voice-changes s { margin-right: 4px; }

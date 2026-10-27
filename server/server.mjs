@@ -318,6 +318,85 @@ const RECOGNIZE = {
   },
 }
 
+// --- голосовой ввод: текст (распознан телефоном) → поля заказа ---
+const VOICE_FIELDS = ['plate', 'plateCountry', 'vin', 'make', 'model', 'year', 'mileage', 'color', 'paintCode', 'paintNotes', 'client', 'phone', 'email', 'notes']
+
+const voiceSchema = (elements, works, damages) => ({
+  type: 'object',
+  properties: {
+    fields: {
+      type: 'object',
+      properties: Object.fromEntries(VOICE_FIELDS.map((k) => [k, { type: 'string' }])),
+      required: VOICE_FIELDS,
+      additionalProperties: false,
+    },
+    elements: {
+      type: 'array',
+      items: {
+        type: 'object',
+        properties: {
+          id: { type: 'string', enum: elements },
+          works: { type: 'array', items: { type: 'string', enum: works } },
+          damage: { type: 'array', items: { type: 'string', enum: damages } },
+          price: { type: 'number' },
+          note: { type: 'string' },
+        },
+        required: ['id', 'works', 'damage', 'price', 'note'],
+        additionalProperties: false,
+      },
+    },
+    confident: { type: 'boolean' },
+  },
+  required: ['fields', 'elements', 'confident'],
+  additionalProperties: false,
+})
+
+const voicePrompt = (text, elements, works, damages) =>
+  'Ты помогаешь мастеру кузовного сервиса в Польше заполнять лист приёмки автомобиля голосом. ' +
+  'Ниже — распознанная речь мастера (русский или польский, возможны ошибки распознавания). ' +
+  'Разложи сказанное по полям. Поле, о котором ничего не сказано, — пустая строка; не выдумывай.\n' +
+  'Поля: plate — номер как на знаке, заглавными, с пробелом между частями («WA 12345»); ' +
+  'plateCountry — код страны с номера (PL, D, UA, LT, CZ…), только если назван; vin — 17 символов без пробелов; ' +
+  'make и model — с обычным написанием («Škoda», «Octavia»); year — 4 цифры; mileage — только цифры, км; ' +
+  'color — цвет словами; paintCode — код краски; paintNotes — замечания к цвету и лакокрасочному покрытию; ' +
+  'client — имя и фамилия или фирма; phone — как продиктован, цифрами; email; ' +
+  'notes — то, что не подходит ни к одному полю (пожелания клиента, договорённости).\n' +
+  'elements — элементы кузова, о которых сказано: id из списка, works — какие работы, damage — какие повреждения уже есть, ' +
+  'price — названная цена в злотых за работы по элементу (0, если не названа), note — уточнение по элементу. ' +
+  'Слова «левый/правый» — по ходу движения автомобиля.\n' +
+  `Элементы (id: название): ${elements.map((e) => `${e.id}: ${e.name}`).join('; ')}\n` +
+  `Работы: ${works.map((w) => `${w.id}: ${w.name}`).join('; ')}\n` +
+  `Повреждения: ${damages.map((d) => `${d.id}: ${d.name}`).join('; ')}\n` +
+  'confident — false, если речь неразборчива или что-то пришлось угадывать.\n\n' +
+  `Речь мастера:\n${text}`
+
+async function parseVoice({ text, elements, works, damages }) {
+  const ids = (list) => list.map((x) => x.id)
+  const response = await ai.beta.messages.create({
+    model: AI_MODEL,
+    max_tokens: 4000,
+    betas: ['server-side-fallback-2026-07-01'],
+    fallbacks: 'default',
+    output_config: { effort: 'low', format: { type: 'json_schema', schema: voiceSchema(ids(elements), ids(works), ids(damages)) } },
+    messages: [{ role: 'user', content: voicePrompt(text, elements, works, damages) }],
+  })
+  if (response.stop_reason === 'refusal') throw new HttpError(422, 'Не удалось разобрать')
+  const out = response.content.find((b) => b.type === 'text')?.text
+  if (!out) throw new HttpError(502, 'Пустой ответ разбора')
+  return JSON.parse(out)
+}
+
+// список { id, name } от приложения: только короткие строки
+const idList = (v, max) => {
+  if (!Array.isArray(v) || !v.length || v.length > max) throw new HttpError(400, 'Неверный список')
+  return v.map((x) => {
+    const id = String(x?.id ?? '')
+    const name = String(x?.name ?? '')
+    if (!/^[\w-]{1,40}$/.test(id) || name.length > 80) throw new HttpError(400, 'Неверный список')
+    return { id, name }
+  })
+}
+
 async function recognize(kind, image) {
   const task = RECOGNIZE[kind]
   const response = await ai.beta.messages.create({
@@ -402,6 +481,30 @@ const routes = {
       if (e instanceof Anthropic.APIError) {
         log('ошибка распознавания', e.status, e.message)
         throw new HttpError(502, 'Сервис распознавания недоступен')
+      }
+      throw e
+    }
+  },
+
+  // голосовой ввод: текст → поля заказа, элементы и работы
+  'POST /api/voice': async (req, url) => {
+    const u = auth(req, url)
+    if (!ai) throw new HttpError(503, 'Разбор голоса не настроен на сервере (нет ANTHROPIC_API_KEY)')
+    const body = await readJson(req)
+    const text = String(body.text ?? '').trim()
+    if (!text) throw new HttpError(400, 'Пустой текст')
+    if (text.length > 4000) throw new HttpError(400, 'Слишком длинный текст')
+    const input = { text, elements: idList(body.elements, 100), works: idList(body.works, 30), damages: idList(body.damages, 30) }
+    try {
+      const out = await parseVoice(input)
+      log(`голос: ${u.login}, ${text.length} симв. → ${out.elements.length} эл.`)
+      return out
+    } catch (e) {
+      if (e instanceof HttpError) throw e
+      if (e instanceof Anthropic.RateLimitError) throw new HttpError(429, 'Разбор голоса перегружен, попробуйте через минуту')
+      if (e instanceof Anthropic.APIError) {
+        log('ошибка разбора голоса', e.status, e.message)
+        throw new HttpError(502, 'Сервис разбора голоса недоступен')
       }
       throw e
     }

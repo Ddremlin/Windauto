@@ -81,3 +81,42 @@ test('камеры: составная iPhone, отдельная сверхши
   assert.equal(zoomBase('Back Dual Wide Camera'), 2)
   assert.equal(zoomBase('camera2 0, facing back'), 1)
 })
+
+test('голос: поля, элементы, цены и примечания', async () => {
+  const { applyVoice } = await import('../src/voice.ts')
+  const order = {
+    plate: '', plateCountry: 'PL', vin: '', make: 'Škoda', model: '', year: '', mileage: '', color: '', paintCode: '',
+    paintNotes: '', client: '', phone: '', email: '', notes: 'Ключи у мастера',
+    elements: { hood: { works: ['paint_partial'], prices: { paint_partial: 300 } } },
+  } as unknown as Order
+  const empty = Object.fromEntries(['plate', 'plateCountry', 'vin', 'make', 'model', 'year', 'mileage', 'color', 'paintCode', 'paintNotes', 'client', 'phone', 'email', 'notes'].map((k) => [k, '']))
+  const { patch, changes } = applyVoice(
+    order,
+    {
+      fields: { ...empty, plate: 'wa12345', make: 'Škoda', model: 'Octavia', mileage: '154 000 км', year: '2019 год', notes: 'Клиент просит позвонить' },
+      elements: [
+        { id: 'hood', works: ['paint_full'], damage: ['scratch'], price: 0, note: '' },
+        { id: 'bumper_front', works: ['repair', 'paint_partial'], damage: [], price: 900, note: 'трещина снизу' },
+        { id: 'no_such', works: ['repair'], damage: [], price: 0, note: '' },
+      ],
+      confident: true,
+    },
+    new Set(['hood', 'bumper_front']),
+    { paint_full: 1200, repair: 250 },
+  )
+  assert.equal(patch.plate, formatPlate('WA12345', 'PL'))
+  assert.equal(patch.model, 'Octavia')
+  assert.equal(patch.make, undefined) // уже такая же — не меняем
+  assert.equal(patch.mileage, '154000')
+  assert.equal(patch.year, '2019')
+  assert.equal(patch.notes, 'Ключи у мастера\nКлиент просит позвонить')
+  // окрас полный заменяет частичный; цена из настроек для новой работы
+  assert.deepEqual(patch.elements!.hood.works, ['paint_full'])
+  assert.equal(patch.elements!.hood.prices!.paint_full, 1200)
+  assert.deepEqual(patch.elements!.hood.damage, ['scratch'])
+  // две работы и одна цена — цену не угадываем, кладём в комментарий
+  assert.deepEqual(patch.elements!.bumper_front.works, ['repair', 'paint_partial'])
+  assert.equal(patch.elements!.bumper_front.note, 'трещина снизу, 900 zł')
+  assert.equal(patch.elements!.no_such, undefined)
+  assert.equal(changes.filter((c) => c.kind === 'element').length, 2)
+})

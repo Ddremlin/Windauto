@@ -448,3 +448,25 @@ export async function recognize(kind: ScanKind, file: Blob): Promise<Recognized 
   const image = await toJpegBase64(file, kind === 'doc' ? 2000 : 1600)
   return api('/api/recognize', { method: 'POST', body: JSON.stringify({ kind, image }) })
 }
+
+// --- голосовой ввод: распознанный телефоном текст → поля заказа (Claude на сервере) ---
+export interface VoiceElement {
+  id: string
+  works: string[]
+  damage: string[]
+  // zł за работы по элементу; 0 — не названа
+  price: number
+  note: string
+}
+
+export interface VoiceResult {
+  // пустая строка — об этом поле ничего не сказано
+  fields: Record<string, string>
+  elements: VoiceElement[]
+  confident: boolean
+}
+
+type Named = { id: string; name: string }
+
+export const parseVoice = (text: string, lists: { elements: Named[]; works: Named[]; damages: Named[] }) =>
+  api<VoiceResult>('/api/voice', { method: 'POST', body: JSON.stringify({ text, ...lists }) })

@@ -122,6 +122,14 @@ test('распознавание без ключа — понятная ошиб
   assert.equal(r.status, 503)
 })
 
+test('голос без ключа — понятная ошибка; без входа — 401', async () => {
+  const lists = { elements: [{ id: 'hood', name: 'Капот' }], works: [{ id: 'repair', name: 'Ремонт' }], damages: [{ id: 'dent', name: 'Вмятина' }] }
+  const r = await api('/api/voice', staff, { text: 'капот ремонт', ...lists })
+  assert.equal(r.status, 503)
+  assert.match(r.body.error, /ANTHROPIC_API_KEY/)
+  assert.equal((await api('/api/voice', '', { text: 'x', ...lists })).status, 401)
+})
+
 test('круговое видео: загрузка, Range, неверный id и вход', async () => {
   const id = 'a1b2c3d4-e5f6.mp4'
   const data = new Uint8Array(1000).map((_, i) => i % 256)

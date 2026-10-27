@@ -11,6 +11,7 @@ import { PhotoStrip } from '../components/Photos'
 import { PlateInput } from '../components/Plate'
 import { useDocScan, useScan } from '../components/Scan'
 import ShareSheet from '../components/ShareSheet'
+import VoiceFab from '../components/VoiceFab'
 import { WalkaroundPanel } from '../components/Walkaround'
 import { COUNTRIES } from '../countries'
 import { deletePhotos, elementPhotoIds, orderPhotoIds } from '../photos'
@@ -454,6 +455,7 @@ export default function OrderEdit({ initial, onSave, onDelete, onBack }: Props) 
         />
       )}
       {share && <ShareSheet order={order} onClose={() => setShare(false)} />}
+      <VoiceFab order={order} onApply={update} />
     </div>
   )
 }
