@@ -55,23 +55,19 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
-/** Экран записи кругового видео: превью, зум ползунком справа, кнопками 0.5× · 1× · 2× · 5× и щипком, запись до maxSec */
+/** Экран записи кругового видео: превью, зум ползунком справа и щипком, запись до maxSec */
 public class RecorderActivity extends AppCompatActivity {
 
     private static final int REQ_PERMS = 1;
-    private static final float[] MARKS = { 0.5f, 1f, 2f, 5f };
 
     private PreviewView preview;
     private TextView top;
     private TextView zoomValue;
-    private LinearLayout zoomRow;
     private LinearLayout bar;
     private Button cancelBtn;
     private Button galleryBtn;
     private View recBtn;
     private ZoomSlider slider;
-    private final List<Button> markBtns = new ArrayList<>();
-    private final List<Float> markVals = new ArrayList<>();
 
     private Camera camera;
     private VideoCapture<Recorder> videoCapture;
@@ -212,16 +208,9 @@ public class RecorderActivity extends AppCompatActivity {
         zoomValue.setTextSize(14);
         zoomValue.setTypeface(Typeface.DEFAULT_BOLD);
         zoomValue.setGravity(Gravity.CENTER);
-        bottom.addView(zoomValue, new LinearLayout.LayoutParams(-2, -2));
-
-        zoomRow = new LinearLayout(this);
-        zoomRow.setOrientation(LinearLayout.HORIZONTAL);
-        zoomRow.setGravity(Gravity.CENTER);
-        zoomRow.setBackground(round(0x66000000, 24));
-        zoomRow.setPadding(dp(4), dp(4), dp(4), dp(4));
         LinearLayout.LayoutParams zoomLp = new LinearLayout.LayoutParams(-2, -2);
-        zoomLp.setMargins(0, dp(6), 0, dp(14));
-        bottom.addView(zoomRow, zoomLp);
+        zoomLp.setMargins(0, 0, 0, dp(14));
+        bottom.addView(zoomValue, zoomLp);
 
         bar = new LinearLayout(this);
         bar.setOrientation(LinearLayout.HORIZONTAL);
@@ -262,7 +251,7 @@ public class RecorderActivity extends AppCompatActivity {
             top.setLayoutParams(topLp);
             // ползунок — между подсказкой сверху и кнопками снизу
             sliderLp.topMargin = s.top + dp(110);
-            sliderLp.bottomMargin = s.bottom + dp(200);
+            sliderLp.bottomMargin = s.bottom + dp(150);
             sliderLp.rightMargin = s.right + dp(4);
             slider.setLayoutParams(sliderLp);
             bottom.setPadding(s.left, 0, s.right, s.bottom + dp(20));
@@ -341,38 +330,9 @@ public class RecorderActivity extends AppCompatActivity {
     }
 
     private void onZoom(ZoomState z) {
-        // кнопки — один раз, когда стал известен диапазон камеры
-        if (markBtns.isEmpty()) {
-            for (float m : MARKS) {
-                // 0.5 — если камера опускается ниже ~0.95 (на Pixel — 0.508); остальное — в пределах максимума
-                float v = m < 1 ? z.getMinZoomRatio() : m;
-                if (m < 1 && z.getMinZoomRatio() > 0.95f) continue;
-                if (m > z.getMaxZoomRatio() + 0.01f) continue;
-                Button b = textButton(fmtZoom(m, false));
-                b.setTextSize(13);
-                b.setPadding(0, 0, 0, 0);
-                b.setSingleLine(true);
-                b.setOnClickListener(x -> setZoom(v));
-                LinearLayout.LayoutParams lp = new LinearLayout.LayoutParams(dp(44), dp(36));
-                lp.setMargins(dp(2), 0, dp(2), 0);
-                zoomRow.addView(b, lp);
-                markBtns.add(b);
-                markVals.add(v);
-            }
-            zoomRow.setVisibility(markBtns.size() > 1 ? View.VISIBLE : View.GONE);
-        }
         float r = z.getZoomRatio();
         slider.update(z.getMinZoomRatio(), z.getMaxZoomRatio(), r);
         zoomValue.setText(fmtZoom(r < 1 && r > 0.45f ? Math.max(0.5f, r) : r, true));
-        // подсвечена ближайшая снизу отметка
-        int sel = 0;
-        for (int i = 0; i < markVals.size(); i++) if (r >= markVals.get(i) - 0.02f) sel = i;
-        for (int i = 0; i < markBtns.size(); i++) {
-            Button b = markBtns.get(i);
-            boolean on = i == sel;
-            b.setBackground(round(on ? 0xFFFFFFFF : 0x00000000, 18));
-            b.setTextColor(on ? Color.BLACK : Color.WHITE);
-        }
     }
 
     /**
