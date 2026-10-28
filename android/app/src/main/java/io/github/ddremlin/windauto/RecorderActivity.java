@@ -4,12 +4,17 @@ import android.Manifest;
 import android.annotation.SuppressLint;
 import android.content.Intent;
 import android.content.pm.PackageManager;
+import android.content.Context;
+import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.Paint;
+import android.graphics.RectF;
 import android.graphics.Typeface;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Bundle;
 import android.util.TypedValue;
 import android.view.Gravity;
+import android.view.MotionEvent;
 import android.view.OrientationEventListener;
 import android.view.ScaleGestureDetector;
 import android.view.Surface;
@@ -50,7 +55,7 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Locale;
 
-/** Экран записи кругового видео: превью, зум 0.5× · 1× · 2× · 5× и щипком, запись до maxSec */
+/** Экран записи кругового видео: превью, зум ползунком справа, кнопками 0.5× · 1× · 2× · 5× и щипком, запись до maxSec */
 public class RecorderActivity extends AppCompatActivity {
 
     private static final int REQ_PERMS = 1;
@@ -64,6 +69,7 @@ public class RecorderActivity extends AppCompatActivity {
     private Button cancelBtn;
     private Button galleryBtn;
     private View recBtn;
+    private ZoomSlider slider;
     private final List<Button> markBtns = new ArrayList<>();
     private final List<Float> markVals = new ArrayList<>();
 
@@ -193,6 +199,10 @@ public class RecorderActivity extends AppCompatActivity {
         FrameLayout.LayoutParams topLp = new FrameLayout.LayoutParams(-2, -2, Gravity.TOP | Gravity.CENTER_HORIZONTAL);
         root.addView(top, topLp);
 
+        slider = new ZoomSlider(this);
+        FrameLayout.LayoutParams sliderLp = new FrameLayout.LayoutParams(dp(120), -1, Gravity.END | Gravity.CENTER_VERTICAL);
+        root.addView(slider, sliderLp);
+
         LinearLayout bottom = new LinearLayout(this);
         bottom.setOrientation(LinearLayout.VERTICAL);
         bottom.setGravity(Gravity.CENTER_HORIZONTAL);
@@ -250,6 +260,11 @@ public class RecorderActivity extends AppCompatActivity {
             Insets s = insets.getInsets(WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout());
             topLp.topMargin = s.top + dp(12);
             top.setLayoutParams(topLp);
+            // ползунок — между подсказкой сверху и кнопками снизу
+            sliderLp.topMargin = s.top + dp(110);
+            sliderLp.bottomMargin = s.bottom + dp(200);
+            sliderLp.rightMargin = s.right + dp(4);
+            slider.setLayoutParams(sliderLp);
             bottom.setPadding(s.left, 0, s.right, s.bottom + dp(20));
             return insets;
         });
@@ -347,6 +362,7 @@ public class RecorderActivity extends AppCompatActivity {
             zoomRow.setVisibility(markBtns.size() > 1 ? View.VISIBLE : View.GONE);
         }
         float r = z.getZoomRatio();
+        slider.update(z.getMinZoomRatio(), z.getMaxZoomRatio(), r);
         zoomValue.setText(fmtZoom(r < 1 && r > 0.45f ? Math.max(0.5f, r) : r, true));
         // подсвечена ближайшая снизу отметка
         int sel = 0;
@@ -356,6 +372,108 @@ public class RecorderActivity extends AppCompatActivity {
             boolean on = i == sel;
             b.setBackground(round(on ? 0xFFFFFFFF : 0x00000000, 18));
             b.setTextColor(on ? Color.BLACK : Color.WHITE);
+        }
+    }
+
+    /**
+     * Вертикальный ползунок зума: внизу минимум (0.5× где есть), вверху максимум камеры.
+     * Шкала логарифмическая — 0.5→1 и 10→20 занимают одинаковый ход, плавно во всём диапазоне.
+     */
+    private class ZoomSlider extends View {
+        private final Paint track = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Paint fill = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Paint thumb = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Paint label = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final Paint value = new Paint(Paint.ANTI_ALIAS_FLAG);
+        private final RectF rect = new RectF();
+        private float min = 1, max = 1, ratio = 1;
+        private boolean dragging;
+
+        ZoomSlider(Context c) {
+            super(c);
+            track.setColor(0x66000000);
+            fill.setColor(0xCCFFFFFF);
+            thumb.setColor(Color.WHITE);
+            thumb.setShadowLayer(dp(3), 0, 0, 0x88000000);
+            label.setColor(0xDDFFFFFF);
+            label.setTextSize(dp(11));
+            label.setTextAlign(Paint.Align.RIGHT);
+            label.setShadowLayer(dp(2), 0, 0, Color.BLACK);
+            value.setColor(Color.WHITE);
+            value.setTextSize(dp(15));
+            value.setTypeface(Typeface.DEFAULT_BOLD);
+            value.setTextAlign(Paint.Align.RIGHT);
+            value.setShadowLayer(dp(3), 0, 0, Color.BLACK);
+            setLayerType(LAYER_TYPE_SOFTWARE, null);
+            setVisibility(GONE);
+        }
+
+        void update(float mn, float mx, float r) {
+            min = mn;
+            max = mx;
+            // пока палец на ползунке — бегунок там, где палец, без дрожания от ответов камеры
+            if (!dragging) ratio = r;
+            setVisibility(mx / mn > 1.05f ? VISIBLE : GONE);
+            invalidate();
+        }
+
+        private float top() { return dp(16); }
+        private float bottom() { return getHeight() - dp(16); }
+        private float cx() { return getWidth() - dp(22); }
+
+        private float yOf(float z) {
+            double f = Math.log(z / min) / Math.log(max / min);
+            return (float) (bottom() - Math.max(0, Math.min(1, f)) * (bottom() - top()));
+        }
+
+        private float zOf(float y) {
+            double f = (bottom() - y) / (bottom() - top());
+            f = Math.max(0, Math.min(1, f));
+            return (float) (min * Math.pow(max / min, f));
+        }
+
+        @Override
+        protected void onDraw(Canvas c) {
+            float x = cx(), w = dp(3);
+            rect.set(x - dp(14), top() - dp(14), x + dp(14), bottom() + dp(14));
+            c.drawRoundRect(rect, dp(14), dp(14), track);
+            float y = yOf(ratio);
+            rect.set(x - w, y, x + w, bottom());
+            c.drawRoundRect(rect, w, w, fill);
+            // подписи: минимум, круглые значения, максимум
+            List<Float> marks = new ArrayList<>();
+            marks.add(min);
+            for (float m : new float[] { 1, 2, 5, 10, 20 }) if (m > min * 1.15f && m < max / 1.15f) marks.add(m);
+            marks.add(max);
+            for (float m : marks) {
+                float my = yOf(m);
+                c.drawCircle(x, my, dp(2), fill);
+                if (Math.abs(my - y) > dp(18)) c.drawText(fmtZoom(m < 1 ? Math.max(0.5f, m) : m, false), x - dp(20), my + dp(4), label);
+            }
+            c.drawCircle(x, y, dp(11), thumb);
+            c.drawText(fmtZoom(ratio < 1 ? Math.max(0.5f, ratio) : ratio, true), x - dp(18), y + dp(5), value);
+        }
+
+        @SuppressLint("ClickableViewAccessibility")
+        @Override
+        public boolean onTouchEvent(MotionEvent e) {
+            // берётся только полоса у правого края, чтобы не мешать щипку по превью
+            if (e.getActionMasked() == MotionEvent.ACTION_DOWN && e.getX() < getWidth() - dp(56)) return false;
+            switch (e.getActionMasked()) {
+                case MotionEvent.ACTION_DOWN:
+                case MotionEvent.ACTION_MOVE:
+                    dragging = true;
+                    getParent().requestDisallowInterceptTouchEvent(true);
+                    ratio = zOf(e.getY());
+                    setZoom(ratio);
+                    invalidate();
+                    return true;
+                case MotionEvent.ACTION_UP:
+                case MotionEvent.ACTION_CANCEL:
+                    dragging = false;
+                    return true;
+            }
+            return false;
         }
     }
 
