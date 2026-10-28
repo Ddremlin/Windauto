@@ -17,6 +17,7 @@ h1{font-size:22px;margin:0 0 12px}h2{font-size:17px;margin:20px 0 6px}p,li{color
 input{width:100%;font:inherit;color:var(--text);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px 12px}
 button{width:100%;margin-top:16px;font:inherit;font-weight:600;border:0;border-radius:10px;padding:12px;background:var(--accent);color:#fff;cursor:pointer}
 .error{color:var(--danger)}.ok{font-size:40px}
+.show{display:flex;align-items:center;gap:8px;color:var(--text)}.show input{width:auto;margin:0}
 </style></head><body><main><div class="brand">Windauto</div><div class="card">${body}</div></main></body></html>`
 
 const T = {
@@ -28,6 +29,7 @@ const T = {
     resetTitle: 'Новый пароль',
     pass: 'Пароль (минимум 8 символов)',
     pass2: 'Повторите пароль',
+    show: 'Показать пароль',
     save: 'Сохранить',
     short: 'Пароль — минимум 8 символов',
     mismatch: 'Пароли не совпадают',
@@ -41,6 +43,7 @@ const T = {
     resetTitle: 'Nowe hasło',
     pass: 'Hasło (co najmniej 8 znaków)',
     pass2: 'Powtórz hasło',
+    show: 'Pokaż hasło',
     save: 'Zapisz',
     short: 'Hasło musi mieć co najmniej 8 znaków',
     mismatch: 'Hasła nie są takie same',
@@ -65,6 +68,7 @@ export function passwordPage(lang, { token, kind, email, error }) {
 <input type="hidden" name="t" value="${esc(token)}">
 <label for="p1">${esc(t.pass)}</label><input id="p1" name="password" type="password" minlength="8" required autocomplete="new-password">
 <label for="p2">${esc(t.pass2)}</label><input id="p2" name="password2" type="password" minlength="8" required autocomplete="new-password">
+<label class="show"><input type="checkbox" onchange="for (const i of [p1, p2]) i.type = this.checked ? 'text' : 'password'">${esc(t.show)}</label>
 ${error ? `<p class="error">${esc(error)}</p>` : ''}
 <button type="submit">${esc(t.save)}</button>
 </form>`,

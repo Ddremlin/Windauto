@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import type { T } from '../i18n'
 import { UPDATE_SERVER } from '../native'
+import PasswordInput from './PasswordInput'
 import { useSettings } from '../settingsHooks'
 import {
   ApiError,
@@ -186,7 +187,7 @@ function AuthPanel() {
           </label>
           <label className="field">
             <span className="field-label">{t('auth.password')}</span>
-            <input type="password" value={reg.password} onChange={(e) => setReg({ ...reg, password: e.target.value })} autoComplete="new-password" />
+            <PasswordInput value={reg.password} onChange={(e) => setReg({ ...reg, password: e.target.value })} autoComplete="new-password" />
           </label>
           <label className="accept">
             <input type="checkbox" checked={reg.accept} onChange={(e) => setReg({ ...reg, accept: e.target.checked })} />
@@ -261,7 +262,7 @@ function AuthPanel() {
         </label>
         <label className="field">
           <span className="field-label">{t('sync.password')}</span>
-          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" onKeyDown={(e) => e.key === 'Enter' && doLogin()} />
+          <PasswordInput value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" onKeyDown={(e) => e.key === 'Enter' && doLogin()} />
         </label>
         {serverField}
         {err && <p className="error-text">{err}</p>}
@@ -315,11 +316,11 @@ function MyPassword() {
     <div className="grid">
       <label className="field">
         <span className="field-label">{t('users.oldPass')}</span>
-        <input type="password" value={oldP} onChange={(e) => setOldP(e.target.value)} autoComplete="current-password" />
+        <PasswordInput value={oldP} onChange={(e) => setOldP(e.target.value)} autoComplete="current-password" />
       </label>
       <label className="field">
         <span className="field-label">{t('users.newPass')}</span>
-        <input type="password" value={newP} onChange={(e) => setNewP(e.target.value)} autoComplete="new-password" />
+        <PasswordInput value={newP} onChange={(e) => setNewP(e.target.value)} autoComplete="new-password" />
       </label>
       {err && <p className="error-text wide">{err}</p>}
       <button className="btn primary wide" disabled={!oldP || newP.length < 8} onClick={save}>
@@ -511,7 +512,7 @@ function UsersAdmin({ me }: { me: SyncUser }) {
           </label>
           <label className="field">
             <span className="field-label">{t('users.password')}</span>
-            <input value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} autoComplete="new-password" />
+            <PasswordInput value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} autoComplete="new-password" />
           </label>
           <div className="seg-row two">
             {(['staff', 'admin'] as const).map((r) => (
