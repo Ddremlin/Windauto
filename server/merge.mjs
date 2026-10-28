@@ -4,10 +4,15 @@ const FIXED = new Set(['id', 'createdAt', 'updatedAt', '_ft'])
 const MAPS = { elements: 'el', signatures: 'sig' }
 const PREFIX_FIELD = Object.fromEntries(Object.entries(MAPS).map(([f, p]) => [p, f]))
 
+// служебные имена объектов JS: заказ с таким полем ломал бы слияние у всей компании
+const BAD = new Set(['__proto__', 'constructor', 'prototype'])
+const own = (o, k) => (o != null && typeof o === 'object' && Object.hasOwn(o, k) ? o[k] : undefined)
+const safeKey = (k) => !k.split(':').some((part) => BAD.has(part))
+
 function keysOf(o) {
   const out = []
   for (const k of Object.keys(o)) {
-    if (FIXED.has(k)) continue
+    if (FIXED.has(k) || BAD.has(k)) continue
     const prefix = MAPS[k]
     if (prefix) for (const sub of Object.keys(o[k] ?? {})) out.push(`${prefix}:${sub}`)
     else out.push(k)
@@ -18,13 +23,13 @@ function keysOf(o) {
 function split(key) {
   const i = key.indexOf(':')
   if (i < 0) return [key, null]
-  const field = PREFIX_FIELD[key.slice(0, i)]
+  const field = own(PREFIX_FIELD, key.slice(0, i))
   return field ? [field, key.slice(i + 1)] : [key, null]
 }
 
 export function getField(o, key) {
   const [field, sub] = split(key)
-  return sub === null ? o[field] : o[field]?.[sub]
+  return sub === null ? own(o, field) : own(own(o, field), sub)
 }
 
 function setField(o, key, value) {
@@ -34,7 +39,7 @@ function setField(o, key, value) {
     else o[field] = value
     return
   }
-  const map = { ...(o[field] ?? {}) }
+  const map = { ...(own(o, field) ?? {}) }
   if (value === undefined) delete map[sub]
   else map[sub] = value
   o[field] = map
@@ -54,7 +59,7 @@ const stable = (v) =>
 export const same = (a, b) => stable(a) === stable(b)
 
 export function changedKeys(prev, next) {
-  const keys = new Set([...keysOf(prev), ...keysOf(next)])
+  const keys = new Set([...keysOf(prev), ...keysOf(next)].filter(safeKey))
   return [...keys].filter((k) => !same(getField(prev, k), getField(next, k)))
 }
 
@@ -62,10 +67,10 @@ export function mergeOrders(a, b) {
   const newer = b.updatedAt >= a.updatedAt ? b : a
   const out = structuredClone(newer)
   const ft = {}
-  const keys = new Set([...keysOf(a), ...keysOf(b), ...Object.keys(a._ft ?? {}), ...Object.keys(b._ft ?? {})])
+  const keys = new Set([...keysOf(a), ...keysOf(b), ...Object.keys(a._ft ?? {}), ...Object.keys(b._ft ?? {})].filter(safeKey))
   for (const k of keys) {
-    const ta = a._ft?.[k] ?? 0
-    const tb = b._ft?.[k] ?? 0
+    const ta = Number(own(a._ft, k)) || 0
+    const tb = Number(own(b._ft, k)) || 0
     const win = ta > tb ? a : tb > ta ? b : newer
     setField(out, k, structuredClone(getField(win, k)))
     const t = Math.max(ta, tb)

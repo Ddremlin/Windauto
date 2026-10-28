@@ -13,7 +13,7 @@ let proc: ChildProcess
 
 async function start() {
   proc = spawn(process.execPath, ['server/server.mjs'], {
-    env: { ...process.env, PORT: String(PORT), DATA_DIR: dir, ADMIN_PASSWORD: 'secret1', ANTHROPIC_API_KEY: '', MAIL_OUTBOX: join(dir, 'mail.jsonl'), REGISTER_PER_HOUR: '100', NODE_NO_WARNINGS: '1' },
+    env: { ...process.env, PORT: String(PORT), DATA_DIR: dir, ADMIN_PASSWORD: 'secret1', ORG_QUOTA_GB: '0.001', ANTHROPIC_API_KEY: '', MAIL_OUTBOX: join(dir, 'mail.jsonl'), REGISTER_PER_HOUR: '100', NODE_NO_WARNINGS: '1' },
     stdio: 'ignore',
   })
   for (let i = 0; i < 50; i++) {
@@ -342,4 +342,61 @@ test('обновление приложения: пока APK нет — пус�
   // приложение ходит с https://localhost
   const cors = await fetch(URL_ + '/api/app', { headers: { Origin: 'https://localhost' } })
   assert.equal(cors.headers.get('access-control-allow-origin'), 'https://localhost')
+})
+
+// вход с отдельного адреса: блокировка по IP от тестов выше сюда не мешает
+const loginFrom = (ip: string, l: string, p: string, extra = '') =>
+  fetch(URL_ + '/api/login', { method: 'POST', headers: { 'x-forwarded-for': ip }, body: extra || JSON.stringify({ login: l, password: p }) })
+
+test('защита: свой пароль только со старым; email сотрудника — после подтверждения; имена без ссылок', async () => {
+  const me = (await api('/api/me', admin)).body.user
+  const own = await api(`/api/users/${me.id}`, admin, { password: 'newsecret1' }, 'PATCH')
+  assert.equal(own.status, 400)
+  assert.equal(own.body.code, 'own_password')
+  // с паролем — нужен свой логин, email из формы для входа не годится до подтверждения
+  assert.equal((await api('/api/users', admin, { email: 'ola@x.pl', name: 'Ola', password: 'secret22' })).body.code, 'bad_login')
+  const r = await api('/api/users', admin, { login: 'ola', email: 'ola@x.pl', name: 'Ola', password: 'secret22' })
+  assert.equal(r.status, 200)
+  assert.equal(r.body.user.email, '')
+  assert.equal((await loginFrom('10.9.0.1', 'ola@x.pl', 'secret22')).status, 401)
+  assert.equal((await loginFrom('10.9.0.1', 'ola', 'secret22')).status, 200)
+  const mail = readFileSync(join(dir, 'mail.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l)).filter((m) => m.to === 'ola@x.pl').pop()
+  const link = mail.text.match(/https?:\/\/\S+/)[0].replace(/^https?:\/\/[^/]+/, URL_)
+  assert.equal((await fetch(link)).status, 200)
+  assert.equal((await loginFrom('10.9.0.1', 'ola@x.pl', 'secret22')).status, 200)
+  // ссылки и адреса в названии компании и имени попали бы в письма
+  assert.equal((await api('/api/register', '', { company: 'Zablokowano: wejdź na bank-pl.com/x', email: 'p@x.pl', password: 'secret22', accept: true })).body.code, 'company')
+  assert.equal((await api('/api/users', admin, { login: 'spam1', name: 'www.evil.pl', password: 'secret22' })).body.code, 'bad_name')
+  assert.equal((await api('/api/register', '', { company: 'Auto-Serwis Sp. z o.o.', email: 'ok@x.pl', password: 'secret22', accept: true })).status, 200)
+})
+
+test('защита: большие запросы без входа, хеш сессий, подбор пароля к аккаунту с разных адресов', async () => {
+  const big = await loginFrom('10.9.0.2', '', '', JSON.stringify({ login: 'admin', password: 'x'.repeat(100_000) }))
+  assert.equal(big.status, 413)
+  const { DatabaseSync } = await import('node:sqlite')
+  const acc = new DatabaseSync(join(dir, 'accounts.db'), { readOnly: true })
+  const tokens = acc.prepare('SELECT token FROM sessions').all().map((r) => String(r.token))
+  acc.close()
+  assert.ok(!tokens.includes(admin))
+  assert.ok(tokens.every((t) => /^[0-9a-f]{64}$/.test(t)))
+  await api('/api/users', admin, { login: 'lock1', name: 'L', password: 'secret22' })
+  for (let i = 0; i < 30; i++)
+    await fetch(URL_ + '/api/login', { method: 'POST', headers: { 'x-forwarded-for': `10.0.0.${i}` }, body: JSON.stringify({ login: 'lock1', password: 'bad' + i }) })
+  const r = await fetch(URL_ + '/api/login', { method: 'POST', headers: { 'x-forwarded-for': '10.0.1.1' }, body: JSON.stringify({ login: 'lock1', password: 'secret22' }) })
+  assert.equal(r.status, 429)
+})
+
+test('защита: квота места компании; заказ со служебными именами полей не ломает слияние', async () => {
+  const put = (id: string, size: number) =>
+    fetch(`${URL_}/api/photos/${id}`, { method: 'PUT', headers: { Authorization: `Bearer ${admin}` }, body: new Uint8Array(size) })
+  assert.equal((await put('quota-ok-1', 300_000)).status, 200)
+  // перезапись того же фото не считается дважды
+  assert.equal((await put('quota-ok-1', 300_000)).status, 200)
+  const over = await put('quota-big-1', 900_000)
+  assert.equal(over.status, 507)
+  assert.equal((await over.json()).code, 'quota')
+  const bad = JSON.parse('{"id":"p1","number":"","createdAt":1,"updatedAt":100,"constructor":"x","elements":{"__proto__":{"a":1}},"_ft":{"constructor":5,"toString":6,"__proto__":7}}')
+  assert.equal((await api('/api/sync', admin, { orders: [{ id: 'p1', updatedAt: 100, deleted: false, data: bad }] })).status, 200)
+  const next = { ...bad, notes: 'ok', updatedAt: 200, _ft: { ...bad._ft, notes: 200 } }
+  assert.equal((await api('/api/sync', staff, { orders: [{ id: 'p1', updatedAt: 200, deleted: false, data: next }] })).status, 200)
 })

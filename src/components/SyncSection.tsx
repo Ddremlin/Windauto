@@ -488,10 +488,11 @@ function UsersAdmin({ me }: { me: SyncUser }) {
       await createUser(form)
       setForm({ login: '', email: '', name: '', password: '', role: 'staff' })
       setAdding(false)
-      alert(invite ? t('users.inviteSent', { email: form.email.trim() }) : t('users.created'))
+      alert(invite ? t('users.inviteSent', { email: form.email.trim() }) : form.email.trim() ? t('users.createdConfirm', { email: form.email.trim() }) : t('users.created'))
     })
 
-  const canCreate = invite || ((form.login.length >= 3 || form.email.includes('@')) && form.password.length >= 8)
+  // с паролем — обязателен логин: email из формы подтверждается письмом и до этого для входа не годится
+  const canCreate = invite || (form.login.length >= 3 && form.password.length >= 8)
 
   return (
     <section className="panel">

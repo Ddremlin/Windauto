@@ -1,5 +1,16 @@
 {$DOMAIN} {
 	encode gzip
+	header {
+		# только HTTPS, год; браузер не пойдёт на сервер по HTTP даже по старой ссылке
+		Strict-Transport-Security "max-age=31536000"
+		# файлы отдаются строго с заявленным типом — фото не станет страницей
+		X-Content-Type-Options nosniff
+		# страницы пароля нельзя встроить в чужой сайт (кликджекинг)
+		X-Frame-Options DENY
+		Referrer-Policy no-referrer
+		-Server
+		-Via
+	}
 	reverse_proxy api:8080 {
 		flush_interval -1
 	}

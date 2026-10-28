@@ -11,10 +11,16 @@ const MAPS: Record<string, string> = { elements: 'el', signatures: 'sig' }
 
 type AnyOrder = Record<string, unknown> & { updatedAt: number; _ft?: Record<string, number> }
 
+// служебные имена объектов JS: заказ с таким полем ломал бы слияние у всей компании
+const BAD = new Set(['__proto__', 'constructor', 'prototype'])
+const own = (o: unknown, k: string): unknown =>
+  o != null && typeof o === 'object' && Object.hasOwn(o, k) ? (o as Record<string, unknown>)[k] : undefined
+const safeKey = (k: string) => !k.split(':').some((part) => BAD.has(part))
+
 function keysOf(o: AnyOrder): string[] {
   const out: string[] = []
   for (const k of Object.keys(o)) {
-    if (FIXED.has(k)) continue
+    if (FIXED.has(k) || BAD.has(k)) continue
     const prefix = MAPS[k]
     if (prefix) for (const sub of Object.keys((o[k] as object) ?? {})) out.push(`${prefix}:${sub}`)
     else out.push(k)
@@ -32,8 +38,7 @@ function split(key: string): [string, string | null] {
 
 function getField(o: AnyOrder, key: string): unknown {
   const [field, sub] = split(key)
-  if (sub === null) return o[field]
-  return (o[field] as Record<string, unknown> | undefined)?.[sub]
+  return sub === null ? own(o, field) : own(own(o, field), sub)
 }
 
 function setField(o: AnyOrder, key: string, value: unknown) {
@@ -43,7 +48,7 @@ function setField(o: AnyOrder, key: string, value: unknown) {
     else o[field] = value
     return
   }
-  const map = { ...((o[field] as Record<string, unknown>) ?? {}) }
+  const map = { ...((own(o, field) as Record<string, unknown>) ?? {}) }
   if (value === undefined) delete map[sub]
   else map[sub] = value
   o[field] = map
@@ -66,7 +71,7 @@ const same = (a: unknown, b: unknown) => stable(a) === stable(b)
 export function changedKeys(prev: Order, next: Order): string[] {
   const a = prev as unknown as AnyOrder
   const b = next as unknown as AnyOrder
-  const keys = new Set([...keysOf(a), ...keysOf(b)])
+  const keys = new Set([...keysOf(a), ...keysOf(b)].filter(safeKey))
   return [...keys].filter((k) => !same(getField(a, k), getField(b, k)))
 }
 
@@ -87,10 +92,10 @@ export function mergeOrders(x: Order, y: Order): Order {
   const newer = b.updatedAt >= a.updatedAt ? b : a
   const out: AnyOrder = structuredClone(newer)
   const ft: Record<string, number> = {}
-  const keys = new Set([...keysOf(a), ...keysOf(b), ...Object.keys(a._ft ?? {}), ...Object.keys(b._ft ?? {})])
+  const keys = new Set([...keysOf(a), ...keysOf(b), ...Object.keys(a._ft ?? {}), ...Object.keys(b._ft ?? {})].filter(safeKey))
   for (const k of keys) {
-    const ta = a._ft?.[k] ?? 0
-    const tb = b._ft?.[k] ?? 0
+    const ta = Number(own(a._ft, k)) || 0
+    const tb = Number(own(b._ft, k)) || 0
     const win = ta > tb ? a : tb > ta ? b : newer
     setField(out, k, structuredClone(getField(win, k)))
     const t = Math.max(ta, tb)

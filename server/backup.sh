@@ -3,6 +3,10 @@
 # (хранятся 30 последних). Видео не включаются — они большие.
 set -euo pipefail
 cd "$(dirname "$0")"
+# BACKUP_PASSPHRASE — шифровать копию (AES-256); BACKUP_COPY_TO — куда ещё скопировать,
+# например u123456@u123456.your-storagebox.de:windauto/ (вход по ключу). Оба — в .env
+BACKUP_PASSPHRASE=$(grep -s '^BACKUP_PASSPHRASE=' .env | cut -d= -f2- || true)
+BACKUP_COPY_TO=$(grep -s '^BACKUP_COPY_TO=' .env | cut -d= -f2- || true)
 mkdir -p backups
 # снимки баз на ходу, без остановки сервера
 docker compose exec -T api node -e "
@@ -19,7 +23,16 @@ docker compose exec -T api node -e "
   }
 "
 PHOTOS=$(cd data && ls -d orgs/*/photos 2>/dev/null || true)
-tar -czf "backups/windauto-$(date +%F).tar.gz" -C data backup $PHOTOS
+OUT="backups/windauto-$(date +%F).tar.gz"
+tar -czf "$OUT" -C data backup $PHOTOS
 rm -rf data/backup
-ls -1t backups/windauto-*.tar.gz | tail -n +31 | xargs -r rm --
-echo "Готово: backups/windauto-$(date +%F).tar.gz"
+if [ -n "$BACKUP_PASSPHRASE" ]; then
+  # расшифровать: openssl enc -d -aes-256-cbc -pbkdf2 -iter 200000 -in файл.enc -out файл.tar.gz
+  PASS="$BACKUP_PASSPHRASE" openssl enc -aes-256-cbc -pbkdf2 -iter 200000 -salt -pass env:PASS -in "$OUT" -out "$OUT.enc"
+  rm -f "$OUT"
+  OUT="$OUT.enc"
+fi
+chmod 600 "$OUT"
+[ -n "$BACKUP_COPY_TO" ] && scp -q -o BatchMode=yes "$OUT" "$BACKUP_COPY_TO"
+ls -1t backups/windauto-*.tar.gz* | tail -n +31 | xargs -r rm --
+echo "Готово: $OUT"

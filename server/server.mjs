@@ -6,7 +6,7 @@
 // Общая только база аккаунтов data/accounts.db: компании, пользователи, сессии, одноразовые ссылки из писем.
 import Anthropic from '@anthropic-ai/sdk'
 import { createHash, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto'
-import { createReadStream, createWriteStream, existsSync, mkdirSync, readFileSync, renameSync, rmSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
+import { createReadStream, createWriteStream, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync, unlinkSync, writeFileSync } from 'node:fs'
 import { createServer } from 'node:http'
 import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
@@ -30,6 +30,8 @@ const REGISTRATION = process.env.REGISTRATION !== 'off'
 // не больше стольких новых компаний в час с одного адреса
 const REGISTER_PER_HOUR = Number(process.env.REGISTER_PER_HOUR ?? 5)
 const MAX_JSON = 20 * 1024 * 1024
+// запросы без входа и небольшие формы — чтобы гигантским телом нельзя было занять память
+const MAX_FORM = 16 * 1024
 const MAX_PHOTO = 15 * 1024 * 1024
 // круговое видео при приёмке: ~2,5 Мбит/с × 3 мин ≈ 60 МБ, с запасом под видео из галереи
 const MAX_VIDEO = 300 * 1024 * 1024
@@ -37,6 +39,12 @@ const SESSION_DAYS = 180
 const PASS_MIN = 8
 const MAX_RECOGNIZE = 8 * 1024 * 1024
 const AI_MODEL = process.env.AI_MODEL || 'claude-opus-5-5'
+// распознавание и голос — платные запросы: не больше стольких в сутки на компанию
+const AI_PER_DAY = Number(process.env.AI_PER_DAY ?? 500)
+// место под фото и видео одной компании
+const ORG_QUOTA = Number(process.env.ORG_QUOTA_GB ?? 20) * 1024 ** 3
+// приглашения сотрудникам — письма на чужие адреса: не больше стольких в сутки на компанию
+const INVITES_PER_DAY = Number(process.env.INVITES_PER_DAY ?? 20)
 const ai = process.env.ANTHROPIC_API_KEY ? new Anthropic() : null
 
 const log = (...a) => console.log(new Date().toISOString(), ...a)
@@ -129,6 +137,15 @@ const db = new DatabaseSync(join(DATA, 'accounts.db'))
 db.exec(ACCOUNTS_SCHEMA)
 // новый email ждёт подтверждения по ссылке, до этого вход — по старому
 if (!db.prepare('PRAGMA table_info(users)').all().some((c) => c.name === 'new_email')) db.exec('ALTER TABLE users ADD COLUMN new_email TEXT')
+// в базе — только хеш токена сессии: утечка базы или копии не даёт войти. Старые токены хешируем на месте
+const sha = (s) => createHash('sha256').update(s).digest('hex')
+{
+  const plain = db.prepare("SELECT token FROM sessions WHERE length(token) != 64").all()
+  if (plain.length) {
+    const upd = db.prepare('UPDATE sessions SET token = ? WHERE token = ?')
+    for (const { token } of plain) upd.run(sha(token), token)
+  }
+}
 
 // --- пароли ---
 const hashPass = (p) => {
@@ -143,6 +160,8 @@ const checkPass = (p, stored) => {
   return a.length === b.length && timingSafeEqual(a, b)
 }
 
+const DUMMY_PASS = hashPass(randomBytes(16).toString('hex'))
+
 // --- первый запуск: компания и администратор (он же владелец платформы) ---
 if (!db.prepare('SELECT 1 FROM users LIMIT 1').get()) {
   const login = (process.env.ADMIN_LOGIN || 'admin').toLowerCase()
@@ -154,6 +173,23 @@ if (!db.prepare('SELECT 1 FROM users LIMIT 1').get()) {
     'INSERT INTO users (id, org_id, login, name, pass, role, email_verified, platform, created) VALUES (?, ?, ?, ?, ?, ?, 1, 1, ?)',
   ).run(userId, orgId, login, 'Администратор', hashPass(pass), 'admin', now())
   log(`Создан администратор: логин "${login}"` + (process.env.ADMIN_PASSWORD ? '' : `, пароль "${pass}" — смените его в приложении`))
+}
+
+const dirBytes = (dir) => {
+  let n = 0
+  for (const f of readdirSync(dir)) {
+    try {
+      n += statSync(join(dir, f)).size
+    } catch {
+      /* удалён между чтением и stat */
+    }
+  }
+  return n
+}
+const fileBytes = (path) => (existsSync(path) ? statSync(path).size : 0)
+// не хватит места компании — 507, приложение покажет понятный текст
+const checkQuota = (o, add) => {
+  if (o.bytes + add > ORG_QUOTA) throw new HttpError(507, 'Закончилось место для фото и видео компании', 'quota')
 }
 
 // --- данные компании: своя база и папки, открываются при первом обращении ---
@@ -168,7 +204,7 @@ function orgStore(id) {
   odb.exec(ORG_SCHEMA)
   // после переноса со старой схемы аккаунты живут в accounts.db
   odb.exec('DROP TABLE IF EXISTS users; DROP TABLE IF EXISTS sessions; DROP TABLE IF EXISTS login_attempts;')
-  o = { id, dir, db: odb, listeners: new Set() }
+  o = { id, dir, db: odb, listeners: new Set(), bytes: dirBytes(join(dir, 'photos')) + dirBytes(join(dir, 'videos')) }
   ORGS.set(id, o)
   return o
 }
@@ -199,6 +235,8 @@ setInterval(() => {
 // --- ограничения частоты (вход, регистрация, письма); в базе — переживают перезапуск ---
 const LOGIN_WINDOW = 15 * 60_000
 const MAX_ATTEMPTS = 10
+// неудачных входов в один аккаунт за час, со всех адресов вместе
+const MAX_USER_ATTEMPTS = 30
 const limited = (key, max, windowMs) => {
   const a = db.prepare('SELECT count, first FROM limits WHERE key = ?').get(key)
   return Boolean(a && a.count >= max && now() - a.first < windowMs)
@@ -219,7 +257,6 @@ const clientIp = (req) => req.headers['x-forwarded-for']?.split(',')[0].trim() |
 
 // --- одноразовые ссылки из писем: в базе только хеш ---
 const TOKEN_TTL = { verify: 7 * 86400_000, reset: 3600_000, invite: 7 * 86400_000, email: 86400_000 }
-const sha = (s) => createHash('sha256').update(s).digest('hex')
 function makeToken(userId, kind) {
   db.prepare('DELETE FROM tokens WHERE user_id = ? AND kind = ?').run(userId, kind)
   const t = randomBytes(32).toString('base64url')
@@ -243,6 +280,8 @@ setInterval(cleanup, 3600_000).unref()
 // --- письма ---
 const baseUrl = (req) => PUBLIC_URL || `${req.headers['x-forwarded-proto'] ?? 'http'}://${req.headers['x-forwarded-host'] ?? req.headers.host}`
 async function mailUser(req, user, kind, to = user.email) {
+  // на один адрес — не больше 5 писем в час, с каких бы IP ни просили
+  rateLimit('to:' + to, 5, 3600_000)
   const token = makeToken(user.id, kind)
   const link = `${baseUrl(req)}${kind === 'verify' || kind === 'email' ? '/auth/verify' : '/auth/reset'}?t=${token}`
   const org = db.prepare('SELECT name FROM orgs WHERE id = ?').get(user.org_id)
@@ -321,22 +360,24 @@ const sendHtml = (res, status, html) => {
 
 const readBody = (req, limit) =>
   new Promise((resolve, reject) => {
+    if (Number(req.headers['content-length'] ?? 0) > limit) return reject(new HttpError(413, 'Слишком большой запрос'))
     const chunks = []
     let size = 0
     req.on('data', (c) => {
       size += c.length
+      // сверх лимита — не копим, а сразу отвечаем 413 (остаток тела Node дочитает и выбросит)
       if (size > limit) {
+        chunks.length = 0
         reject(new HttpError(413, 'Слишком большой запрос'))
-        req.destroy()
       } else chunks.push(c)
     })
     req.on('end', () => resolve(Buffer.concat(chunks)))
     req.on('error', reject)
   })
 
-const readJson = async (req) => {
+const readJson = async (req, limit = MAX_JSON) => {
   try {
-    return JSON.parse((await readBody(req, MAX_JSON)).toString('utf8') || '{}')
+    return JSON.parse((await readBody(req, limit)).toString('utf8') || '{}')
   } catch (e) {
     if (e instanceof HttpError) throw e
     throw new HttpError(400, 'Неверный JSON')
@@ -352,11 +393,11 @@ const auth = (req, url) => {
       `SELECT u.*, s.created AS session_created, o.blocked, o.name AS org_name, o.owner_id
        FROM sessions s JOIN users u ON u.id = s.user_id JOIN orgs o ON o.id = u.org_id WHERE s.token = ?`,
     )
-    .get(token)
+    .get(sha(token))
   if (!row || row.disabled || now() - row.session_created > SESSION_DAYS * 86400_000) throw new HttpError(401, 'Сессия недействительна')
   if (row.blocked && !row.platform) throw new HttpError(403, 'Компания заблокирована', 'blocked')
-  db.prepare('UPDATE sessions SET last_seen = ? WHERE token = ?').run(now(), token)
-  return { ...userInfo(row), token, org: orgStore(row.org_id) }
+  db.prepare('UPDATE sessions SET last_seen = ? WHERE token = ?').run(now(), sha(token))
+  return { ...userInfo(row), token: sha(token), org: orgStore(row.org_id) }
 }
 
 const adminOnly = (u) => {
@@ -627,6 +668,26 @@ const orgSummary = (org) => {
   }
 }
 
+// название компании и имя попадают в письма — без ссылок, адресов и управляющих символов
+const LINKISH = /https?:|www\.|@|[a-z0-9-]\.(?:[a-z]{2,}|xn--)(?:[/\s]|$)|[\u0000-\u001f\u007f<>]/i
+const goodCompany = (s) => s.length >= 2 && !LINKISH.test(s)
+const goodName = (s) => !LINKISH.test(s)
+
+const aiLimit = (u) => {
+  if (limited('ai:' + u.orgId, AI_PER_DAY, 86400_000)) throw new HttpError(429, 'Распознавание: дневной лимит компании исчерпан', 'ai_limit')
+  bump('ai:' + u.orgId, 86400_000)
+}
+const inviteLimit = (u) => rateLimit('invite:' + u.orgId, INVITES_PER_DAY, 86400_000)
+// письма по запросу без входа: ответ одинаковый, даже если лимит на адрес исчерпан
+async function mailQuiet(req, user, kind) {
+  try {
+    await mailUser(req, user, kind)
+  } catch (e) {
+    if (e.code !== 'too_many') throw e
+    log(`письмо не отправлено (лимит на адрес): ${kind} → ${user.email}`)
+  }
+}
+
 const routes = {
   'GET /api/health': () => ({ ok: true }),
 
@@ -636,18 +697,25 @@ const routes = {
   'POST /api/login': async (req) => {
     const key = 'login:' + clientIp(req)
     if (limited(key, MAX_ATTEMPTS, LOGIN_WINDOW)) throw new HttpError(429, 'Слишком много попыток, подождите 15 минут', 'too_many')
-    const { login, password } = await readJson(req)
-    const l = String(login ?? '').trim().toLowerCase()
+    const { login, password } = await readJson(req, MAX_FORM)
+    const l = String(login ?? '').trim().toLowerCase().slice(0, 254)
+    // и на аккаунт — подбор пароля с множества адресов
+    const userKey = 'login-user:' + l
+    if (l && limited(userKey, MAX_USER_ATTEMPTS, 3600_000)) throw new HttpError(429, 'Слишком много попыток, подождите 15 минут', 'too_many')
     const u = l ? userRow('u.login = ? OR u.email = ?', l, l) : null
-    if (!u || u.disabled || !checkPass(String(password ?? ''), u.pass)) {
+    // проверка пароля и для несуществующего логина — по времени ответа не узнать, есть ли такой
+    const ok = checkPass(String(password ?? ''), u?.pass || DUMMY_PASS)
+    if (!u || u.disabled || !u.pass || !ok) {
       bump(key, LOGIN_WINDOW)
+      if (l) bump(userKey, 3600_000)
       throw new HttpError(401, 'Неверный логин или пароль', 'login_failed')
     }
     clearLimit(key)
+    clearLimit(userKey)
     if (u.email && !u.email_verified) throw new HttpError(403, 'Подтвердите email — ссылка в письме', 'unverified')
     if (u.blocked && !u.platform) throw new HttpError(403, 'Компания заблокирована', 'blocked')
     const token = randomBytes(32).toString('base64url')
-    db.prepare('INSERT INTO sessions (token, user_id, created, last_seen) VALUES (?, ?, ?, ?)').run(token, u.id, now(), now())
+    db.prepare('INSERT INTO sessions (token, user_id, created, last_seen) VALUES (?, ?, ?, ?)').run(sha(token), u.id, now(), now())
     log(`вход: ${u.login} (${u.org_name})`)
     return { token, user: userInfo(u) }
   },
@@ -655,13 +723,14 @@ const routes = {
   // новая компания и её владелец; войти можно после подтверждения email
   'POST /api/register': async (req) => {
     if (!REGISTRATION) throw new HttpError(403, 'Регистрация закрыта', 'registration_closed')
-    const b = await readJson(req)
+    const b = await readJson(req, MAX_FORM)
     const company = String(b.company ?? '').trim().slice(0, 100)
     const name = String(b.name ?? '').trim().slice(0, 100)
     const email = normEmail(b.email)
     const password = String(b.password ?? '')
     const lang = b.lang === 'pl' ? 'pl' : 'ru'
-    if (company.length < 2) throw new HttpError(400, 'Укажите название компании', 'company')
+    if (!goodCompany(company)) throw new HttpError(400, 'Укажите название компании', 'company')
+    if (name.length > 0 && !goodName(name)) throw new HttpError(400, 'Имя без ссылок и адресов', 'bad_name')
     if (!EMAIL_RE.test(email)) throw new HttpError(400, 'Неверный email', 'bad_email')
     if (password.length < PASS_MIN) throw new HttpError(400, `Пароль — минимум ${PASS_MIN} символов`, 'weak_password')
     if (!b.accept) throw new HttpError(400, 'Нужно принять условия', 'terms')
@@ -692,19 +761,19 @@ const routes = {
 
   'POST /api/verify/resend': async (req) => {
     rateLimit('mail:' + clientIp(req), 5, 15 * 60_000)
-    const email = normEmail((await readJson(req)).email)
+    const email = normEmail((await readJson(req, MAX_FORM)).email)
     const u = email ? userRow('u.email = ?', email) : null
-    if (u && u.pass && !u.email_verified) await mailUser(req, u, 'verify')
+    if (u && u.pass && !u.email_verified) await mailQuiet(req, u, 'verify')
     // одинаковый ответ — по нему не узнать, есть ли такой email
     return { ok: true }
   },
 
   'POST /api/password/forgot': async (req) => {
     rateLimit('mail:' + clientIp(req), 5, 15 * 60_000)
-    const l = normEmail((await readJson(req)).login)
+    const l = normEmail((await readJson(req, MAX_FORM)).login)
     const u = l ? userRow('u.email = ? OR u.login = ?', l, l) : null
     // приглашённый, но ещё не задавший пароль, получает приглашение заново
-    if (u?.email && !u.disabled) await mailUser(req, u, u.pass ? 'reset' : 'invite')
+    if (u?.email && !u.disabled) await mailQuiet(req, u, u.pass ? 'reset' : 'invite')
     return { ok: true }
   },
 
@@ -774,7 +843,7 @@ const routes = {
 
   'POST /api/password': async (req, url) => {
     const u = auth(req, url)
-    const { oldPassword, newPassword } = await readJson(req)
+    const { oldPassword, newPassword } = await readJson(req, MAX_FORM)
     const row = db.prepare('SELECT pass FROM users WHERE id = ?').get(u.id)
     if (!checkPass(String(oldPassword ?? ''), row.pass)) throw new HttpError(400, 'Текущий пароль неверный', 'old_password')
     if (String(newPassword ?? '').length < PASS_MIN) throw new HttpError(400, `Пароль — минимум ${PASS_MIN} символов`, 'weak_password')
@@ -787,7 +856,7 @@ const routes = {
   'POST /api/me/email': async (req, url) => {
     const u = auth(req, url)
     rateLimit('email:' + u.id, 5, 15 * 60_000)
-    const { email, password } = await readJson(req)
+    const { email, password } = await readJson(req, MAX_FORM)
     const e = normEmail(email)
     if (!EMAIL_RE.test(e)) throw new HttpError(400, 'Неверный email', 'bad_email')
     const row = db.prepare('SELECT * FROM users WHERE id = ?').get(u.id)
@@ -805,6 +874,7 @@ const routes = {
   'POST /api/recognize': async (req, url) => {
     const u = auth(req, url)
     if (!ai) throw new HttpError(503, 'Распознавание не настроено на сервере (нет ANTHROPIC_API_KEY)')
+    aiLimit(u)
     const { kind, image } = JSON.parse((await readBody(req, MAX_RECOGNIZE)).toString('utf8') || '{}')
     if (!Object.hasOwn(RECOGNIZE, kind)) throw new HttpError(400, 'kind: vin, plate или doc')
     if (typeof image !== 'string' || !image) throw new HttpError(400, 'Нет фото')
@@ -827,6 +897,7 @@ const routes = {
   'POST /api/voice': async (req, url) => {
     const u = auth(req, url)
     if (!ai) throw new HttpError(503, 'Разбор голоса не настроен на сервере (нет ANTHROPIC_API_KEY)')
+    aiLimit(u)
     const body = await readJson(req)
     const text = String(body.text ?? '').trim()
     if (!text) throw new HttpError(400, 'Пустой текст')
@@ -1001,25 +1072,29 @@ const routes = {
   'POST /api/users': async (req, url) => {
     const me = auth(req, url)
     adminOnly(me)
-    const { login, name, password, role, email } = await readJson(req)
+    const { login, name, password, role, email } = await readJson(req, MAX_FORM)
     const e = email ? normEmail(email) : ''
     if (e && !EMAIL_RE.test(e)) throw new HttpError(400, 'Неверный email', 'bad_email')
-    const l = String(login ?? '').trim().toLowerCase() || e
-    if (l !== e && !LOGIN_RE.test(l)) throw new HttpError(400, 'Логин: 3–32 символа, латиница, цифры, . _ -', 'bad_login')
     const invite = Boolean(e) && !password
+    const n = String(name ?? '').trim().slice(0, 100)
+    if (!goodName(n)) throw new HttpError(400, 'Имя без ссылок и адресов', 'bad_name')
+    // с паролем от администратора — свой логин; email из формы ещё не проверен, он подтверждается письмом
+    // и до этого не служит для входа: иначе можно было бы занять чужой адрес
+    const l = invite ? e : String(login ?? '').trim().toLowerCase()
+    if (!invite && !LOGIN_RE.test(l)) throw new HttpError(400, 'Логин: 3–32 символа, латиница, цифры, . _ -', 'bad_login')
     if (!invite && String(password ?? '').length < PASS_MIN) throw new HttpError(400, `Пароль — минимум ${PASS_MIN} символов`, 'weak_password')
     if (db.prepare('SELECT 1 FROM users WHERE login = ? OR email = ?').get(l, l)) throw new HttpError(409, 'Такой логин уже есть', 'login_taken')
     if (e && db.prepare('SELECT 1 FROM users WHERE email = ? OR login = ?').get(e, e)) throw new HttpError(409, 'Этот email уже зарегистрирован', 'email_taken')
+    if (e) inviteLimit(me)
     const id = newId()
     db.prepare(
-      'INSERT INTO users (id, org_id, login, email, email_verified, name, pass, role, lang, created) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
-    ).run(id, me.orgId, l, e || null, invite ? 0 : 1, String(name ?? '').trim(), invite ? '' : hashPass(password), role === 'admin' ? 'admin' : 'staff', me.lang, now())
-    if (invite) {
-      try {
-        await mailUser(req, userRow('u.id = ?', id), 'invite')
-      } catch {
-        throw new HttpError(502, 'Сотрудник добавлен, но письмо не отправилось — нажмите «Отправить приглашение»', 'mail_failed')
-      }
+      'INSERT INTO users (id, org_id, login, email, new_email, email_verified, name, pass, role, lang, created) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+    ).run(id, me.orgId, l, invite ? e : null, invite || !e ? null : e, invite ? 0 : 1, n, invite ? '' : hashPass(password), role === 'admin' ? 'admin' : 'staff', me.lang, now())
+    try {
+      if (invite) await mailUser(req, userRow('u.id = ?', id), 'invite')
+      else if (e) await mailUser(req, userRow('u.id = ?', id), 'email', e)
+    } catch {
+      throw new HttpError(502, 'Сотрудник добавлен, но письмо не отправилось — нажмите «Отправить приглашение»', 'mail_failed')
     }
     return { user: publicUser(db.prepare('SELECT * FROM users WHERE id = ?').get(id)) }
   },
@@ -1034,8 +1109,8 @@ const routes = {
   'PATCH /api/org': async (req, url) => {
     const u = auth(req, url)
     adminOnly(u)
-    const name = String((await readJson(req)).name ?? '').trim().slice(0, 100)
-    if (name.length < 2) throw new HttpError(400, 'Укажите название компании', 'company')
+    const name = String((await readJson(req, MAX_FORM)).name ?? '').trim().slice(0, 100)
+    if (!goodCompany(name)) throw new HttpError(400, 'Укажите название компании', 'company')
     db.prepare('UPDATE orgs SET name = ? WHERE id = ?').run(name, u.orgId)
     return { ok: true }
   },
@@ -1044,7 +1119,7 @@ const routes = {
   'DELETE /api/org': async (req, url) => {
     const u = auth(req, url)
     if (!u.owner) throw new HttpError(403, 'Удалить компанию может только её владелец', 'not_owner')
-    const { password } = await readJson(req)
+    const { password } = await readJson(req, MAX_FORM)
     if (!checkPass(String(password ?? ''), db.prepare('SELECT pass FROM users WHERE id = ?').get(u.id).pass))
       throw new HttpError(400, 'Неверный пароль', 'old_password')
     if (db.prepare('SELECT 1 FROM users WHERE org_id = ? AND platform = 1').get(u.orgId))
@@ -1071,11 +1146,14 @@ async function dynamicRoute(req, res, url) {
     if (!target) throw new HttpError(404, 'Нет такого сотрудника')
     const isOwner = target.owner_id === target.id
     if (req.method === 'PATCH') {
-      const { name, password, disabled, role, invite } = await readJson(req)
+      const { name, password, disabled, role, invite } = await readJson(req, MAX_FORM)
       if (target.id === me.id && (disabled || role === 'staff')) throw new HttpError(400, 'Нельзя отключить или понизить себя')
+      // свой пароль — только со старым, через /api/password: украденной сессии не хватит, чтобы забрать аккаунт
+      if (target.id === me.id && password !== undefined) throw new HttpError(400, 'Свой пароль меняйте в разделе «Мой пароль»', 'own_password')
+      if (name !== undefined && !goodName(String(name).trim())) throw new HttpError(400, 'Имя без ссылок и адресов', 'bad_name')
       if (isOwner && target.id !== me.id && (disabled !== undefined || role !== undefined || password !== undefined))
         throw new HttpError(403, 'Владельца компании нельзя изменить', 'owner')
-      if (name !== undefined) db.prepare('UPDATE users SET name = ? WHERE id = ?').run(String(name).trim(), target.id)
+      if (name !== undefined) db.prepare('UPDATE users SET name = ? WHERE id = ?').run(String(name).trim().slice(0, 100), target.id)
       if (role !== undefined) db.prepare('UPDATE users SET role = ? WHERE id = ?').run(role === 'admin' ? 'admin' : 'staff', target.id)
       if (password !== undefined) {
         if (String(password).length < PASS_MIN) throw new HttpError(400, `Пароль — минимум ${PASS_MIN} символов`, 'weak_password')
@@ -1089,6 +1167,7 @@ async function dynamicRoute(req, res, url) {
       // приглашение ещё раз — пока сотрудник не задал пароль
       if (invite) {
         if (!target.email || target.pass) throw new HttpError(400, 'Сотрудник уже задал пароль')
+        inviteLimit(me)
         await mailUser(req, target, 'invite')
       }
       return send(res, 200, { user: publicUser(db.prepare('SELECT * FROM users WHERE id = ?').get(target.id)) })
@@ -1111,7 +1190,7 @@ async function dynamicRoute(req, res, url) {
     if (!org) throw new HttpError(404, 'Нет такой компании')
     if (org.id === me.orgId) throw new HttpError(400, 'Это ваша компания')
     if (req.method === 'PATCH') {
-      const { blocked } = await readJson(req)
+      const { blocked } = await readJson(req, MAX_FORM)
       db.prepare('UPDATE orgs SET blocked = ? WHERE id = ?').run(blocked ? 1 : 0, org.id)
       // заблокированные сразу теряют доступ
       if (blocked) {
@@ -1145,9 +1224,12 @@ async function dynamicRoute(req, res, url) {
     const p = photoPath(u.org, m[1])
     if (req.method === 'PUT') {
       const buf = await readBody(req, MAX_PHOTO)
+      const old = fileBytes(p)
+      checkQuota(u.org, buf.length - old)
       // запись через временный файл — не оставляем обрезанные фото
       writeFileSync(p + '.tmp', buf)
       renameSync(p + '.tmp', p)
+      u.org.bytes += buf.length - old
       return send(res, 200, { ok: true })
     }
     if (req.method === 'GET' || req.method === 'HEAD') {
@@ -1162,7 +1244,11 @@ async function dynamicRoute(req, res, url) {
     const u = auth(req, url)
     const { path, type } = videoPath(u.org, m[1])
     if (req.method === 'PUT') {
-      await saveStream(req, path, MAX_VIDEO)
+      const old = fileBytes(path)
+      checkQuota(u.org, Number(req.headers['content-length'] ?? 0) - old)
+      // без Content-Length — не дальше остатка квоты
+      const size = await saveStream(req, path, Math.min(MAX_VIDEO, ORG_QUOTA - u.org.bytes + old))
+      u.org.bytes += size - old
       return send(res, 200, { ok: true })
     }
     if (req.method === 'GET' || req.method === 'HEAD') {

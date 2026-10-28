@@ -6,8 +6,9 @@ const config: CapacitorConfig = {
   appName: 'Windauto',
   webDir: 'dist',
   android: {
-    // подключение отладчика Chrome по USB (chrome://inspect) — для разбора проблем на телефоне
-    webContentsDebuggingEnabled: true,
+    // отладчик Chrome по USB (chrome://inspect) даёт полный доступ к данным приложения —
+    // только в сборке для разбора проблем: WEBVIEW_DEBUG=1 ./scripts/build-apk.sh
+    webContentsDebuggingEnabled: process.env.WEBVIEW_DEBUG === '1',
     buildOptions: {
       keystorePath: process.env.HOME + '/.android-keys/windauto.jks',
       keystoreAlias: 'windauto',
