@@ -127,6 +127,8 @@ mkdirSync(join(DATA, 'orgs'), { recursive: true })
 migrateLegacy()
 const db = new DatabaseSync(join(DATA, 'accounts.db'))
 db.exec(ACCOUNTS_SCHEMA)
+// новый email ждёт подтверждения по ссылке, до этого вход — по старому
+if (!db.prepare('PRAGMA table_info(users)').all().some((c) => c.name === 'new_email')) db.exec('ALTER TABLE users ADD COLUMN new_email TEXT')
 
 // --- пароли ---
 const hashPass = (p) => {
@@ -216,7 +218,7 @@ const rateLimit = (key, max, windowMs) => {
 const clientIp = (req) => req.headers['x-forwarded-for']?.split(',')[0].trim() || req.socket.remoteAddress
 
 // --- одноразовые ссылки из писем: в базе только хеш ---
-const TOKEN_TTL = { verify: 7 * 86400_000, reset: 3600_000, invite: 7 * 86400_000 }
+const TOKEN_TTL = { verify: 7 * 86400_000, reset: 3600_000, invite: 7 * 86400_000, email: 86400_000 }
 const sha = (s) => createHash('sha256').update(s).digest('hex')
 function makeToken(userId, kind) {
   db.prepare('DELETE FROM tokens WHERE user_id = ? AND kind = ?').run(userId, kind)
@@ -240,12 +242,12 @@ setInterval(cleanup, 3600_000).unref()
 
 // --- письма ---
 const baseUrl = (req) => PUBLIC_URL || `${req.headers['x-forwarded-proto'] ?? 'http'}://${req.headers['x-forwarded-host'] ?? req.headers.host}`
-async function mailUser(req, user, kind) {
+async function mailUser(req, user, kind, to = user.email) {
   const token = makeToken(user.id, kind)
-  const link = `${baseUrl(req)}${kind === 'verify' ? '/auth/verify' : '/auth/reset'}?t=${token}`
+  const link = `${baseUrl(req)}${kind === 'verify' || kind === 'email' ? '/auth/verify' : '/auth/reset'}?t=${token}`
   const org = db.prepare('SELECT name FROM orgs WHERE id = ?').get(user.org_id)
   try {
-    await sendMail({ to: user.email, ...mailFor(kind, user.lang, { link, company: org?.name ?? '', name: user.name }) }, log)
+    await sendMail({ to, ...mailFor(kind, user.lang, { link, company: org?.name ?? '', name: user.name }) }, log)
   } catch {
     throw new HttpError(502, 'Письмо не отправилось — попробуйте позже', 'mail_failed')
   }
@@ -579,7 +581,7 @@ const userRow = (where, ...args) =>
   db.prepare(`SELECT u.*, o.blocked, o.name AS org_name, o.owner_id FROM users u JOIN orgs o ON o.id = u.org_id WHERE ${where}`).get(...args)
 // пользователь вместе с его компанией — для входа и /api/me
 const userInfo = (row) => ({
-  ...publicUser(row), orgId: row.org_id, orgName: row.org_name, owner: row.owner_id === row.id, platform: !!row.platform, lang: row.lang,
+  ...publicUser(row), newEmail: row.new_email ?? '', orgId: row.org_id, orgName: row.org_name, owner: row.owner_id === row.id, platform: !!row.platform, lang: row.lang,
 })
 
 // язык страниц из писем: ?lang=, язык пользователя, язык браузера
@@ -706,11 +708,18 @@ const routes = {
     return { ok: true }
   },
 
-  // ссылка из письма «подтвердите email»
+  // ссылка из письма «подтвердите email» (при регистрации или смене email)
   'GET /auth/verify': (req, url, res) => {
-    const tok = findToken(url.searchParams.get('t'), ['verify'])
+    const tok = findToken(url.searchParams.get('t'), ['verify', 'email'])
     const lang = langOf(req, url, tok?.user_id)
     if (!tok) return sendHtml(res, 400, messagePage(lang, pageText(lang).badLink, false))
+    if (tok.kind === 'email') {
+      const e = db.prepare('SELECT new_email FROM users WHERE id = ?').get(tok.user_id)?.new_email
+      // пока шло письмо, адрес мог занять кто-то другой
+      const taken = e && db.prepare('SELECT 1 FROM users WHERE (email = ? OR login = ?) AND id != ?').get(e, e, tok.user_id)
+      if (!e || taken) return sendHtml(res, 400, messagePage(lang, pageText(lang).badLink, false))
+      db.prepare('UPDATE users SET email = new_email, new_email = NULL WHERE id = ?').run(tok.user_id)
+    }
     db.prepare('UPDATE users SET email_verified = 1 WHERE id = ?').run(tok.user_id)
     db.prepare('DELETE FROM tokens WHERE hash = ?').run(tok.hash)
     log(`email подтверждён: ${tok.user_id}`)
@@ -772,6 +781,24 @@ const routes = {
     db.prepare('UPDATE users SET pass = ? WHERE id = ?').run(hashPass(newPassword), u.id)
     db.prepare('DELETE FROM sessions WHERE user_id = ? AND token != ?').run(u.id, u.token)
     return { ok: true }
+  },
+
+  // свой email: письмо со ссылкой на новый адрес, сменится после перехода по ней
+  'POST /api/me/email': async (req, url) => {
+    const u = auth(req, url)
+    rateLimit('email:' + u.id, 5, 15 * 60_000)
+    const { email, password } = await readJson(req)
+    const e = normEmail(email)
+    if (!EMAIL_RE.test(e)) throw new HttpError(400, 'Неверный email', 'bad_email')
+    const row = db.prepare('SELECT * FROM users WHERE id = ?').get(u.id)
+    if (!checkPass(String(password ?? ''), row.pass)) throw new HttpError(400, 'Неверный пароль', 'old_password')
+    if (e === row.email && row.email_verified) return { ok: true, newEmail: '' }
+    if (db.prepare('SELECT 1 FROM users WHERE (email = ? OR login = ?) AND id != ?').get(e, e, u.id))
+      throw new HttpError(409, 'Этот email уже зарегистрирован', 'email_taken')
+    db.prepare('UPDATE users SET new_email = ? WHERE id = ?').run(e, u.id)
+    await mailUser(req, row, 'email', e)
+    log(`смена email: ${row.login} → ${e}`)
+    return { ok: true, newEmail: e }
   },
 
   // фото (JPEG base64) → VIN или номер

@@ -43,6 +43,12 @@ const TEXTS = {
       button: 'Задать пароль',
       foot: 'Ссылка действует 7 дней. Логин для входа — этот email.',
     },
+    email: {
+      subject: 'Подтвердите новый email — Windauto',
+      body: (v) => `Здравствуйте${v.name ? ', ' + v.name : ''}!\n\nВы указали этот адрес для своего аккаунта в компании «${v.company}» в Windauto. Подтвердите его — после этого им можно входить и восстанавливать пароль:`,
+      button: 'Подтвердить email',
+      foot: 'Ссылка действует 1 день. Если это были не вы — просто удалите это письмо.',
+    },
   },
   pl: {
     verify: {
@@ -63,12 +69,18 @@ const TEXTS = {
       button: 'Ustaw hasło',
       foot: 'Link jest ważny 7 dni. Login to ten adres e-mail.',
     },
+    email: {
+      subject: 'Potwierdź nowy e-mail — Windauto',
+      body: (v) => `Dzień dobry${v.name ? ', ' + v.name : ''}!\n\nTen adres został podany dla Twojego konta w firmie „${v.company}” w Windauto. Potwierdź go — potem możesz się nim logować i odzyskiwać hasło:`,
+      button: 'Potwierdź e-mail',
+      foot: 'Link jest ważny 1 dzień. Jeśli to nie Ty — po prostu usuń tę wiadomość.',
+    },
   },
 }
 
 const esc = (s) => String(s).replace(/[&<>"]/g, (c) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' })[c])
 
-/** Тема и текст письма вида kind (verify | reset | invite) на языке пользователя */
+/** Тема и текст письма вида kind (verify | reset | invite | email) на языке пользователя */
 export function mailFor(kind, lang, v) {
   const t = (TEXTS[lang] ?? TEXTS.ru)[kind]
   const subject = typeof t.subject === 'function' ? t.subject(v) : t.subject

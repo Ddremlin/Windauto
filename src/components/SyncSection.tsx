@@ -5,6 +5,7 @@ import PasswordInput from './PasswordInput'
 import { useSettings } from '../settingsHooks'
 import {
   ApiError,
+  changeEmail,
   changePassword,
   connect,
   createUser,
@@ -81,6 +82,7 @@ export default function SyncSection() {
               {t('sync.logout')}
             </button>
           </div>
+          <MyEmail me={st.user} />
           <MyPassword />
         </div>
       </section>
@@ -285,6 +287,63 @@ function AuthPanel() {
         )}
       </div>
     </section>
+  )
+}
+
+/** Свой email — для входа и восстановления пароля */
+function MyEmail({ me }: { me: SyncUser | null }) {
+  const { t } = useSettings()
+  const [open, setOpen] = useState(false)
+  const [email, setEmail] = useState('')
+  const [pass, setPass] = useState('')
+  const [err, setErr] = useState('')
+  const [busy, setBusy] = useState(false)
+  // ссылку из письма открывают в браузере — данные о себе обновляем при каждом показе
+  useEffect(() => {
+    refreshMe()
+  }, [])
+  const save = async () => {
+    setErr('')
+    setBusy(true)
+    try {
+      await changeEmail(email.trim(), pass)
+      setOpen(false)
+      setEmail('')
+      setPass('')
+    } catch (e) {
+      setErr(errText(t, e))
+    } finally {
+      setBusy(false)
+    }
+  }
+  return (
+    <div className="stack">
+      <div>
+        <span className="field-label">{t('me.email')}: </span>
+        {me?.email ? <b>{me.email}</b> : <span className="muted">{t('me.noEmail')}</span>}
+      </div>
+      {me?.newEmail && <p className="notice">{t('me.checkMail', { email: me.newEmail })}</p>}
+      {!open ? (
+        <button className="link-btn" onClick={() => setOpen(true)}>
+          {t(me?.email ? 'me.change' : 'me.add')}
+        </button>
+      ) : (
+        <div className="grid">
+          <label className="field">
+            <span className="field-label">{t('me.newEmail')}</span>
+            <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" autoCapitalize="off" autoCorrect="off" />
+          </label>
+          <label className="field">
+            <span className="field-label">{t('me.password')}</span>
+            <PasswordInput value={pass} onChange={(e) => setPass(e.target.value)} autoComplete="current-password" />
+          </label>
+          {err && <p className="error-text wide">{err}</p>}
+          <button className="btn primary wide" disabled={busy || !email.includes('@') || !pass} onClick={save}>
+            {t('me.send')}
+          </button>
+        </div>
+      )}
+    </div>
   )
 }
 

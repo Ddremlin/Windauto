@@ -16,6 +16,8 @@ export interface SyncUser {
   role: 'admin' | 'staff'
   disabled?: boolean
   email?: string
+  // новый email ждёт подтверждения по ссылке из письма
+  newEmail?: string
   // приглашён по email, пароль ещё не задал
   invited?: boolean
   // своя компания и права — приходят при входе и в /api/me
@@ -449,6 +451,12 @@ export const patchUser = (id: string, patch: Partial<{ name: string; password: s
 export const deleteUser = (id: string) => api(`/api/users/${id}`, { method: 'DELETE' })
 export const changePassword = (oldPassword: string, newPassword: string) =>
   api('/api/password', { method: 'POST', body: JSON.stringify({ oldPassword, newPassword }) })
+
+/** Свой email: сервер шлёт ссылку на новый адрес, сменится после перехода по ней */
+export async function changeEmail(email: string, password: string) {
+  await api('/api/me/email', { method: 'POST', body: JSON.stringify({ email, password }) })
+  await refreshMe()
+}
 
 // --- сотрудники для выбора ответственного (доступно всем) ---
 let staffCache: SyncUser[] = []

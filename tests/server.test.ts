@@ -234,6 +234,34 @@ test('забыли пароль: письмо, новый пароль по сс
   assert.equal((await api('/api/login', '', { login: 'forgot@serwis.pl', password: 'nowehaslo1' })).status, 200)
 })
 
+test('свой email: письмо на новый адрес, до подтверждения вход по логину, потом и по email', async () => {
+  const t = await login('jan', 'secret22')
+  assert.equal((await api('/api/me/email', t, { email: 'jan@serwis.pl', password: 'wrong' })).body.code, 'old_password')
+  assert.equal((await api('/api/me/email', t, { email: 'bad', password: 'secret22' })).body.code, 'bad_email')
+  await newCompany('taken@serwis.pl')
+  assert.equal((await api('/api/me/email', t, { email: 'taken@serwis.pl', password: 'secret22' })).body.code, 'email_taken')
+
+  assert.equal((await api('/api/me/email', t, { email: 'Jan@Serwis.pl', password: 'secret22' })).status, 200)
+  let me = (await api('/api/me', t)).body.user
+  assert.equal(me.email, '')
+  assert.equal(me.newEmail, 'jan@serwis.pl')
+  // пока не подтверждён — входим по-старому
+  assert.ok(await login('jan', 'secret22'))
+  assert.equal((await api('/api/login', '', { login: 'jan@serwis.pl', password: 'secret22' })).status, 401)
+
+  const link = mailLink('jan@serwis.pl')
+  assert.equal(link.pathname, '/auth/verify')
+  assert.equal((await fetch(URL_ + link.pathname + link.search)).status, 200)
+  assert.equal((await fetch(URL_ + link.pathname + link.search)).status, 400)
+  me = (await api('/api/me', t)).body.user
+  assert.equal(me.email, 'jan@serwis.pl')
+  assert.equal(me.newEmail, '')
+  assert.ok(await login('jan@serwis.pl', 'secret22'))
+  assert.ok(await login('jan', 'secret22'))
+  assert.equal((await api('/api/password/forgot', '', { login: 'jan' })).status, 200)
+  assert.equal(mailLink('jan@serwis.pl').pathname, '/auth/reset')
+})
+
 test('приглашение сотрудника по email: пароль задаёт сам, входит по email', async () => {
   const owner = await newCompany('boss@serwis.pl', 'Serwis C')
   const r = await api('/api/users', owner, { email: 'Mechanik@serwis.pl', name: 'Piotr', role: 'staff' })
