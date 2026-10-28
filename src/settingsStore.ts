@@ -95,6 +95,11 @@ export function applyRemoteShared(data: SharedSettings, updatedAt: number) {
 export const hasShared = (s: Settings) =>
   Boolean(s.shopName || s.shopAddress || s.shopPhone || s.shopNip || s.rodoText || Object.keys(s.defaultPrices).length)
 
+/** Вход в другую компанию: реквизиты и цены прежней не должны к ней попасть */
+export function resetShared() {
+  commit({ ...settings, ...pickShared(DEFAULTS), sharedUpdatedAt: 0 })
+}
+
 /** Поставить отметку времени общим настройкам без уведомления (0 — уступить серверу) */
 export function setSharedStamp(at: number) {
   commit({ ...settings, sharedUpdatedAt: at })

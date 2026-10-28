@@ -7,7 +7,7 @@ import { Share } from '@capacitor/share'
 export const isNative = Capacitor.isNativePlatform()
 
 // откуда приложение берёт обновления, пока не подключено к базе (после подключения — с её сервера)
-export const UPDATE_SERVER = import.meta.env.VITE_UPDATE_SERVER || 'https://95.216.219.8.sslip.io'
+export const UPDATE_SERVER = import.meta.env?.VITE_UPDATE_SERVER || 'https://app.dmerlinauto.vip'
 
 const Print = registerPlugin<{ print: (o: { name: string }) => Promise<void> }>('Print')
 

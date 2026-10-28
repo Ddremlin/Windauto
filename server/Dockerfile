@@ -2,7 +2,7 @@ FROM node:24-alpine
 WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --omit=dev --no-audit --no-fund
-COPY server.mjs merge.mjs ./
+COPY server.mjs merge.mjs mail.mjs pages.mjs ./
 ENV NODE_ENV=production DATA_DIR=/data PORT=8080 NODE_NO_WARNINGS=1
 VOLUME /data
 EXPOSE 8080

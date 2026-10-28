@@ -1,7 +1,7 @@
 // Сервер целиком: запускаем server.mjs на временной папке и ходим в API.
 import assert from 'node:assert/strict'
 import { spawn, type ChildProcess } from 'node:child_process'
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, before, test } from 'node:test'
@@ -13,7 +13,7 @@ let proc: ChildProcess
 
 async function start() {
   proc = spawn(process.execPath, ['server/server.mjs'], {
-    env: { ...process.env, PORT: String(PORT), DATA_DIR: dir, ADMIN_PASSWORD: 'secret1', ANTHROPIC_API_KEY: '', NODE_NO_WARNINGS: '1' },
+    env: { ...process.env, PORT: String(PORT), DATA_DIR: dir, ADMIN_PASSWORD: 'secret1', ANTHROPIC_API_KEY: '', MAIL_OUTBOX: join(dir, 'mail.jsonl'), REGISTER_PER_HOUR: '100', NODE_NO_WARNINGS: '1' },
     stdio: 'ignore',
   })
   for (let i = 0; i < 50; i++) {
@@ -48,8 +48,8 @@ let staff = ''
 before(async () => {
   await start()
   admin = await login('admin', 'secret1')
-  await api('/api/users', admin, { login: 'jan', name: 'Jan', password: 'secret2', role: 'staff' })
-  staff = await login('jan', 'secret2')
+  await api('/api/users', admin, { login: 'jan', name: 'Jan', password: 'secret22', role: 'staff' })
+  staff = await login('jan', 'secret22')
 })
 after(async () => {
   await stop()
@@ -150,12 +150,153 @@ test('круговое видео: загрузка, Range, неверный id 
   assert.equal((await fetch(`${URL_}/api/videos/${id}`)).status, 401)
 })
 
+// --- компании, регистрация, письма ---
+// последняя ссылка из письма на этот адрес (письма пишутся в MAIL_OUTBOX)
+function mailLink(to: string) {
+  const mails = readFileSync(join(dir, 'mail.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l)).filter((m) => m.to === to)
+  const link = mails.at(-1)?.text.match(/https?:\/\/\S+/)?.[0] as string
+  return new URL(link)
+}
+const register = (email: string, company = 'Auto Kowalski', password = 'haslo1234') =>
+  api('/api/register', '', { company, name: 'Jan Kowalski', email, password, lang: 'pl', accept: true })
+
+async function newCompany(email: string, company?: string) {
+  assert.equal((await register(email, company)).status, 200)
+  const link = mailLink(email)
+  assert.equal((await fetch(URL_ + link.pathname + link.search)).status, 200)
+  return login(email, 'haslo1234')
+}
+
+test('регистрация: проверки, письмо, вход только после подтверждения email', async () => {
+  assert.equal((await api('/api/register', '', { company: 'A', name: '', email: 'x@y.pl', password: 'haslo1234', accept: true })).body.code, 'company')
+  assert.equal((await api('/api/register', '', { company: 'Firma', email: 'bad', password: 'haslo1234', accept: true })).body.code, 'bad_email')
+  assert.equal((await api('/api/register', '', { company: 'Firma', email: 'a@b.pl', password: 'short', accept: true })).body.code, 'weak_password')
+  assert.equal((await api('/api/register', '', { company: 'Firma', email: 'a@b.pl', password: 'haslo1234' })).body.code, 'terms')
+
+  assert.equal((await register('Owner@Firma.pl')).status, 200)
+  assert.equal((await register('owner@firma.pl')).body.code, 'email_taken')
+  const before = await api('/api/login', '', { login: 'owner@firma.pl', password: 'haslo1234' })
+  assert.equal(before.status, 403)
+  assert.equal(before.body.code, 'unverified')
+
+  const link = mailLink('owner@firma.pl')
+  assert.equal(link.pathname, '/auth/verify')
+  const page = await fetch(URL_ + link.pathname + link.search)
+  assert.equal(page.status, 200)
+  assert.match(await page.text(), /E-mail potwierdzony/)
+  // ссылка одноразовая
+  assert.equal((await fetch(URL_ + link.pathname + link.search)).status, 400)
+
+  const ok = await api('/api/login', '', { login: 'OWNER@firma.pl', password: 'haslo1234' })
+  assert.equal(ok.status, 200)
+  assert.equal(ok.body.user.orgName, 'Auto Kowalski')
+  assert.equal(ok.body.user.owner, true)
+  assert.equal(ok.body.user.role, 'admin')
+})
+
+test('компании не видят данные друг друга: заказы, фото, нумерация, сотрудники', async () => {
+  const a = await newCompany('a@serwis.pl', 'Serwis A')
+  const b = await newCompany('b@serwis.pl', 'Serwis B')
+  await api('/api/sync', a, { orders: [{ id: 'iso-a', updatedAt: 100, deleted: false, data: order({ id: 'iso-a' }) }] })
+  const rb = await api('/api/sync', b, { orders: [{ id: 'iso-b', updatedAt: 100, deleted: false, data: order({ id: 'iso-b' }) }] })
+  // у каждой компании своя нумерация
+  assert.equal(rb.body.merged[0].data.number, '2026/0001')
+  const seenByB = (await api('/api/sync?since=0', b)).body.orders.map((o: { id: string }) => o.id)
+  assert.deepEqual(seenByB, ['iso-b'])
+
+  const photo = new Uint8Array([0xff, 0xd8, 1, 2, 3])
+  assert.equal((await fetch(`${URL_}/api/photos/photo-of-a1`, { method: 'PUT', headers: { Authorization: `Bearer ${a}` }, body: photo })).status, 200)
+  assert.equal((await fetch(`${URL_}/api/photos/photo-of-a1`, { headers: { Authorization: `Bearer ${a}` } })).status, 200)
+  assert.equal((await fetch(`${URL_}/api/photos/photo-of-a1`, { headers: { Authorization: `Bearer ${b}` } })).status, 404)
+
+  const staffB = (await api('/api/staff', b)).body.users.map((u: { login: string }) => u.login)
+  assert.deepEqual(staffB, ['b@serwis.pl'])
+  // чужого сотрудника не изменить
+  const adminUsers = (await api('/api/users', admin)).body.users
+  assert.equal((await api(`/api/users/${adminUsers[0].id}`, b, { name: 'x' }, 'PATCH')).status, 404)
+})
+
+test('забыли пароль: письмо, новый пароль по ссылке, старые сессии закрыты', async () => {
+  const t = await newCompany('forgot@serwis.pl')
+  assert.equal((await api('/api/password/forgot', '', { login: 'forgot@serwis.pl' })).status, 200)
+  // про несуществующий адрес ответ такой же
+  assert.equal((await api('/api/password/forgot', '', { login: 'nobody@serwis.pl' })).status, 200)
+  const link = mailLink('forgot@serwis.pl')
+  assert.equal(link.pathname, '/auth/reset')
+  const t2 = link.searchParams.get('t')!
+  assert.match(await (await fetch(URL_ + link.pathname + link.search)).text(), /<form/)
+  const post = (body: Record<string, string>) =>
+    fetch(URL_ + '/auth/reset', { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams(body) })
+  assert.equal((await post({ t: t2, password: 'nowehaslo1', password2: 'inne' })).status, 400)
+  assert.equal((await post({ t: t2, password: 'nowehaslo1', password2: 'nowehaslo1' })).status, 200)
+  assert.equal((await post({ t: t2, password: 'nowehaslo1', password2: 'nowehaslo1' })).status, 400)
+  assert.equal((await api('/api/me', t)).status, 401)
+  assert.equal((await api('/api/login', '', { login: 'forgot@serwis.pl', password: 'nowehaslo1' })).status, 200)
+})
+
+test('приглашение сотрудника по email: пароль задаёт сам, входит по email', async () => {
+  const owner = await newCompany('boss@serwis.pl', 'Serwis C')
+  const r = await api('/api/users', owner, { email: 'Mechanik@serwis.pl', name: 'Piotr', role: 'staff' })
+  assert.equal(r.status, 200)
+  assert.equal(r.body.user.invited, true)
+  assert.equal((await api('/api/login', '', { login: 'mechanik@serwis.pl', password: '' })).status, 401)
+  const link = mailLink('mechanik@serwis.pl')
+  const res = await fetch(URL_ + '/auth/reset', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams({ t: link.searchParams.get('t')!, password: 'mechanik123', password2: 'mechanik123' }),
+  })
+  assert.equal(res.status, 200)
+  const l = await api('/api/login', '', { login: 'mechanik@serwis.pl', password: 'mechanik123' })
+  assert.equal(l.status, 200)
+  assert.equal(l.body.user.orgName, 'Serwis C')
+  assert.equal(l.body.user.role, 'staff')
+  // логин и email — общие на весь сервер
+  assert.equal((await api('/api/users', owner, { login: 'jan', password: 'haslo1234' })).body.code, 'login_taken')
+  // владельца не понизить и не удалить
+  const me = (await api('/api/me', owner)).body.user
+  const admin2 = (await api('/api/users', owner, { login: 'kierownik', password: 'haslo1234', role: 'admin' })).body.user
+  const t2 = await login('kierownik', 'haslo1234')
+  assert.equal((await api(`/api/users/${me.id}`, t2, { role: 'staff' }, 'PATCH')).body.code, 'owner')
+  assert.equal((await api(`/api/users/${me.id}`, t2, undefined, 'DELETE')).body.code, 'owner')
+  assert.ok(admin2.id)
+})
+
+test('владелец платформы: список компаний, блокировка, удаление; владелец удаляет свою компанию', async () => {
+  const t = await newCompany('bad@serwis.pl', 'Zła Firma')
+  assert.equal((await api('/api/platform/orgs', t)).status, 403)
+  const list = (await api('/api/platform/orgs', admin)).body.orgs
+  const org = list.find((o: { name: string }) => o.name === 'Zła Firma')
+  assert.equal(org.owner.email, 'bad@serwis.pl')
+  assert.equal((await api(`/api/platform/orgs/${org.id}`, admin, { blocked: true }, 'PATCH')).body.org.blocked, true)
+  assert.equal((await api('/api/me', t)).status, 401)
+  assert.equal((await api('/api/login', '', { login: 'bad@serwis.pl', password: 'haslo1234' })).body.code, 'blocked')
+  assert.equal((await api(`/api/platform/orgs/${org.id}`, admin, undefined, 'DELETE')).status, 200)
+  assert.equal(existsSync(join(dir, 'orgs', org.id)), false)
+  assert.equal((await api('/api/login', '', { login: 'bad@serwis.pl', password: 'haslo1234' })).status, 401)
+
+  const own = await newCompany('leaving@serwis.pl', 'Odchodzę')
+  const ownOrg = (await api('/api/org', own)).body.org
+  assert.equal((await api('/api/org', own, { password: 'wrong' }, 'DELETE')).body.code, 'old_password')
+  assert.equal((await api('/api/org', own, { password: 'haslo1234' }, 'DELETE')).status, 200)
+  assert.equal(existsSync(join(dir, 'orgs', ownOrg.id)), false)
+  // компанию платформы так не удалить
+  assert.equal((await api('/api/org', admin, { password: 'secret1' }, 'DELETE')).body.code, 'platform_org')
+})
+
+test('юридические страницы открываются', async () => {
+  const r = await fetch(URL_ + '/legal/privacy')
+  assert.equal(r.status, 200)
+  assert.match(await r.text(), /Polityka prywatności/)
+  assert.match(await (await fetch(URL_ + '/legal/terms?lang=ru')).text(), /Условия использования/)
+})
+
 test('блокировка подбора пароля переживает перезапуск', async () => {
   for (let i = 0; i < 10; i++) await api('/api/login', '', { login: 'jan', password: 'wrong' })
-  assert.equal((await api('/api/login', '', { login: 'jan', password: 'secret2' })).status, 429)
+  assert.equal((await api('/api/login', '', { login: 'jan', password: 'secret22' })).status, 429)
   await stop()
   await start()
-  assert.equal((await api('/api/login', '', { login: 'jan', password: 'secret2' })).status, 429)
+  assert.equal((await api('/api/login', '', { login: 'jan', password: 'secret22' })).status, 429)
   // токены после перезапуска живы
   assert.equal((await api('/api/me', staff)).status, 200)
 })

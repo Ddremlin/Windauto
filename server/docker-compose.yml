@@ -11,6 +11,19 @@ services:
       # распознавание VIN/номера по фото; пусто — выключено
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       AI_MODEL: ${AI_MODEL:-}
+      # адрес сервера в ссылках из писем, например https://app.windauto.pl
+      PUBLIC_URL: ${PUBLIC_URL:-}
+      # письма (подтверждение email, сброс пароля, приглашения) через Brevo; пусто — только в журнал
+      BREVO_API_KEY: ${BREVO_API_KEY:-}
+      MAIL_FROM: ${MAIL_FROM:-}
+      MAIL_FROM_NAME: ${MAIL_FROM_NAME:-}
+      # регистрация новых компаний; off — закрыта
+      REGISTRATION: ${REGISTRATION:-}
+      # оператор сервиса — в политике конфиденциальности и условиях
+      OPERATOR_NAME: ${OPERATOR_NAME:-}
+      OPERATOR_ADDRESS: ${OPERATOR_ADDRESS:-}
+      OPERATOR_NIP: ${OPERATOR_NIP:-}
+      OPERATOR_EMAIL: ${OPERATOR_EMAIL:-}
     volumes:
       - ./data:/data
 

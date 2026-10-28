@@ -612,3 +612,9 @@ input:disabled { opacity: 0.6; }
 .app-update .btn { padding: 8px 14px; flex: none; }
 /* кнопка «+» — над плашкой */
 .app-update + .screen .fab { bottom: calc(84px + env(safe-area-inset-bottom)); }
+
+/* регистрация компании */
+.accept { display: flex; gap: 10px; align-items: flex-start; font-size: 14px; }
+.accept input { width: 20px; height: 20px; margin: 2px 0 0; flex: none; accent-color: var(--accent); }
+.notice { margin: 0 0 12px; padding: 10px 12px; border-radius: 10px; font-size: 14px; background: color-mix(in srgb, var(--ok) 12%, transparent); }
+.tag.danger { background: color-mix(in srgb, var(--danger) 15%, transparent); color: var(--danger); }

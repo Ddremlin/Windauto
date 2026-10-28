@@ -1,70 +1,51 @@
 import { useEffect, useState } from 'react'
-import { isNative, UPDATE_SERVER } from '../native'
+import type { T } from '../i18n'
+import { UPDATE_SERVER } from '../native'
 import { useSettings } from '../settingsHooks'
 import {
+  ApiError,
   changePassword,
   connect,
   createUser,
+  deleteOrg,
   deleteUser,
   disconnect,
+  forgotPassword,
+  getOrg,
+  legalUrl,
+  listOrgs,
   listUsers,
   patchUser,
+  refreshMe,
+  register,
+  removeOrg,
+  renameOrg,
+  resendVerify,
+  serverInfo,
+  setOrgBlocked,
   syncNow,
   useSyncStatus,
+  type OrgSummary,
   type SyncUser,
 } from '../sync'
+
+/** Текст ошибки на языке интерфейса: по коду от сервера, иначе — как прислал сервер */
+function errText(t: T, e: unknown): string {
+  const code = e instanceof ApiError ? e.code : undefined
+  if (code && t(`err.${code}`) !== `err.${code}`) return t(`err.${code}`)
+  return (e as Error).message
+}
+
+// сервер по умолчанию — свой; другой можно вписать
+const DEFAULT_SERVER = UPDATE_SERVER.replace(/^https:\/\//, '')
+
+type Mode = 'login' | 'register' | 'forgot'
 
 export default function SyncSection() {
   const { t, locale } = useSettings()
   const st = useSyncStatus()
-  // в Android-приложении сразу подставляем свой сервер
-  const [server, setServer] = useState(st.server || (isNative ? UPDATE_SERVER.replace(/^https:\/\//, '') : ''))
-  const [login, setLogin] = useState(st.user?.login ?? '')
-  const [password, setPassword] = useState('')
-  const [busy, setBusy] = useState(false)
-  const [err, setErr] = useState('')
 
-  const doConnect = async () => {
-    setBusy(true)
-    setErr('')
-    try {
-      await connect(server, login, password)
-      setPassword('')
-    } catch (e) {
-      setErr((e as Error).message)
-    } finally {
-      setBusy(false)
-    }
-  }
-
-  if (!st.connected || st.authError) {
-    return (
-      <section className="panel">
-        <h2>☁ {t('sync.title')}</h2>
-        <p className="hint">{st.authError ? t('sync.authError') : t('sync.hint')}</p>
-        <div className="stack">
-          <label className="field">
-            <span className="field-label">{t('sync.server')}</span>
-            <input value={server} onChange={(e) => setServer(e.target.value)} placeholder="1.2.3.4.sslip.io" inputMode="url" autoCapitalize="off" autoCorrect="off" />
-          </label>
-          <div className="grid">
-            <label className="field">
-              <span className="field-label">{t('sync.login')}</span>
-              <input value={login} onChange={(e) => setLogin(e.target.value)} autoCapitalize="off" autoCorrect="off" autoComplete="username" />
-            </label>
-            <label className="field">
-              <span className="field-label">{t('sync.password')}</span>
-              <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" onKeyDown={(e) => e.key === 'Enter' && doConnect()} />
-            </label>
-          </div>
-          {err && <p className="error-text">{err}</p>}
-          <button className="btn primary" disabled={busy || !server || !login || !password} onClick={doConnect}>
-            {busy ? t('sync.connecting') : t('sync.connect')}
-          </button>
-        </div>
-      </section>
-    )
-  }
+  if (!st.connected || st.authError) return <AuthPanel />
 
   const state = st.syncing
     ? t('sync.syncing')
@@ -86,6 +67,7 @@ export default function SyncSection() {
               <b>{t('sync.as', { name: st.user?.name || st.user?.login || '' })}</b>
               {st.user?.role === 'admin' && <span className="tag">{t('users.admin')}</span>}
             </div>
+            {st.user?.orgName && <div>{st.user.orgName}</div>}
             <div className="hint">{st.server}</div>
           </div>
           <div className={'sync-state' + (st.error || !st.online ? ' warn' : '')}>{state}</div>
@@ -101,8 +83,207 @@ export default function SyncSection() {
           <MyPassword />
         </div>
       </section>
+      {st.user?.role === 'admin' && <OrgPanel me={st.user} />}
       {st.user?.role === 'admin' && <UsersAdmin me={st.user} />}
+      {st.user?.platform && <PlatformPanel />}
     </>
+  )
+}
+
+function AuthPanel() {
+  const { t, settings } = useSettings()
+  const st = useSyncStatus()
+  const [mode, setMode] = useState<Mode>('login')
+  const [server, setServer] = useState(st.server.replace(/^https:\/\//, '') || DEFAULT_SERVER)
+  const [login, setLogin] = useState(st.user?.login ?? '')
+  const [password, setPassword] = useState('')
+  const [reg, setReg] = useState({ company: '', name: '', email: '', password: '', accept: false })
+  const [busy, setBusy] = useState(false)
+  const [err, setErr] = useState('')
+  const [errCode, setErrCode] = useState('')
+  // письмо отправлено на этот адрес — ждём подтверждения
+  const [sentTo, setSentTo] = useState('')
+  const [notice, setNotice] = useState('')
+  const [canRegister, setCanRegister] = useState(true)
+
+  useEffect(() => {
+    if (!server) return
+    const id = setTimeout(() => {
+      serverInfo(server)
+        .then((i) => setCanRegister(i.registration !== false))
+        .catch(() => setCanRegister(true))
+    }, 500)
+    return () => clearTimeout(id)
+  }, [server])
+
+  const run = async (fn: () => Promise<unknown>) => {
+    setBusy(true)
+    setErr('')
+    setErrCode('')
+    setNotice('')
+    try {
+      await fn()
+    } catch (e) {
+      setErr(errText(t, e))
+      setErrCode(e instanceof ApiError ? (e.code ?? '') : '')
+    } finally {
+      setBusy(false)
+    }
+  }
+
+  const go = (m: Mode) => {
+    setMode(m)
+    setErr('')
+    setErrCode('')
+    setNotice('')
+  }
+
+  const doLogin = () =>
+    run(async () => {
+      const ok = await connect(server, login, password, () => confirm(t('auth.switchOrg')))
+      if (ok) setPassword('')
+    })
+
+  const doRegister = () =>
+    run(async () => {
+      await register(server, { ...reg, lang: settings.lang })
+      setSentTo(reg.email.trim())
+      setLogin(reg.email.trim())
+      setReg({ ...reg, password: '' })
+      go('login')
+    })
+
+  const resend = (email: string) =>
+    run(async () => {
+      await resendVerify(server, email)
+      setNotice(t('auth.resent'))
+    })
+
+  const serverField = (
+    <label className="field">
+      <span className="field-label">{t('sync.server')}</span>
+      <input value={server} onChange={(e) => setServer(e.target.value)} placeholder={DEFAULT_SERVER} inputMode="url" autoCapitalize="off" autoCorrect="off" />
+    </label>
+  )
+
+  if (mode === 'register')
+    return (
+      <section className="panel">
+        <h2>{t('auth.registerTitle')}</h2>
+        <p className="hint">{t('auth.registerHint')}</p>
+        <div className="stack">
+          <label className="field">
+            <span className="field-label">{t('auth.company')}</span>
+            <input value={reg.company} onChange={(e) => setReg({ ...reg, company: e.target.value })} autoComplete="organization" />
+          </label>
+          <label className="field">
+            <span className="field-label">{t('auth.yourName')}</span>
+            <input value={reg.name} onChange={(e) => setReg({ ...reg, name: e.target.value })} autoComplete="name" />
+          </label>
+          <label className="field">
+            <span className="field-label">{t('auth.email')}</span>
+            <input type="email" value={reg.email} onChange={(e) => setReg({ ...reg, email: e.target.value })} autoComplete="email" autoCapitalize="off" autoCorrect="off" />
+          </label>
+          <label className="field">
+            <span className="field-label">{t('auth.password')}</span>
+            <input type="password" value={reg.password} onChange={(e) => setReg({ ...reg, password: e.target.value })} autoComplete="new-password" />
+          </label>
+          <label className="accept">
+            <input type="checkbox" checked={reg.accept} onChange={(e) => setReg({ ...reg, accept: e.target.checked })} />
+            <span>
+              {t('auth.acceptPre')}{' '}
+              <a href={legalUrl(server, 'terms', settings.lang)} target="_blank" rel="noreferrer">
+                {t('auth.terms')}
+              </a>{' '}
+              {t('auth.and')}{' '}
+              <a href={legalUrl(server, 'privacy', settings.lang)} target="_blank" rel="noreferrer">
+                {t('auth.privacy')}
+              </a>
+            </span>
+          </label>
+          {serverField}
+          {err && <p className="error-text">{err}</p>}
+          <button
+            className="btn primary"
+            disabled={busy || !server || reg.company.trim().length < 2 || !reg.email.includes('@') || reg.password.length < 8 || !reg.accept}
+            onClick={doRegister}
+          >
+            {busy ? t('sync.connecting') : t('auth.create')}
+          </button>
+          <button className="link-btn" onClick={() => go('login')}>
+            {t('auth.back')}
+          </button>
+        </div>
+      </section>
+    )
+
+  if (mode === 'forgot')
+    return (
+      <section className="panel">
+        <h2>{t('auth.forgotTitle')}</h2>
+        <p className="hint">{t('auth.forgotHint')}</p>
+        <div className="stack">
+          <label className="field">
+            <span className="field-label">{t('auth.email')}</span>
+            <input type="email" value={login} onChange={(e) => setLogin(e.target.value)} autoComplete="email" autoCapitalize="off" autoCorrect="off" />
+          </label>
+          {serverField}
+          {err && <p className="error-text">{err}</p>}
+          {notice && <p className="hint">{notice}</p>}
+          <button
+            className="btn primary"
+            disabled={busy || !server || !login.trim()}
+            onClick={() =>
+              run(async () => {
+                await forgotPassword(server, login.trim())
+                setNotice(t('auth.forgotSent'))
+              })
+            }
+          >
+            {t('auth.send')}
+          </button>
+          <button className="link-btn" onClick={() => go('login')}>
+            {t('auth.back')}
+          </button>
+        </div>
+      </section>
+    )
+
+  return (
+    <section className="panel">
+      <h2>☁ {t('sync.title')}</h2>
+      <p className="hint">{st.authError ? t('sync.authError') : t('sync.hint')}</p>
+      {sentTo && <p className="notice">{t('auth.checkMail', { email: sentTo })}</p>}
+      <div className="stack">
+        <label className="field">
+          <span className="field-label">{t('sync.login')}</span>
+          <input value={login} onChange={(e) => setLogin(e.target.value)} autoCapitalize="off" autoCorrect="off" autoComplete="username" inputMode="email" />
+        </label>
+        <label className="field">
+          <span className="field-label">{t('sync.password')}</span>
+          <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" onKeyDown={(e) => e.key === 'Enter' && doLogin()} />
+        </label>
+        {serverField}
+        {err && <p className="error-text">{err}</p>}
+        {notice && <p className="hint">{notice}</p>}
+        {(errCode === 'unverified' || sentTo) && (
+          <button className="link-btn" disabled={busy} onClick={() => resend(sentTo || login.trim())}>
+            {t('auth.resend')}
+          </button>
+        )}
+        <button className="btn primary" disabled={busy || !server || !login || !password} onClick={doLogin}>
+          {busy ? t('sync.connecting') : t('sync.connect')}
+        </button>
+        <button className="link-btn" onClick={() => go('forgot')}>
+          {t('auth.forgot')}
+        </button>
+        {canRegister && (
+          <button className="btn" onClick={() => go('register')}>
+            ＋ {t('auth.register')}
+          </button>
+        )}
+      </div>
+    </section>
   )
 }
 
@@ -127,7 +308,7 @@ function MyPassword() {
       setOldP('')
       setNewP('')
     } catch (e) {
-      setErr((e as Error).message)
+      setErr(errText(t, e))
     }
   }
   return (
@@ -141,23 +322,94 @@ function MyPassword() {
         <input type="password" value={newP} onChange={(e) => setNewP(e.target.value)} autoComplete="new-password" />
       </label>
       {err && <p className="error-text wide">{err}</p>}
-      <button className="btn primary wide" disabled={!oldP || newP.length < 6} onClick={save}>
+      <button className="btn primary wide" disabled={!oldP || newP.length < 8} onClick={save}>
         {t('users.changeMy')}
       </button>
     </div>
   )
 }
 
+/** Своя компания: название; владелец может удалить её со всеми данными */
+function OrgPanel({ me }: { me: SyncUser }) {
+  const { t } = useSettings()
+  const [name, setName] = useState(me.orgName ?? '')
+  const [err, setErr] = useState('')
+  const [saved, setSaved] = useState(false)
+
+  useEffect(() => {
+    getOrg()
+      .then((o) => setName(o.name))
+      .catch(() => {})
+  }, [])
+
+  const save = async () => {
+    setErr('')
+    try {
+      await renameOrg(name)
+      await refreshMe()
+      setSaved(true)
+    } catch (e) {
+      setErr(errText(t, e))
+    }
+  }
+
+  const remove = async () => {
+    const p = prompt(t('org.deletePrompt', { name: me.orgName ?? '' }))
+    if (!p) return
+    try {
+      await deleteOrg(p)
+      alert(t('org.deleted'))
+    } catch (e) {
+      setErr(errText(t, e))
+    }
+  }
+
+  return (
+    <section className="panel">
+      <h2>🏢 {t('org.title')}</h2>
+      <div className="stack">
+        <label className="field">
+          <span className="field-label">{t('org.name')}</span>
+          <input
+            value={name}
+            onChange={(e) => {
+              setName(e.target.value)
+              setSaved(false)
+            }}
+          />
+        </label>
+        {err && <p className="error-text">{err}</p>}
+        <button className="btn" disabled={name.trim().length < 2 || name.trim() === me.orgName} onClick={save}>
+          {saved ? t('org.saved') : t('org.save')}
+        </button>
+        {me.owner && !me.platform && (
+          <>
+            <p className="hint">{t('org.deleteHint')}</p>
+            <button className="btn danger" onClick={remove}>
+              {t('org.delete')}
+            </button>
+          </>
+        )}
+      </div>
+    </section>
+  )
+}
+
 function UsersAdmin({ me }: { me: SyncUser }) {
   const { t } = useSettings()
   const [users, setUsers] = useState<SyncUser[]>([])
-  const [form, setForm] = useState({ login: '', name: '', password: '', role: 'staff' as 'staff' | 'admin' })
+  const [form, setForm] = useState({ login: '', email: '', name: '', password: '', role: 'staff' as 'staff' | 'admin' })
   const [err, setErr] = useState('')
   const [adding, setAdding] = useState(false)
+  // владельца компании нельзя отключить или удалить — кнопки ему не показываем
+  const [ownerId, setOwnerId] = useState('')
 
-  const reload = () => listUsers().then(setUsers).catch((e) => setErr(e.message))
+  const reload = () => listUsers().then(setUsers).catch((e) => setErr(errText(t, e)))
   useEffect(() => {
     reload()
+    getOrg()
+      .then((o) => setOwnerId(o.ownerId))
+      .catch(() => {})
   }, [])
 
   const run = async (fn: () => Promise<unknown>) => {
@@ -166,70 +418,97 @@ function UsersAdmin({ me }: { me: SyncUser }) {
       await fn()
       await reload()
     } catch (e) {
-      setErr((e as Error).message)
+      setErr(errText(t, e))
     }
   }
 
+  const invite = Boolean(form.email.trim()) && !form.password
   const create = () =>
     run(async () => {
       await createUser(form)
-      setForm({ login: '', name: '', password: '', role: 'staff' })
+      setForm({ login: '', email: '', name: '', password: '', role: 'staff' })
       setAdding(false)
-      alert(t('users.created'))
+      alert(invite ? t('users.inviteSent', { email: form.email.trim() }) : t('users.created'))
     })
+
+  const canCreate = invite || ((form.login.length >= 3 || form.email.includes('@')) && form.password.length >= 8)
 
   return (
     <section className="panel">
       <h2>👥 {t('users.title')}</h2>
       <ul className="users">
-        {users.map((u) => (
-          <li key={u.id} className={u.disabled ? 'off' : ''}>
-            <div>
-              <b>{u.name || u.login}</b> <span className="muted">@{u.login}</span>
-              <div className="muted">
-                {u.role === 'admin' ? t('users.admin') : t('users.staff')}
-                {u.disabled && ` · ${t('users.disabled')}`}
-                {u.id === me.id && ` · ${t('users.you')}`}
+        {users.map((u) => {
+          const isOwner = u.id === ownerId
+          return (
+            <li key={u.id} className={u.disabled ? 'off' : ''}>
+              <div>
+                <b>{u.name || u.login}</b> <span className="muted">{u.email || '@' + u.login}</span>
+                <div className="muted">
+                  {u.role === 'admin' ? t('users.admin') : t('users.staff')}
+                  {isOwner && ` · ${t('users.owner')}`}
+                  {u.invited && ` · ${t('users.invited')}`}
+                  {u.disabled && ` · ${t('users.disabled')}`}
+                  {u.id === me.id && ` · ${t('users.you')}`}
+                </div>
               </div>
-            </div>
-            {u.id !== me.id && (
-              <div className="user-actions">
-                <button
-                  className="btn small"
-                  onClick={() => {
-                    const p = prompt(t('users.resetPrompt', { name: u.name || u.login }))
-                    if (p) run(() => patchUser(u.id, { password: p }))
-                  }}
-                >
-                  {t('users.resetPass')}
-                </button>
-                <button className="btn small" onClick={() => run(() => patchUser(u.id, { disabled: !u.disabled }))}>
-                  {u.disabled ? t('users.enable') : t('users.disable')}
-                </button>
-                <button
-                  className="btn small danger"
-                  onClick={() => confirm(t('users.deleteConfirm', { name: u.name || u.login })) && run(() => deleteUser(u.id))}
-                >
-                  {t('users.delete')}
-                </button>
-              </div>
-            )}
-          </li>
-        ))}
+              {u.id !== me.id && !isOwner && (
+                <div className="user-actions">
+                  {u.invited ? (
+                    <button
+                      className="btn small"
+                      onClick={() =>
+                        run(async () => {
+                          await patchUser(u.id, { invite: true })
+                          alert(t('users.inviteSent', { email: u.email ?? '' }))
+                        })
+                      }
+                    >
+                      {t('users.inviteAgain')}
+                    </button>
+                  ) : (
+                    <button
+                      className="btn small"
+                      onClick={() => {
+                        const p = prompt(t('users.resetPrompt', { name: u.name || u.login }))
+                        if (p) run(() => patchUser(u.id, { password: p }))
+                      }}
+                    >
+                      {t('users.resetPass')}
+                    </button>
+                  )}
+                  <button className="btn small" onClick={() => run(() => patchUser(u.id, { disabled: !u.disabled }))}>
+                    {u.disabled ? t('users.enable') : t('users.disable')}
+                  </button>
+                  <button
+                    className="btn small danger"
+                    onClick={() => confirm(t('users.deleteConfirm', { name: u.name || u.login })) && run(() => deleteUser(u.id))}
+                  >
+                    {t('users.delete')}
+                  </button>
+                </div>
+              )}
+            </li>
+          )
+        })}
       </ul>
       {err && <p className="error-text">{err}</p>}
       {adding ? (
         <div className="stack">
+          <p className="hint">{t('users.inviteHint')}</p>
           <div className="grid">
-            <label className="field">
-              <span className="field-label">{t('users.login')}</span>
-              <input value={form.login} onChange={(e) => setForm({ ...form, login: e.target.value.toLowerCase() })} autoCapitalize="off" autoCorrect="off" />
-            </label>
             <label className="field">
               <span className="field-label">{t('users.name')}</span>
               <input value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} />
             </label>
+            <label className="field">
+              <span className="field-label">{t('users.email')}</span>
+              <input type="email" value={form.email} onChange={(e) => setForm({ ...form, email: e.target.value })} autoCapitalize="off" autoCorrect="off" />
+            </label>
           </div>
+          <label className="field">
+            <span className="field-label">{t('users.login')}</span>
+            <input value={form.login} onChange={(e) => setForm({ ...form, login: e.target.value.toLowerCase() })} autoCapitalize="off" autoCorrect="off" />
+          </label>
           <label className="field">
             <span className="field-label">{t('users.password')}</span>
             <input value={form.password} onChange={(e) => setForm({ ...form, password: e.target.value })} autoComplete="new-password" />
@@ -241,7 +520,7 @@ function UsersAdmin({ me }: { me: SyncUser }) {
               </button>
             ))}
           </div>
-          <button className="btn primary" disabled={form.login.length < 3 || form.password.length < 6} onClick={create}>
+          <button className="btn primary" disabled={!canCreate} onClick={create}>
             {t('users.create')}
           </button>
         </div>
@@ -250,6 +529,62 @@ function UsersAdmin({ me }: { me: SyncUser }) {
           ＋ {t('users.add')}
         </button>
       )}
+    </section>
+  )
+}
+
+/** Владелец платформы: все компании — блокировка и удаление */
+function PlatformPanel() {
+  const { t, locale } = useSettings()
+  const [orgs, setOrgs] = useState<OrgSummary[]>([])
+  const [err, setErr] = useState('')
+
+  const reload = () => listOrgs().then(setOrgs).catch((e) => setErr(errText(t, e)))
+  useEffect(() => {
+    reload()
+  }, [])
+
+  const run = async (fn: () => Promise<unknown>) => {
+    setErr('')
+    try {
+      await fn()
+      await reload()
+    } catch (e) {
+      setErr(errText(t, e))
+    }
+  }
+
+  return (
+    <section className="panel">
+      <h2>🌐 {t('platform.title')}</h2>
+      <ul className="users">
+        {orgs.map((o) => (
+          <li key={o.id} className={o.blocked ? 'off' : ''}>
+            <div>
+              <b>{o.name}</b> {o.blocked && <span className="tag danger">{t('platform.blocked')}</span>}
+              <div className="muted">{[o.owner?.name, o.owner?.email || o.owner?.login].filter(Boolean).join(' · ')}</div>
+              <div className="muted">
+                {new Date(o.created).toLocaleDateString(locale)} · {t('platform.users', { n: o.users })} · {t('platform.orders', { n: o.orders })} ·{' '}
+                {o.lastSeen ? t('platform.lastSeen', { time: new Date(o.lastSeen).toLocaleDateString(locale) }) : t('platform.never')}
+              </div>
+            </div>
+            <div className="user-actions">
+              <button
+                className="btn small"
+                onClick={() =>
+                  (o.blocked || confirm(t('platform.blockConfirm', { name: o.name }))) && run(() => setOrgBlocked(o.id, !o.blocked))
+                }
+              >
+                {o.blocked ? t('platform.unblock') : t('platform.block')}
+              </button>
+              <button className="btn small danger" onClick={() => confirm(t('platform.deleteConfirm', { name: o.name })) && run(() => removeOrg(o.id))}>
+                {t('platform.delete')}
+              </button>
+            </div>
+          </li>
+        ))}
+      </ul>
+      {err && <p className="error-text">{err}</p>}
     </section>
   )
 }

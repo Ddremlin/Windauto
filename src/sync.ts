@@ -4,9 +4,9 @@
 import { useSyncExternalStore } from 'react'
 import { deletePhotos, getLocalPhoto, markRemoteSource, orderPhotoIds } from './photos'
 import { deleteVideos, getLocalVideo, markRemoteVideoSource, orderVideoIds, videoType } from './videos'
-import { applyRemoteShared, getSettings, hasShared, onSharedChange, pickShared, setSharedStamp, type SharedSettings } from './settingsStore'
+import { applyRemoteShared, getSettings, hasShared, onSharedChange, pickShared, resetShared, setSharedStamp, type SharedSettings } from './settingsStore'
 import { mergeOrders } from './merge'
-import { getOrders, migrate, onLocalChange, removeOrder, setServerNumbering, upsertOrder } from './storage'
+import { getOrders, migrate, onLocalChange, removeOrder, replaceAllOrders, setServerNumbering, upsertOrder } from './storage'
 import type { Order } from './types'
 
 export interface SyncUser {
@@ -15,6 +15,14 @@ export interface SyncUser {
   name: string
   role: 'admin' | 'staff'
   disabled?: boolean
+  email?: string
+  // приглашён по email, пароль ещё не задал
+  invited?: boolean
+  // своя компания и права — приходят при входе и в /api/me
+  orgId?: string
+  orgName?: string
+  owner?: boolean
+  platform?: boolean
 }
 
 interface State {
@@ -92,11 +100,14 @@ export function useSyncStatus(): SyncStatus {
 }
 
 // --- HTTP ---
-class ApiError extends Error {
+export class ApiError extends Error {
   status: number
-  constructor(status: number, message: string) {
+  // код ошибки от сервера (unverified, email_taken…) — по нему показываем текст на языке интерфейса
+  code?: string
+  constructor(status: number, message: string, code?: string) {
     super(message)
     this.status = status
+    this.code = code
   }
 }
 
@@ -112,7 +123,7 @@ async function api<T>(path: string, init: RequestInit = {}, server = state.serve
   }
   if (!res.ok) {
     const body = await res.json().catch(() => ({}))
-    throw new ApiError(res.status, body.error ?? `HTTP ${res.status}`)
+    throw new ApiError(res.status, body.error ?? `HTTP ${res.status}`, body.code)
   }
   return res.json()
 }
@@ -309,7 +320,37 @@ function stopLive() {
 }
 
 // --- вход / выход ---
-export async function connect(server: string, login: string, password: string) {
+// какой компании принадлежат заказы на телефоне (запоминаем и после выхода)
+const DATA_ORG_KEY = 'windauto.dataOrg'
+const dataOrg = () => {
+  try {
+    return localStorage.getItem(DATA_ORG_KEY) ?? ''
+  } catch {
+    return ''
+  }
+}
+const setDataOrg = (id: string) => {
+  try {
+    localStorage.setItem(DATA_ORG_KEY, id)
+  } catch {
+    /* приватный режим */
+  }
+}
+
+/** Убрать с телефона заказы, фото и реквизиты прежней компании (на её сервере они остаются) */
+function clearLocalData() {
+  const list = getOrders()
+  deletePhotos(list.flatMap(orderPhotoIds))
+  deleteVideos(list.flatMap(orderVideoIds))
+  replaceAllOrders([])
+  resetShared()
+}
+
+/**
+ * Вход. Если на телефоне заказы другой компании, спрашиваем (confirmSwitch) и убираем их,
+ * иначе они уехали бы в новую компанию.
+ */
+export async function connect(server: string, login: string, password: string, confirmSwitch: (from: string) => boolean = () => true) {
   const url = normalizeServer(server)
   const res = await api<{ token: string; user: SyncUser }>(
     '/api/login',
@@ -317,6 +358,16 @@ export async function connect(server: string, login: string, password: string) {
     url,
     '',
   )
+  const prev = dataOrg()
+  const orgId = res.user.orgId ?? ''
+  if (prev && orgId && prev !== orgId && getOrders().length) {
+    if (!confirmSwitch(prev)) {
+      await api('/api/logout', { method: 'POST' }, url, res.token).catch(() => {})
+      return false
+    }
+    clearLocalData()
+  }
+  if (orgId) setDataOrg(orgId)
   // всё, что уже есть на телефоне, отправляем на сервер
   const dirty: Record<string, true> = {}
   getOrders().forEach((o) => (dirty[o.id] = true))
@@ -329,6 +380,7 @@ export async function connect(server: string, login: string, password: string) {
   setStatus({ error: null, authError: false })
   startLive()
   await syncNow()
+  return true
 }
 
 export async function disconnect() {
@@ -341,11 +393,58 @@ export async function disconnect() {
   setStatus({ error: null, authError: false })
 }
 
+// --- регистрация компании и письма (без входа) ---
+const post = <T,>(server: string, path: string, body: unknown) =>
+  api<T>(path, { method: 'POST', body: JSON.stringify(body) }, normalizeServer(server), '')
+
+export const serverInfo = (server: string) => api<{ registration?: boolean }>('/api/info', {}, normalizeServer(server), '')
+export const register = (server: string, r: { company: string; name: string; email: string; password: string; lang: string; accept: boolean }) =>
+  post(server, '/api/register', r)
+export const resendVerify = (server: string, email: string) => post(server, '/api/verify/resend', { email })
+export const forgotPassword = (server: string, login: string) => post(server, '/api/password/forgot', { login })
+export const legalUrl = (server: string, doc: 'privacy' | 'terms', lang: string) => `${normalizeServer(server)}/legal/${doc}?lang=${lang}`
+
+// --- своя компания ---
+export interface OrgInfo {
+  id: string
+  name: string
+  created: number
+  ownerId: string
+}
+export const getOrg = () => api<{ org: OrgInfo }>('/api/org').then((r) => r.org)
+export const renameOrg = (name: string) => api('/api/org', { method: 'PATCH', body: JSON.stringify({ name }) })
+/** Удалить компанию со всеми данными (только владелец) — и выйти */
+export async function deleteOrg(password: string) {
+  await api('/api/org', { method: 'DELETE', body: JSON.stringify({ password }) })
+  stopLive()
+  clearLocalData()
+  state = { ...EMPTY, server: state.server }
+  persist()
+  setServerNumbering(false)
+  setStatus({ error: null, authError: false })
+}
+
+// --- владелец платформы: все компании ---
+export interface OrgSummary {
+  id: string
+  name: string
+  created: number
+  blocked: boolean
+  owner: { name: string; login: string; email: string } | null
+  users: number
+  orders: number
+  lastSeen: number
+}
+export const listOrgs = () => api<{ orgs: OrgSummary[] }>('/api/platform/orgs').then((r) => r.orgs)
+export const setOrgBlocked = (id: string, blocked: boolean) =>
+  api(`/api/platform/orgs/${id}`, { method: 'PATCH', body: JSON.stringify({ blocked }) })
+export const removeOrg = (id: string) => api(`/api/platform/orgs/${id}`, { method: 'DELETE' })
+
 // --- администрирование ---
 export const listUsers = () => api<{ users: SyncUser[] }>('/api/users').then((r) => r.users)
-export const createUser = (u: { login: string; name: string; password: string; role: 'admin' | 'staff' }) =>
+export const createUser = (u: { login: string; email: string; name: string; password: string; role: 'admin' | 'staff' }) =>
   api<{ user: SyncUser }>('/api/users', { method: 'POST', body: JSON.stringify(u) }).then((r) => r.user)
-export const patchUser = (id: string, patch: Partial<{ name: string; password: string; disabled: boolean; role: string }>) =>
+export const patchUser = (id: string, patch: Partial<{ name: string; password: string; disabled: boolean; role: string; invite: boolean }>) =>
   api<{ user: SyncUser }>(`/api/users/${id}`, { method: 'PATCH', body: JSON.stringify(patch) }).then((r) => r.user)
 export const deleteUser = (id: string) => api(`/api/users/${id}`, { method: 'DELETE' })
 export const changePassword = (oldPassword: string, newPassword: string) =>
@@ -405,6 +504,20 @@ export function initSync() {
   if (state.token) {
     startLive()
     scheduleSync(300)
+    refreshMe()
+  }
+}
+
+/** Свежие данные о себе и компании (название, права); заодно запоминаем, чьи заказы на телефоне */
+export async function refreshMe() {
+  try {
+    const { user } = await api<{ user: SyncUser }>('/api/me')
+    state.user = user
+    persist()
+    if (user.orgId && !dataOrg()) setDataOrg(user.orgId)
+    setStatus()
+  } catch {
+    /* офлайн — в следующий раз */
   }
 }
 
