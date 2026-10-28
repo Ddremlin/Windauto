@@ -7,6 +7,7 @@ import android.content.pm.PackageManager;
 import android.content.Context;
 import android.graphics.Canvas;
 import android.graphics.Color;
+import android.graphics.Matrix;
 import android.graphics.Paint;
 import android.graphics.RectF;
 import android.graphics.Typeface;
@@ -97,12 +98,14 @@ public class RecorderActivity extends AppCompatActivity {
         orientation = new OrientationEventListener(this) {
             @Override
             public void onOrientationChanged(int deg) {
-                if (deg == ORIENTATION_UNKNOWN || videoCapture == null || recording != null) return;
+                if (deg == ORIENTATION_UNKNOWN) return;
                 int r = deg >= 45 && deg < 135 ? Surface.ROTATION_270
                     : deg >= 135 && deg < 225 ? Surface.ROTATION_180
                     : deg >= 225 && deg < 315 ? Surface.ROTATION_90
                     : Surface.ROTATION_0;
-                videoCapture.setTargetRotation(r);
+                // ползунок поворачивается и во время записи, кадр — только до начала
+                slider.setUiRotation(r);
+                if (videoCapture != null && recording == null) videoCapture.setTargetRotation(r);
             }
         };
 
@@ -195,9 +198,9 @@ public class RecorderActivity extends AppCompatActivity {
         FrameLayout.LayoutParams topLp = new FrameLayout.LayoutParams(-2, -2, Gravity.TOP | Gravity.CENTER_HORIZONTAL);
         root.addView(top, topLp);
 
+        // на весь экран: сам рисует полосу у правого края с точки зрения того, как держат телефон
         slider = new ZoomSlider(this);
-        FrameLayout.LayoutParams sliderLp = new FrameLayout.LayoutParams(dp(120), -1, Gravity.END | Gravity.CENTER_VERTICAL);
-        root.addView(slider, sliderLp);
+        root.addView(slider, new FrameLayout.LayoutParams(-1, -1));
 
         LinearLayout bottom = new LinearLayout(this);
         bottom.setOrientation(LinearLayout.VERTICAL);
@@ -249,11 +252,7 @@ public class RecorderActivity extends AppCompatActivity {
             Insets s = insets.getInsets(WindowInsetsCompat.Type.systemBars() | WindowInsetsCompat.Type.displayCutout());
             topLp.topMargin = s.top + dp(12);
             top.setLayoutParams(topLp);
-            // ползунок — между подсказкой сверху и кнопками снизу
-            sliderLp.topMargin = s.top + dp(110);
-            sliderLp.bottomMargin = s.bottom + dp(150);
-            sliderLp.rightMargin = s.right + dp(4);
-            slider.setLayoutParams(sliderLp);
+            slider.setInsets(s);
             bottom.setPadding(s.left, 0, s.right, s.bottom + dp(20));
             return insets;
         });
@@ -336,8 +335,10 @@ public class RecorderActivity extends AppCompatActivity {
     }
 
     /**
-     * Вертикальный ползунок зума: внизу минимум (0.5× где есть), вверху максимум камеры.
-     * Шкала логарифмическая — 0.5→1 и 10→20 занимают одинаковый ход, плавно во всём диапазоне.
+     * Ползунок зума у правого края — с точки зрения того, как держат телефон: экран заперт в портрете,
+     * поэтому при повороте полоса переезжает к другой стороне экрана и рисуется повёрнутой.
+     * Внизу минимум (0.5× где есть), вверху максимум камеры. Шкала логарифмическая —
+     * 0.5→1 и 10→20 занимают одинаковый ход, плавно во всём диапазоне.
      */
     private class ZoomSlider extends View {
         private final Paint track = new Paint(Paint.ANTI_ALIAS_FLAG);
@@ -346,7 +347,14 @@ public class RecorderActivity extends AppCompatActivity {
         private final Paint label = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final Paint value = new Paint(Paint.ANTI_ALIAS_FLAG);
         private final RectF rect = new RectF();
+        private final Matrix toScreen = new Matrix();
+        private final Matrix toLocal = new Matrix();
+        private final float[] pt = new float[2];
+        private Insets insets = Insets.NONE;
+        private int rotation = Surface.ROTATION_0;
         private float min = 1, max = 1, ratio = 1;
+        // полоса в повёрнутых координатах: x — центр, top..bottom — ход бегунка
+        private float lx, ltop, lbottom;
         private boolean dragging;
 
         ZoomSlider(Context c) {
@@ -377,28 +385,70 @@ public class RecorderActivity extends AppCompatActivity {
             invalidate();
         }
 
-        private float top() { return dp(16); }
-        private float bottom() { return getHeight() - dp(16); }
-        private float cx() { return getWidth() - dp(22); }
+        void setInsets(Insets s) {
+            insets = s;
+            layoutStrip();
+        }
+
+        void setUiRotation(int r) {
+            if (r == rotation) return;
+            rotation = r;
+            layoutStrip();
+        }
+
+        @Override
+        protected void onSizeChanged(int w, int h, int ow, int oh) {
+            layoutStrip();
+        }
+
+        private void layoutStrip() {
+            int w = getWidth(), h = getHeight();
+            if (w == 0 || h == 0) return;
+            // ROTATION_90 — повернули против часовой (верх телефона слева): правая сторона — низ экрана
+            float deg = rotation == Surface.ROTATION_90 ? 90 : rotation == Surface.ROTATION_180 ? 180 : rotation == Surface.ROTATION_270 ? -90 : 0;
+            boolean side = rotation == Surface.ROTATION_90 || rotation == Surface.ROTATION_270;
+            float lw = side ? h : w, lh = side ? w : h;
+            toScreen.setTranslate(-lw / 2, -lh / 2);
+            toScreen.postRotate(deg);
+            toScreen.postTranslate(w / 2f, h / 2f);
+            toScreen.invert(toLocal);
+            // отступы от краёв экрана: сверху подсказка, снизу кнопки — их полоса не закрывает
+            float top = insets.top + dp(110), bottom = insets.bottom + dp(150);
+            float left = insets.left + dp(4), right = insets.right + dp(4);
+            float edge, endTop, endBottom;
+            switch (rotation) {
+                case Surface.ROTATION_90: edge = bottom; endTop = insets.right + dp(24); endBottom = insets.left + dp(24); break;
+                case Surface.ROTATION_270: edge = top; endTop = insets.left + dp(24); endBottom = insets.right + dp(24); break;
+                case Surface.ROTATION_180: edge = left; endTop = bottom; endBottom = top; break;
+                default: edge = right; endTop = top; endBottom = bottom;
+            }
+            lx = lw - edge - dp(22);
+            ltop = endTop + dp(16);
+            lbottom = lh - endBottom - dp(16);
+            invalidate();
+        }
 
         private float yOf(float z) {
             double f = Math.log(z / min) / Math.log(max / min);
-            return (float) (bottom() - Math.max(0, Math.min(1, f)) * (bottom() - top()));
+            return (float) (lbottom - Math.max(0, Math.min(1, f)) * (lbottom - ltop));
         }
 
         private float zOf(float y) {
-            double f = (bottom() - y) / (bottom() - top());
+            double f = (lbottom - y) / (lbottom - ltop);
             f = Math.max(0, Math.min(1, f));
             return (float) (min * Math.pow(max / min, f));
         }
 
         @Override
         protected void onDraw(Canvas c) {
-            float x = cx(), w = dp(3);
-            rect.set(x - dp(14), top() - dp(14), x + dp(14), bottom() + dp(14));
+            if (lbottom <= ltop) return;
+            c.save();
+            c.concat(toScreen);
+            float x = lx, w = dp(3);
+            rect.set(x - dp(14), ltop - dp(14), x + dp(14), lbottom + dp(14));
             c.drawRoundRect(rect, dp(14), dp(14), track);
             float y = yOf(ratio);
-            rect.set(x - w, y, x + w, bottom());
+            rect.set(x - w, y, x + w, lbottom);
             c.drawRoundRect(rect, w, w, fill);
             // подписи: минимум, круглые значения, максимум
             List<Float> marks = new ArrayList<>();
@@ -412,19 +462,24 @@ public class RecorderActivity extends AppCompatActivity {
             }
             c.drawCircle(x, y, dp(11), thumb);
             c.drawText(fmtZoom(ratio < 1 ? Math.max(0.5f, ratio) : ratio, true), x - dp(18), y + dp(5), value);
+            c.restore();
         }
 
         @SuppressLint("ClickableViewAccessibility")
         @Override
         public boolean onTouchEvent(MotionEvent e) {
-            // берётся только полоса у правого края, чтобы не мешать щипку по превью
-            if (e.getActionMasked() == MotionEvent.ACTION_DOWN && e.getX() < getWidth() - dp(56)) return false;
+            pt[0] = e.getX();
+            pt[1] = e.getY();
+            toLocal.mapPoints(pt);
+            // берётся только сама полоса — остальное уходит превью (щипок) и кнопкам
+            if (e.getActionMasked() == MotionEvent.ACTION_DOWN
+                && (Math.abs(pt[0] - lx) > dp(34) || pt[1] < ltop - dp(30) || pt[1] > lbottom + dp(30))) return false;
             switch (e.getActionMasked()) {
                 case MotionEvent.ACTION_DOWN:
                 case MotionEvent.ACTION_MOVE:
                     dragging = true;
                     getParent().requestDisallowInterceptTouchEvent(true);
-                    ratio = zOf(e.getY());
+                    ratio = zOf(pt[1]);
                     setZoom(ratio);
                     invalidate();
                     return true;
