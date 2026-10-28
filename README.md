@@ -30,7 +30,14 @@ npm test           # тесты (Node 22.6+): слияние, VIN, смета, �
 
 ## Публикация
 
-Сайт: https://ddremlin.github.io/Windauto/
+Веб-версия: https://app.dmerlinauto.vip — на одном адресе с сервером синхронизации (Caddy отдаёт папку
+`/opt/windauto/web`, API — `/api`, `/auth`, `/legal`). Выкладка:
 
-Публикуется автоматически при каждом push в `main` (GitHub Actions, `.github/workflows/deploy.yml`).
-Вручную: на GitHub → Actions → Deploy to GitHub Pages → Run workflow.
+```
+npm run build && rsync -a --delete dist/ root@95.216.219.8:/opt/windauto/web/
+```
+
+Прежний адрес https://ddremlin.github.io/Windauto/ — страница переезда (`pages-redirect/index.html`):
+стирает токен входа и уводит на новый адрес, а если в браузере остались неотправленные изменения —
+даёт дослать их из прежней версии (`old/`). Публикуется при каждом push в `main`
+(GitHub Actions, `.github/workflows/deploy.yml`).

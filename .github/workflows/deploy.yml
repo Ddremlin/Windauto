@@ -32,10 +32,16 @@ jobs:
         working-directory: server
       - run: npm test
       - run: npm run build
-      - run: touch dist/.nojekyll
+      # веб-версия переехала на https://app.dmerlinauto.vip: здесь — страница переезда,
+      # а прежняя версия — в old/, чтобы дослать изменения, не успевшие уйти на сервер
+      - run: |
+          mkdir pages
+          mv dist pages/old
+          cp pages-redirect/index.html pages/index.html
+          touch pages/.nojekyll
       - uses: actions/configure-pages@v5
       - uses: actions/upload-pages-artifact@v3
         with:
-          path: dist
+          path: pages
       - id: deployment
         uses: actions/deploy-pages@v4

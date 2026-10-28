@@ -19,7 +19,6 @@ if [ ! -f .env ]; then
 DOMAIN=$DOMAIN
 ADMIN_LOGIN=admin
 ADMIN_PASSWORD=$PASS
-ALLOWED_ORIGINS=https://ddremlin.github.io
 ENV
   chmod 600 .env
   NEW=1

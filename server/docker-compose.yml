@@ -7,7 +7,7 @@ services:
     environment:
       ADMIN_LOGIN: ${ADMIN_LOGIN:-admin}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:-}
-      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-https://ddremlin.github.io}
+      ALLOWED_ORIGINS: ${ALLOWED_ORIGINS:-}
       # распознавание VIN/номера по фото; пусто — выключено
       ANTHROPIC_API_KEY: ${ANTHROPIC_API_KEY:-}
       AI_MODEL: ${AI_MODEL:-}
@@ -37,6 +37,8 @@ services:
       DOMAIN: ${DOMAIN:?укажите DOMAIN, например 1.2.3.4.sslip.io}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      # веб-версия приложения (npm run build → dist/ сюда)
+      - ./web:/srv/web:ro
       - caddy_data:/data
       - caddy_config:/config
     depends_on:

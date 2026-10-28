@@ -342,6 +342,9 @@ test('обновление приложения: пока APK нет — пус�
   // приложение ходит с https://localhost
   const cors = await fetch(URL_ + '/api/app', { headers: { Origin: 'https://localhost' } })
   assert.equal(cors.headers.get('access-control-allow-origin'), 'https://localhost')
+  // старый адрес веб-версии больше не пускаем: она переехала на адрес сервера
+  const old = await fetch(URL_ + '/api/app', { headers: { Origin: 'https://ddremlin.github.io' } })
+  assert.equal(old.headers.get('access-control-allow-origin'), null)
 })
 
 // вход с отдельного адреса: блокировка по IP от тестов выше сюда не мешает

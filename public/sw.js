@@ -1,5 +1,8 @@
 // Сеть в приоритете, кэш — запасной вариант без интернета
-const CACHE = 'windauto-v5'
+const CACHE = 'windauto-v6'
+// приложение и сервер на одном адресе: API, ссылки из писем и юридические страницы — мимо кэша
+// (данные заказов не оседают в кэше, поток событий и видео с перемоткой идут напрямую)
+const PASS = /^\/(api|auth|legal)\//
 
 self.addEventListener('install', () => self.skipWaiting())
 self.addEventListener('activate', (e) => e.waitUntil((async () => {
@@ -9,7 +12,8 @@ self.addEventListener('activate', (e) => e.waitUntil((async () => {
 })()))
 
 self.addEventListener('fetch', (e) => {
-  if (e.request.method !== 'GET' || new URL(e.request.url).origin !== location.origin) return
+  const url = new URL(e.request.url)
+  if (e.request.method !== 'GET' || url.origin !== location.origin || PASS.test(url.pathname)) return
   e.respondWith(
     fetch(e.request)
       .then((res) => {

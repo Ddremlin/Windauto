@@ -16,7 +16,9 @@ import { legalPage, messagePage, pageText, passwordPage } from './pages.mjs'
 
 const PORT = Number(process.env.PORT ?? 8080)
 const DATA = process.env.DATA_DIR ?? './data'
-const ORIGINS = (process.env.ALLOWED_ORIGINS ?? 'https://ddremlin.github.io,http://localhost:5173,http://localhost:4173')
+// веб-версия отдаётся с того же адреса, что и API (Caddy, папка web/) — CORS ей не нужен;
+// здесь — другие адреса, например http://localhost:5173 для разработки
+const ORIGINS = (process.env.ALLOWED_ORIGINS ?? '')
   .split(',')
   .map((s) => s.trim())
   .filter(Boolean)
