@@ -15,6 +15,7 @@ import {
   type Cameras,
   type ZoomRange,
 } from '../camera'
+import { hasNativeRecorder, recordVideoNative } from '../native'
 import { useSettings, useT } from '../settingsHooks'
 import type { Order, VideoRef } from '../types'
 import { addVideo, deleteVideos, formatDuration, useVideoUrl } from '../videos'
@@ -69,6 +70,8 @@ function Recorder({ onSave, onClose }: { onSave: (r: VideoRef) => void; onClose:
   const galRef = useRef<HTMLInputElement>(null)
   const [ready, setReady] = useState(false)
   const [noCamera, setNoCamera] = useState(!canRecord())
+  // на нативном экране нажали «Галерея» — камера есть, просто выбираем файл
+  const [picking, setPicking] = useState(false)
   const [recording, setRecording] = useState(false)
   const [elapsed, setElapsed] = useState(0)
   const [taken, setTaken] = useState<Taken | null>(null)
@@ -213,7 +216,32 @@ function Recorder({ onSave, onClose }: { onSave: (r: VideoRef) => void; onClose:
     pinch.current = null
   }
 
-  const openOnMount = useEffectEvent(() => void startCamera())
+  // Android-приложение: запись на нативном экране, сюда возвращается готовый файл
+  const recordNative = async () => {
+    try {
+      const r = await recordVideoNative({
+        maxSec: MAX_SEC,
+        bitrate: BITRATE,
+        tip: t('video.walk'),
+        limit: t('video.limit', { min: MAX_SEC / 60 }),
+        cancel: t('app.cancel'),
+        gallery: t('video.galleryShort'),
+      })
+      if (!alive.current) return
+      if (r.blob) setTaken({ blob: r.blob, duration: r.duration ?? 0, url: URL.createObjectURL(r.blob) })
+      else if (r.action === 'cancel') onClose()
+      else {
+        setPicking(r.action === 'gallery')
+        setNoCamera(true)
+      }
+    } catch (e) {
+      if (!alive.current) return
+      setError((e as Error).message)
+      setNoCamera(true)
+    }
+  }
+
+  const openOnMount = useEffectEvent(() => void (hasNativeRecorder ? recordNative() : startCamera()))
   const reopen = useEffectEvent(() => void startCamera())
 
   useEffect(() => {
@@ -301,7 +329,8 @@ function Recorder({ onSave, onClose }: { onSave: (r: VideoRef) => void; onClose:
   const redo = () => {
     setTaken(null)
     setError(null)
-    if (canRecord() && !noCamera) void startCamera()
+    if (hasNativeRecorder) void recordNative()
+    else if (canRecord() && !noCamera) void startCamera()
   }
 
   const save = async () => {
@@ -329,7 +358,7 @@ function Recorder({ onSave, onClose }: { onSave: (r: VideoRef) => void; onClose:
         <video className="rec-video" src={taken.url} controls playsInline autoPlay />
       ) : noCamera ? (
         <div className="rec-nocam">
-          <p>{t('video.noCamera')}</p>
+          {!picking && <p>{t('video.noCamera')}</p>}
           <button className="btn primary" onClick={() => camRef.current?.click()}>{t('video.systemCamera')}</button>
           <button className="btn" onClick={() => galRef.current?.click()}>{t('video.gallery')}</button>
         </div>

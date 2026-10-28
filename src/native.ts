@@ -1,5 +1,5 @@
 // Android-приложение (Capacitor): то, что в WebView работает не так, как в браузере, —
-// «Поделиться» файлом, сохранение файлов, печать, внешние ссылки.
+// «Поделиться» файлом, сохранение файлов, печать, внешние ссылки, запись видео камерой.
 import { Capacitor, registerPlugin } from '@capacitor/core'
 import { Directory, Filesystem } from '@capacitor/filesystem'
 import { Share } from '@capacitor/share'
@@ -10,6 +10,33 @@ export const isNative = Capacitor.isNativePlatform()
 export const UPDATE_SERVER = import.meta.env?.VITE_UPDATE_SERVER || 'https://app.dmerlinauto.vip'
 
 const Print = registerPlugin<{ print: (o: { name: string }) => Promise<void> }>('Print')
+
+interface RecordOptions {
+  maxSec: number
+  bitrate: number
+  tip: string
+  limit: string
+  cancel: string
+  gallery: string
+}
+// path — записанный файл; иначе action: cancel (закрыли), gallery (выбрать файл), fallback (камера не открылась)
+interface RecordResult {
+  path?: string
+  duration?: number
+  action?: 'cancel' | 'gallery' | 'fallback'
+  message?: string
+}
+const VideoRecorder = registerPlugin<{ record: (o: RecordOptions) => Promise<RecordResult> }>('VideoRecorder')
+
+// WebView на Android не отдаёт зум камеры — круговое видео пишем нативной камерой (зум от 0.5×)
+export const hasNativeRecorder = isNative && Capacitor.getPlatform() === 'android'
+
+export async function recordVideoNative(o: RecordOptions): Promise<RecordResult & { blob?: Blob }> {
+  const r = await VideoRecorder.record(o)
+  if (!r.path) return r
+  const blob = await (await fetch(Capacitor.convertFileSrc(r.path))).blob()
+  return { ...r, blob: new Blob([blob], { type: 'video/mp4' }) }
+}
 
 const toBase64 = (blob: Blob) =>
   new Promise<string>((resolve, reject) => {
