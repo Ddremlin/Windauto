@@ -1,5 +1,8 @@
 import { useEffect, useState } from 'react'
 import AppUpdate from './components/AppUpdate'
+import Calc from './screens/Calc'
+import Calendar from './screens/Calendar'
+import Import from './screens/Import'
 import OrderEdit from './screens/OrderEdit'
 import OrderList from './screens/OrderList'
 import Settings from './screens/Settings'
@@ -8,7 +11,8 @@ import Sync from './screens/Sync'
 import { newOrder, useOrders } from './storage'
 import type { Order } from './types'
 
-// Простая навигация через hash: #/ — список, #/order/<id> — заказ, #/new — новый, #/settings, #/stats, #/sync
+// Простая навигация через hash: #/ — список, #/order/<id> — заказ, #/new — новый,
+// #/settings, #/stats, #/sync, #/calendar, #/calc, #/import
 function useRoute() {
   const [hash, setHash] = useState(location.hash)
   useEffect(() => {
@@ -67,6 +71,21 @@ export default function App() {
   if (route === '/settings') return <Settings orders={orders} onImport={replaceAll} />
 
   if (route === '/sync') return <Sync />
+
+  if (route === '/calc') return <Calc />
+
+  if (route === '/calendar') return <Calendar orders={orders} onOpen={(id) => go(`/order/${id}`)} />
+
+  if (route === '/import')
+    return (
+      <Import
+        onCreate={(list) => {
+          const saved = list.map((o) => upsert(o))
+          // один заказ — сразу открываем, несколько — в списке
+          go(saved.length === 1 ? `/order/${saved[0].id}` : '/')
+        }}
+      />
+    )
 
   const m = route.match(/^\/order\/(.+)$/)
   if (m) {

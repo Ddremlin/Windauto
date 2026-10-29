@@ -484,6 +484,51 @@ const ru: Dict = {
   'stats.byAssignee': 'В работе по сотрудникам',
   'stats.noAssignee': 'Без ответственного',
   'stats.overdue': 'Просрочено: {n}',
+
+  // меню: инструменты
+  'menu.calendar': 'Календарь',
+  'menu.calc': 'Калькулятор',
+  'menu.import': 'Заказ из файла',
+
+  // калькулятор
+  'calc.memory': 'Память',
+  'calc.history': 'История',
+  'calc.noHistory': 'Здесь будут посчитанные примеры — нажмите, чтобы взять число',
+  'calc.clearHistory': 'Очистить историю',
+  'calc.error': 'Ошибка',
+  'calc.copy': 'Скопировать',
+  'calc.copied': 'Скопировано',
+
+  // календарь
+  'cal.byDue': 'Срок готовности',
+  'cal.byCreated': 'Приёмка',
+  'cal.today': 'Сегодня',
+  'cal.prev': 'Предыдущий месяц',
+  'cal.next': 'Следующий месяц',
+  'cal.none': 'В этот день заказов нет',
+  'cal.noDue': 'Без срока: {n}',
+  'cal.overdue': 'просрочен',
+  'cal.legend': 'Цвет — статус заказа. Нажмите на статус, чтобы скрыть его.',
+
+  // заказ из файла
+  'imp.hint': 'Выберите текстовые файлы (.txt) или вставьте текст. Один файл — один заказ; несколько заказов в одном файле разделите строкой «---». Понимаются строки вида «Марка: Audi», «Nr rej.: WA 12345», «Телефон: …».',
+  'imp.files': 'Выбрать файлы…',
+  'imp.paste': 'Или вставьте текст',
+  'imp.text': 'Текст',
+  'imp.parse': 'Разобрать',
+  'imp.ai': 'Разобрать с ИИ (общая база)',
+  'imp.aiHint': 'ИИ на сервере разберёт и свободный текст — работы по элементам, цены, повреждения.',
+  'imp.aiFail': 'ИИ не помог ({e}) — разобрано без него',
+  'imp.tooLong': 'Текст длиннее 4000 знаков — ИИ разберёт только начало',
+  'imp.busy': 'Разбираю…',
+  'imp.found': 'Найдено заказов: {n}',
+  'imp.empty': 'Ничего не распознано',
+  'imp.create': 'Создать заказы: {n}',
+  'imp.created': 'Создано заказов: {n}',
+  'imp.noFields': 'Поля не узнаны — текст попадёт в примечания',
+  'imp.works': 'Элементов с работами: {n}',
+  'imp.readFail': 'Не удалось прочитать файл {name}',
+  'imp.again': 'Начать заново',
 }
 
 const pl: Dict = {
@@ -950,6 +995,51 @@ const pl: Dict = {
   'stats.byAssignee': 'W realizacji wg osób',
   'stats.noAssignee': 'Bez odpowiedzialnego',
   'stats.overdue': 'Po terminie: {n}',
+
+  // menu: narzędzia
+  'menu.calendar': 'Kalendarz',
+  'menu.calc': 'Kalkulator',
+  'menu.import': 'Zlecenie z pliku',
+
+  // kalkulator
+  'calc.memory': 'Pamięć',
+  'calc.history': 'Historia',
+  'calc.noHistory': 'Tu pojawią się obliczenia — dotknij, aby wziąć liczbę',
+  'calc.clearHistory': 'Wyczyść historię',
+  'calc.error': 'Błąd',
+  'calc.copy': 'Kopiuj',
+  'calc.copied': 'Skopiowano',
+
+  // kalendarz
+  'cal.byDue': 'Termin realizacji',
+  'cal.byCreated': 'Przyjęcie',
+  'cal.today': 'Dziś',
+  'cal.prev': 'Poprzedni miesiąc',
+  'cal.next': 'Następny miesiąc',
+  'cal.none': 'Brak zleceń tego dnia',
+  'cal.noDue': 'Bez terminu: {n}',
+  'cal.overdue': 'po terminie',
+  'cal.legend': 'Kolor — status zlecenia. Dotknij statusu, aby go ukryć.',
+
+  // zlecenie z pliku
+  'imp.hint': 'Wybierz pliki tekstowe (.txt) lub wklej tekst. Jeden plik — jedno zlecenie; kilka zleceń w jednym pliku oddziel linią «---». Rozpoznawane są linie typu «Marka: Audi», «Nr rej.: WA 12345», «Telefon: …».',
+  'imp.files': 'Wybierz pliki…',
+  'imp.paste': 'Lub wklej tekst',
+  'imp.text': 'Tekst',
+  'imp.parse': 'Analizuj',
+  'imp.ai': 'Analizuj z AI (wspólna baza)',
+  'imp.aiHint': 'AI na serwerze rozpozna też wolny tekst — prace na elementach, ceny, uszkodzenia.',
+  'imp.aiFail': 'AI nie pomogło ({e}) — przeanalizowano bez niego',
+  'imp.tooLong': 'Tekst dłuższy niż 4000 znaków — AI przeanalizuje tylko początek',
+  'imp.busy': 'Analizuję…',
+  'imp.found': 'Znaleziono zleceń: {n}',
+  'imp.empty': 'Nic nie rozpoznano',
+  'imp.create': 'Utwórz zlecenia: {n}',
+  'imp.created': 'Utworzono zleceń: {n}',
+  'imp.noFields': 'Nie rozpoznano pól — tekst trafi do uwag',
+  'imp.works': 'Elementów z pracami: {n}',
+  'imp.readFail': 'Nie udało się odczytać pliku {name}',
+  'imp.again': 'Zacznij od nowa',
 }
 
 // Элементы кузова: [рус. полное, рус. краткое, пол. полное, пол. краткое]

@@ -2,9 +2,17 @@ import { useEffect, useState } from 'react'
 import { useSettings } from '../settingsHooks'
 import { syncNow, useSyncStatus } from '../sync'
 
-export type Section = 'orders' | 'stats' | 'sync' | 'settings'
+export type Section = 'orders' | 'calendar' | 'stats' | 'calc' | 'import' | 'sync' | 'settings'
 
-const PATHS: Record<Section, string> = { orders: '/', stats: '/stats', sync: '/sync', settings: '/settings' }
+const PATHS: Record<Section, string> = {
+  orders: '/',
+  calendar: '/calendar',
+  stats: '/stats',
+  calc: '/calc',
+  import: '/import',
+  sync: '/sync',
+  settings: '/settings',
+}
 
 const go = (path: string) => {
   location.hash = path
@@ -45,7 +53,10 @@ export default function TopBar({ current }: { current: Section }) {
 
   const items: { id: Section; icon: string; label: string; hint?: string }[] = [
     { id: 'orders', icon: '📋', label: t('menu.orders') },
+    { id: 'calendar', icon: '📅', label: t('menu.calendar') },
+    { id: 'import', icon: '📄', label: t('menu.import') },
     { id: 'stats', icon: '📊', label: t('stats.title') },
+    { id: 'calc', icon: '🧮', label: t('menu.calc') },
     { id: 'sync', icon: '☁', label: t('menu.sync'), hint: syncState },
     { id: 'settings', icon: '⚙', label: t('app.settings') },
   ]
