@@ -41,6 +41,27 @@ export function clientProfiles(orders: Order[]): Map<string, ClientProfile> {
   return new Map([...groups].map(([k, g]) => [k, profileOf(g)]))
 }
 
+export interface ClientCar {
+  car: string
+  plate: string
+  plateCountry: string
+}
+
+export function carsOf(orders: Order[]): ClientCar[] {
+  const seen = new Map<string, ClientCar>()
+  for (const o of orders) {
+    const car = [o.make, o.model].filter(Boolean).join(' ')
+    const plate = o.plate.replace(/\s+/g, '').toUpperCase()
+    const k = plate || car.toLowerCase()
+    if (!k) continue
+    const cur = seen.get(k)
+    // у того же номера марку могли дописать позже
+    if (!cur) seen.set(k, { car, plate: o.plate, plateCountry: o.plateCountry })
+    else if (!cur.car && car) cur.car = car
+  }
+  return [...seen.values()]
+}
+
 export interface ClientInfo {
   key: string
   // последние известные данные (из самого нового заказа, где они заполнены)
@@ -49,6 +70,8 @@ export interface ClientInfo {
   email: string
   // заказы клиента, новые сверху
   orders: Order[]
+  // машины клиента без повторов: по номеру, а без номера — по марке и модели
+  cars: ClientCar[]
   profile: ClientProfile
   lastVisit: number
 }
@@ -67,7 +90,7 @@ export function listClients(orders: Order[]): ClientInfo[] {
     .map(([key, list]) => {
       const sorted = list.slice().sort((a, b) => b.createdAt - a.createdAt)
       const pick = (f: 'client' | 'phone' | 'email') => sorted.find((o) => o[f].trim())?.[f].trim() ?? ''
-      return { key, name: pick('client'), phone: pick('phone'), email: pick('email'), orders: sorted, profile: profileOf(sorted), lastVisit: sorted[0].createdAt }
+      return { key, name: pick('client'), phone: pick('phone'), email: pick('email'), orders: sorted, cars: carsOf(sorted), profile: profileOf(sorted), lastVisit: sorted[0].createdAt }
     })
     .sort((a, b) => b.lastVisit - a.lastVisit)
 }

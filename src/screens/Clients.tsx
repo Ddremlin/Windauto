@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { StarPicker, Stars } from '../components/ClientRating'
+import { PlateBadge } from '../components/Plate'
 import TopBar from '../components/TopBar'
 import { isRisky, listClients, type ClientInfo } from '../clients'
 import { orderNo } from '../docNumber'
@@ -77,6 +78,16 @@ export function ClientList({ orders, onOpenClient }: ListProps) {
                   <span className="muted small">{t('cl.noRating')}</span>
                 )}
               </div>
+              {c.cars.length > 0 && (
+                <div className="client-cars">
+                  {c.cars.map((car, i) => (
+                    <span key={i} className="client-car">
+                      🚗 {car.car || t('list.noMake')}
+                      {car.plate && <small> · {formatPlate(car.plate, car.plateCountry)}</small>}
+                    </span>
+                  ))}
+                </div>
+              )}
               <div className="card-row muted small">
                 <span>{[c.name && c.phone, c.email].filter(Boolean).join(' · ') || ' '}</span>
               </div>
@@ -146,6 +157,16 @@ export function ClientPage({ client, onBack, onOpen, onSave, onNewOrder }: PageP
       <main className="content">
         <section className={'panel' + (risky ? ' client-risky' : '')}>
           {risky && <p className="client-risky-text">⚠ {t('rate.risky')}</p>}
+          {client.cars.length > 0 && (
+            <div className="client-cars big">
+              {client.cars.map((car, i) => (
+                <span key={i} className="client-car">
+                  {car.plate && <PlateBadge text={formatPlate(car.plate, car.plateCountry)} country={car.plateCountry} height={24} />}
+                  <b>{car.car || t('list.noMake')}</b>
+                </span>
+              ))}
+            </div>
+          )}
           <div className="client-contacts">
             {client.phone && <a href={`tel:${client.phone.replace(/[^\d+]/g, '')}`}>📞 {client.phone}</a>}
             {client.email && <a href={`mailto:${client.email}`}>📧 {client.email}</a>}

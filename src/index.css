@@ -781,3 +781,7 @@ input:disabled { opacity: 0.6; }
   padding: 9px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); text-align: left; font-size: 15px;
 }
 .order-client.risky { border-color: color-mix(in srgb, var(--danger) 50%, var(--line)); color: var(--danger); font-weight: 600; }
+.client-cars { display: flex; flex-wrap: wrap; gap: 4px 12px; font-size: 14px; }
+.client-car { display: inline-flex; align-items: center; gap: 6px; min-width: 0; }
+.client-car small { color: var(--muted); }
+.client-cars.big { flex-direction: column; gap: 8px; margin-bottom: 12px; font-size: 16px; }

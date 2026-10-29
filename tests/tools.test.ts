@@ -98,7 +98,7 @@ test('клиенты: один телефон в разной записи — �
 
 test('клиенты: список с последними контактами, свежие сверху', async () => {
   const { listClients } = await import('../src/clients.ts')
-  const o = (id: string, createdAt: number, phone: string, client: string, email = '') => ({ id, createdAt, phone, client, email }) as never
+  const o = (id: string, createdAt: number, phone: string, client: string, email = '') => ({ id, createdAt, phone, client, email, plate: '', make: '', model: '', plateCountry: 'PL' }) as never
   const list = listClients([o('a', 1, '600100200', 'Jan', 'old@x.pl'), o('b', 5, '+48 600 100 200', '', 'new@x.pl'), o('c', 3, '', 'Anna Nowak')])
   assert.equal(list.length, 2)
   assert.equal(list[0].key, 'tel:600100200')
@@ -106,4 +106,11 @@ test('клиенты: список с последними контактами,
   assert.equal(list[0].email, 'new@x.pl')
   assert.deepEqual(list[0].orders.map((x: { id: string }) => x.id), ['b', 'a'])
   assert.equal(list[1].name, 'Anna Nowak')
+})
+
+test('клиенты: машины без повторов', async () => {
+  const { carsOf } = await import('../src/clients.ts')
+  const o = (make: string, model: string, plate: string) => ({ make, model, plate, plateCountry: 'PL' }) as never
+  const cars = carsOf([o('MINI', 'Cooper', 'WA 12345'), o('', '', 'wa12345'), o('Škoda', 'Octavia', ''), o('Škoda', 'Octavia', ''), o('', '', '')])
+  assert.deepEqual(cars.map((c: { car: string }) => c.car), ['MINI Cooper', 'Škoda Octavia'])
 })
