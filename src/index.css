@@ -720,6 +720,9 @@ input:disabled { opacity: 0.6; }
 
 /* --- заказ из файла --- */
 .imp-hint { margin: 0 0 10px; }
+.imp-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.imp-head p { margin: 0; }
+.imp-sort { margin: 8px 0; }
 .imp-files { margin: 8px 0 0; }
 .imp-files li span { overflow-wrap: anywhere; font-size: 14px; }
 .imp-paste { margin-top: 12px; }

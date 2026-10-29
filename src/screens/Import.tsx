@@ -27,6 +27,15 @@ interface Item extends Block {
   include: boolean
 }
 
+type SortBy = 'file' | 'plate' | 'car' | 'client' | 'due'
+const SORTS: SortBy[] = ['file', 'plate', 'car', 'client', 'due']
+const sortKey: Record<Exclude<SortBy, 'file'>, (p: Partial<Order>) => string> = {
+  plate: (p) => p.plate ?? '',
+  car: (p) => [p.make, p.model].filter(Boolean).join(' '),
+  client: (p) => p.client ?? '',
+  due: (p) => p.dueDate ?? '',
+}
+
 // ограничение сервера на текст для разбора
 const AI_MAX = 4000
 
@@ -39,6 +48,7 @@ export default function Import({ onCreate }: Props) {
   const [useAi, setUseAi] = useState(canRecognize)
   const [busy, setBusy] = useState(false)
   const [items, setItems] = useState<Item[] | null>(null)
+  const [sortBy, setSortBy] = useState<SortBy>('file')
   const [notes, setNotes] = useState<string[]>([])
 
   const parse = async () => {
@@ -119,11 +129,24 @@ export default function Import({ onCreate }: Props) {
   }
 
   const chosen = items?.filter((i) => i.include) ?? []
+  // n — место в файле: по нему отмечаем и возвращаем исходный порядок
+  const shown = (items ?? []).map((it, n) => ({ it, n }))
+  if (sortBy !== 'file') {
+    const key = sortKey[sortBy]
+    // пустые — в конце
+    shown.sort((a, b) => {
+      const x = key(a.it.patch)
+      const y = key(b.it.patch)
+      return !x !== !y ? (x ? -1 : 1) : x.localeCompare(y, locale, { numeric: true }) || a.n - b.n
+    })
+  }
   const create = () => {
     onCreate(chosen.map((i) => ({ ...newOrder(), ...i.patch })))
     reset()
   }
 
+  const allOn = !!items?.length && items.every((i) => i.include)
+  const setAll = (include: boolean) => setItems((list) => list && list.map((x) => ({ ...x, include })))
   const toggle = (n: number) => setItems((list) => list && list.map((x, i) => (i === n ? { ...x, include: !x.include } : x)))
 
   return (
@@ -178,8 +201,27 @@ export default function Import({ onCreate }: Props) {
             {notes.map((n, i) => (
               <p key={i} className="hint warn-text">⚠ {n}</p>
             ))}
-            <p className="muted">{items.length ? t('imp.found', { n: items.length }) : t('imp.empty')}</p>
-            {items.map((it, n) => {
+            <div className="imp-head">
+              <p className="muted">{items.length ? t('imp.found', { n: items.length }) : t('imp.empty')}</p>
+              {items.length > 1 && (
+                <button className="btn small" onClick={() => setAll(!allOn)}>
+                  {allOn ? '☐ ' + t('imp.none') : '☑ ' + t('imp.all')}
+                </button>
+              )}
+            </div>
+            {items.length > 1 && (
+              <label className="field imp-sort">
+                <span className="field-label">{t('imp.sort')}</span>
+                <select value={sortBy} onChange={(e) => setSortBy(e.target.value as SortBy)}>
+                  {SORTS.map((s) => (
+                    <option key={s} value={s}>
+                      {t(`imp.sort.${s}`)}
+                    </option>
+                  ))}
+                </select>
+              </label>
+            )}
+            {shown.map(({ it, n }) => {
               const p = it.patch
               const car = [p.make, p.model, p.year].filter(Boolean).join(' ')
               const works = Object.values(p.elements ?? {}).filter((v) => v.works.length).length
