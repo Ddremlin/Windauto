@@ -132,3 +132,87 @@ test('напоминания: свои, невыполненные, по вре�
   assert.equal(notifId('abc'), notifId('abc'))
   assert.ok(notifId('abc') > 0 && notifId('abc') <= 0x7fffffff)
 })
+
+test('таблица .ods: строка заголовков, по строке на заказ', async () => {
+  const { readFile } = await import('node:fs/promises')
+  const { readOds, sheetBlocks } = await import('../src/sheetImport.ts')
+  const f = await readFile(new URL('./fixtures/orders.ods', import.meta.url))
+  const sheets = await readOds(f.buffer.slice(f.byteOffset, f.byteOffset + f.byteLength))
+  const { blocks, skipped } = sheetBlocks(sheets[0])
+  assert.equal(skipped, 0)
+  assert.deepEqual(blocks.map((b) => b.row), [2, 3, 5])
+  const [a, b, c] = blocks.map((b) => parseOrderText(b.text))
+  assert.equal(a.plate, 'WA 12345')
+  assert.equal(a.make, 'Škoda')
+  assert.equal(a.client, 'Jan Kowalski')
+  assert.equal(a.phone, '600100200')
+  assert.equal(a.dueDate, '2026-11-05')
+  // незнакомый столбец — с названием в примечания, «Lp.» пропущен
+  assert.equal(a.notes, 'zderzak przedni\nrysa na drzwiach\nKwota: 1200')
+  assert.equal(b.client, 'Anna & Co')
+  // LibreOffice сам сделал из телефона число — остаются цифры
+  assert.equal(b.phone, '48601200300')
+  assert.equal(c.model, 'Cooper')
+  assert.equal(c.notes, 'lakierowanie maski')
+})
+
+test('таблица .ods: повторы клеток и строк, даты, длинные числа, примечания к клетке', async () => {
+  const { parseOdsXml } = await import('../src/sheetImport.ts')
+  const cell = (v: string, a = '') => `<table:table-cell${a}><text:p>${v}</text:p></table:table-cell>`
+  const xml =
+    `<table:table table:name="L1"><table:table-row>${cell('A')}<table:table-cell table:number-columns-repeated="3"/>${cell('B', ' table:number-columns-repeated="2"')}` +
+    `<table:table-cell table:number-columns-repeated="16000"/></table:table-row>` +
+    `<table:table-row table:number-rows-repeated="1048000"><table:table-cell table:number-columns-repeated="1024"/></table:table-row>` +
+    `<table:table-row>${cell('5 lis 2026', ' office:value-type="date" office:date-value="2026-11-05T00:00:00"')}${cell('6,01E+08', ' office:value-type="float" office:value="601200300"')}` +
+    `<table:table-cell><office:annotation><text:p>не данные</text:p></office:annotation><text:p>x<text:s text:c="2"/>y &amp; z</text:p></table:table-cell></table:table-row></table:table>`
+  const [s] = parseOdsXml(xml)
+  assert.equal(s.name, 'L1')
+  assert.deepEqual(s.rows[0].cells, ['A', '', '', '', 'B', 'B'])
+  assert.deepEqual(s.rows[1].cells, [])
+  assert.equal(s.rows[2].n, 1048002)
+  assert.deepEqual(s.rows[2].cells, ['2026-11-05', '601200300', 'x  y & z'])
+})
+
+test('таблица .csv: кавычки, разделитель; без заголовков — как текст', async () => {
+  const { csvSheet, sheetBlocks } = await import('../src/sheetImport.ts')
+  const { blocks } = sheetBlocks(csvSheet('Госномер;Авто;Клиент;Телефон\r\nKR4567A;"BMW X5";"Иван ""Ваня""";600-100-200\r\n'))
+  const p = parseOrderText(blocks[0].text)
+  assert.equal(p.plate, 'KR 4567A')
+  assert.equal(p.make, 'BMW')
+  assert.equal(p.model, 'X5')
+  assert.equal(p.client, 'Иван "Ваня"')
+  // «подпись;значение» столбиком и «---» между заказами
+  const t = sheetBlocks(csvSheet('Marka;Audi\nModel;A4\n---\nMarka;VW'))
+  assert.equal(t.blocks.length, 2)
+  assert.equal(t.blocks[0].table, false)
+  assert.equal(parseOrderText(t.blocks[0].text).model, 'A4')
+})
+
+test('таблица .xlsx: тот же файл из Excel-формата', async () => {
+  const { readFile } = await import('node:fs/promises')
+  const { readSheets, sheetBlocks } = await import('../src/sheetImport.ts')
+  const f = await readFile(new URL('./fixtures/orders.xlsx', import.meta.url))
+  const sheets = await readSheets('Zlecenia.XLSX', f.buffer.slice(f.byteOffset, f.byteOffset + f.byteLength), decodeText)
+  const { blocks } = sheetBlocks(sheets[0])
+  assert.deepEqual(blocks.map((b) => b.row), [2, 3, 5])
+  const [a, , c] = blocks.map((b) => parseOrderText(b.text))
+  assert.equal(a.plate, 'WA 12345')
+  assert.equal(a.make, 'Škoda')
+  assert.equal(a.phone, '600100200')
+  assert.equal(a.dueDate, '2026-11-05')
+  assert.equal(a.notes, 'zderzak przedni\nrysa na drzwiach\nKwota: 1200')
+  assert.equal(c.model, 'Cooper')
+})
+
+test('таблица .xlsx: общие и встроенные строки, даты по стилю, пропуски', async () => {
+  const { parseXlsxSheet } = await import('../src/sheetImport.ts')
+  const xml =
+    '<x:worksheet><x:sheetData><x:row r="1"><x:c r="A1" t="s"><x:v>0</x:v></x:c><x:c r="C1" t="inlineStr"><x:is><x:r><x:t>a &amp; </x:t></x:r><x:r><x:t>b</x:t></x:r></x:is></x:c></x:row>' +
+    '<x:row r="4"><x:c r="B4" s="1"><x:v>46331</x:v></x:c><x:c r="C4"><x:v>6.012003E8</x:v></x:c><x:c r="D4" s="2"/></x:row></x:sheetData></x:worksheet>'
+  const s = parseXlsxSheet('L', xml, ['Marka'], new Set([1]))
+  assert.deepEqual(s.rows.map((r) => [r.n, r.cells]), [
+    [1, ['Marka', '', 'a & b']],
+    [2, []],
+    [4, ['', '2026-11-05', '601200300']],
+  ])
+})

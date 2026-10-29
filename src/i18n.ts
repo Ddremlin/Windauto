@@ -540,7 +540,9 @@ const ru: Dict = {
   'cal.legend': 'Цвет — статус заказа. Нажмите на статус, чтобы скрыть его.',
 
   // заказ из файла
-  'imp.hint': 'Выберите текстовые файлы (.txt) или вставьте текст. Один файл — один заказ; несколько заказов в одном файле разделите строкой «---». Понимаются строки вида «Марка: Audi», «Nr rej.: WA 12345», «Телефон: …».',
+  'imp.hint': 'Выберите текстовые файлы (.txt) или вставьте текст. Один файл — один заказ; несколько заказов в одном файле разделите строкой «---». Понимаются строки вида «Марка: Audi», «Nr rej.: WA 12345», «Телефон: …». Таблица (.xlsx, .ods, .csv): первая строка — названия столбцов (Номер, Марка, Модель, Клиент, Телефон, Срок…), каждая строка ниже — отдельный заказ.',
+  'imp.row': 'строка {n}',
+  'imp.tooMany': '{name}: взяты первые {n} строк, ещё {skipped} не вошли — разбейте таблицу',
   'imp.files': 'Выбрать файлы…',
   'imp.paste': 'Или вставьте текст',
   'imp.text': 'Текст',
@@ -1100,7 +1102,9 @@ const pl: Dict = {
   'cal.legend': 'Kolor — status zlecenia. Dotknij statusu, aby go ukryć.',
 
   // zlecenie z pliku
-  'imp.hint': 'Wybierz pliki tekstowe (.txt) lub wklej tekst. Jeden plik — jedno zlecenie; kilka zleceń w jednym pliku oddziel linią «---». Rozpoznawane są linie typu «Marka: Audi», «Nr rej.: WA 12345», «Telefon: …».',
+  'imp.hint': 'Wybierz pliki tekstowe (.txt) lub wklej tekst. Jeden plik — jedno zlecenie; kilka zleceń w jednym pliku oddziel linią «---». Rozpoznawane są linie typu «Marka: Audi», «Nr rej.: WA 12345», «Telefon: …». Arkusz (.xlsx, .ods, .csv): pierwszy wiersz — nazwy kolumn (Nr rej., Marka, Model, Klient, Telefon, Termin…), każdy wiersz poniżej — osobne zlecenie.',
+  'imp.row': 'wiersz {n}',
+  'imp.tooMany': '{name}: wzięto pierwsze {n} wierszy, {skipped} pominięto — podziel arkusz',
   'imp.files': 'Wybierz pliki…',
   'imp.paste': 'Lub wklej tekst',
   'imp.text': 'Tekst',

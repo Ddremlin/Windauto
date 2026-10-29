@@ -5,6 +5,7 @@ import TopBar from '../components/TopBar'
 import { useSettings } from '../settingsHooks'
 import { newOrder } from '../storage'
 import { canRecognize, parseVoice } from '../sync'
+import { isSheetFile, readSheets, sheetBlocks } from '../sheetImport'
 import { decodeText, parseOrderText, parsedToPatch, splitOrders } from '../textImport'
 import type { Order } from '../types'
 import { applyVoice } from '../voice'
@@ -14,9 +15,14 @@ interface Props {
   onCreate: (orders: Order[]) => void
 }
 
-interface Item {
+interface Block {
   source: string
   text: string
+  /** строка таблицы с заголовками — поля уже по столбцам */
+  table?: boolean
+}
+
+interface Item extends Block {
   patch: Partial<Order>
   include: boolean
 }
@@ -38,10 +44,32 @@ export default function Import({ onCreate }: Props) {
   const parse = async () => {
     setBusy(true)
     const msgs: string[] = []
-    const blocks: { source: string; text: string }[] = []
+    const blocks: Block[] = []
     for (const f of files) {
       try {
-        const parts = splitOrders(decodeText(await f.arrayBuffer()))
+        const buf = await f.arrayBuffer()
+        if (isSheetFile(f.name)) {
+          const sheets = await readSheets(f.name, buf, decodeText)
+          for (const sh of sheets) {
+            const { blocks: list, skipped } = sheetBlocks(sh)
+            if (skipped) msgs.push(t('imp.tooMany', { name: sh.name || f.name, n: list.length, skipped }))
+            list.forEach((b, i) =>
+              blocks.push({
+                source: [
+                  f.name,
+                  sheets.length > 1 && sh.name,
+                  b.row ? t('imp.row', { n: b.row }) : list.length > 1 && String(i + 1),
+                ]
+                  .filter(Boolean)
+                  .join(' · '),
+                text: b.text,
+                table: b.table,
+              }),
+            )
+          }
+          continue
+        }
+        const parts = splitOrders(decodeText(buf))
         parts.forEach((text, i) => blocks.push({ source: parts.length > 1 ? `${f.name} · ${i + 1}` : f.name, text }))
       } catch {
         msgs.push(t('imp.readFail', { name: f.name }))
@@ -62,7 +90,8 @@ export default function Import({ onCreate }: Props) {
     const out: Item[] = []
     for (const b of blocks) {
       let patch = parsedToPatch(parseOrderText(b.text))
-      if (ai) {
+      // строка таблицы уже разложена по столбцам — сотни запросов к ИИ ни к чему
+      if (ai && !b.table) {
         if (b.text.length > AI_MAX && !msgs.includes(t('imp.tooLong'))) msgs.push(t('imp.tooLong'))
         try {
           const r = await parseVoice(b.text.slice(0, AI_MAX), lists)
@@ -110,7 +139,7 @@ export default function Import({ onCreate }: Props) {
             <input
               ref={fileRef}
               type="file"
-              accept=".txt,.text,.md,.csv,text/plain"
+              accept=".txt,.text,.md,.csv,.tsv,.ods,.xlsx,.xlsm,text/plain,text/csv,application/vnd.oasis.opendocument.spreadsheet,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
               multiple
               hidden
               onChange={(e) => setFiles([...(e.target.files ?? [])])}

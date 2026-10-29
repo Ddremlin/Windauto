@@ -21,6 +21,8 @@ export type TextField =
   | 'assignee'
   | 'dueDate'
   | 'notes'
+  // «Авто: Audi A4» — марка и модель вместе
+  | 'car'
 
 export type ParsedText = Partial<Record<TextField, string>>
 
@@ -40,12 +42,13 @@ const LABELS: [TextField, string[]][] = [
   ['email', ['email', 'e-mail', 'почта', 'эл почта', 'mail']],
   ['assignee', ['ответственный', 'мастер', 'сотрудник', 'mechanik', 'pracownik', 'odpowiedzialny', 'lakiernik']],
   ['dueDate', ['срок', 'срок готовности', 'готовность', 'дата выдачи', 'termin', 'termin realizacji', 'termin odbioru', 'due', 'deadline']],
+  ['car', ['авто', 'автомобиль', 'машина', 'samochód', 'pojazd', 'auto', 'car', 'vehicle']],
   ['notes', ['примечания', 'примечание', 'заметки', 'комментарий', 'работы', 'uwagi', 'notatki', 'opis', 'zakres prac', 'notes']],
 ]
 
-const LABEL_OF = new Map(LABELS.flatMap(([f, list]) => list.map((l) => [l, f] as const)))
+export const LABEL_OF = new Map(LABELS.flatMap(([f, list]) => list.map((l) => [l, f] as const)))
 
-const cleanLabel = (s: string) =>
+export const cleanLabel = (s: string) =>
   s
     .toLowerCase()
     .replace(/[.:№#]/g, ' ')
@@ -154,6 +157,12 @@ export function parseOrderText(text: string): ParsedText {
   const leftovers = rest.filter((s) => !(out.email && s === out.email) && !(out.phone && s === out.phone) && !(out.vin && normalizeVin(s) === out.vin))
   if (leftovers.length) out.notes = [out.notes, ...leftovers].filter(Boolean).join('\n')
 
+  if (out.car) {
+    const [make, ...model] = out.car.split(/\s+/)
+    if (!out.make) out.make = make
+    if (!out.model && model.length) out.model = model.join(' ')
+    delete out.car
+  }
   if (out.plate) out.plate = formatPlate(out.plate, out.plateCountry || 'PL')
   return out
 }
