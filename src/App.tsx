@@ -1,5 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import AppUpdate from './components/AppUpdate'
+import { RemindersBanner } from './components/Reminders'
+import { useReminderService } from './components/useReminderService'
 import Calc from './screens/Calc'
 import Calendar from './screens/Calendar'
 import { ClientList, ClientPage } from './screens/Clients'
@@ -39,6 +41,8 @@ export default function App() {
   const { orders, upsert, remove, replaceAll } = useOrders()
   const [draft, setDraft] = useState<Order | null>(() => (readRoute() === '/new' ? newOrder() : null))
   const [draftRoute, setDraftRoute] = useState(readRoute)
+  const openOrder = useCallback((id: string) => go(`/order/${id}`), [])
+  useReminderService(orders, openOrder)
 
   // Черновик создаём только при входе на #/new, а не пока маршрут ещё не сменился после «назад».
   if (route !== draftRoute) {
@@ -131,6 +135,7 @@ export default function App() {
       <AppUpdate />
       <OrderList
       orders={orders}
+      banner={<RemindersBanner orders={orders} onSave={upsert} onOpen={openOrder} />}
       onOpen={(id) => go(`/order/${id}`)}
       onCreate={() => {
         setDraft(newOrder())

@@ -93,6 +93,19 @@ export interface ClientRating {
   by?: string
 }
 
+// напоминание позвонить клиенту: за before минут до at
+export interface Reminder {
+  id: string
+  // когда звонить, мс
+  at: number
+  // за сколько минут напомнить (0 — в само время)
+  before: number
+  note: string
+  // логин сотрудника, которому напоминать; пусто — тому телефону, где создано без общей базы
+  user: string
+  done?: boolean
+}
+
 export interface Order {
   id: string
   // номер заказа «2026/0142»; пусто — ещё не выдан (выдаёт сервер)
@@ -126,6 +139,7 @@ export interface Order {
   signatures: Partial<Record<SignatureKind, Signature>>
   walkaround?: VideoRef
   clientRating?: ClientRating
+  reminders?: Reminder[]
   elements: Record<string, ElementWork>
   // время последнего изменения каждого поля (для слияния правок с разных телефонов):
   // ключ — имя поля или «el:<id элемента>»

@@ -1,4 +1,4 @@
-import { useMemo, useState } from 'react'
+import { useMemo, useState, type ReactNode } from 'react'
 import { orderNo } from '../docNumber'
 import { Stars } from '../components/ClientRating'
 import { PlateBadge } from '../components/Plate'
@@ -30,9 +30,11 @@ interface Props {
   orders: Order[]
   onOpen: (id: string) => void
   onCreate: () => void
+  // напоминания «позвонить» над списком
+  banner?: ReactNode
 }
 
-export default function OrderList({ orders, onOpen, onCreate }: Props) {
+export default function OrderList({ orders, onOpen, onCreate, banner }: Props) {
   const { t, locale, settings } = useSettings()
   const [q, setQ] = useState('')
   const [filter, setFilterState] = useState<Filter>(loadFilter)
@@ -66,6 +68,7 @@ export default function OrderList({ orders, onOpen, onCreate }: Props) {
   return (
     <div className="screen">
       <TopBar current="orders" />
+      {banner}
 
       <div className="search">
         <input type="search" placeholder={t('list.search')} value={q} onChange={(e) => setQ(e.target.value)} />

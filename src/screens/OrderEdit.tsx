@@ -4,6 +4,7 @@ import { MAKES, canonMake, canonModel, isKnownModel, modelsOf } from '../cars'
 import AcceptanceNo from '../components/AcceptanceNo'
 import BodyMap, { DAMAGE_COLOR } from '../components/BodyMap'
 import { ClientRatingBlock, ReviewPanel, Stars } from '../components/ClientRating'
+import { RemindersBlock } from '../components/Reminders'
 import { clientKey, clientPath, isRisky, profileOf } from '../clients'
 import Combo from '../components/Combo'
 import ElementSheet from '../components/ElementSheet'
@@ -347,6 +348,8 @@ export default function OrderEdit({ initial, onSave, onDelete, onBack }: Props) 
             by={sync.user?.name || sync.user?.login || ''}
             onChange={(clientRating) => update({ clientRating })}
           />
+          <span className="field-label reminders-label">{t('rem.title')}</span>
+          <RemindersBlock order={order} onChange={(reminders) => update({ reminders })} />
           <ConsentBlock consent={order.consent} onChange={(consent) => update({ consent })} />
         </section>
 

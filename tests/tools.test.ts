@@ -116,3 +116,19 @@ test('клиенты: машины без повторов', async () => {
   const cars = carsOf([o('MINI', 'Cooper', 'WA 12345'), o('', '', 'wa12345'), o('Škoda', 'Octavia', ''), o('Škoda', 'Octavia', ''), o('', '', '')])
   assert.deepEqual(cars.map((c: { car: string }) => c.car), ['MINI Cooper', 'Škoda Octavia'])
 })
+
+test('напоминания: свои, невыполненные, по времени напоминания', async () => {
+  const { beforeParts, myReminders, notifId, remindAt } = await import('../src/reminders.ts')
+  const r = (id: string, at: number, before: number, user = '', done = false) => ({ id, at, before, note: '', user, done })
+  const orders = [
+    { id: 'a', reminders: [r('1', 10_000_000, 60, 'jan'), r('2', 9_000_000, 0, 'anna'), r('3', 5_000_000, 0, 'jan', true)] },
+    { id: 'b', reminders: [r('4', 8_000_000, 1440)] },
+  ] as never
+  assert.deepEqual(myReminders(orders, 'jan').map((d: { r: { id: string } }) => d.r.id), ['4', '1'])
+  assert.equal(remindAt(r('x', 10_000_000, 60)), 10_000_000 - 3_600_000)
+  assert.deepEqual(beforeParts(2880), { n: 2, unit: 'd' })
+  assert.deepEqual(beforeParts(120), { n: 2, unit: 'h' })
+  assert.deepEqual(beforeParts(15), { n: 15, unit: 'min' })
+  assert.equal(notifId('abc'), notifId('abc'))
+  assert.ok(notifId('abc') > 0 && notifId('abc') <= 0x7fffffff)
+})

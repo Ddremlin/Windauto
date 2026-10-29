@@ -1,7 +1,7 @@
 {
   "name": "windauto",
   "private": true,
-  "version": "1.9.2",
+  "version": "1.10.0",
   "type": "module",
   "scripts": {
     "dev": "vite",
@@ -18,6 +18,7 @@
     "@capacitor/app": "^8.1.2",
     "@capacitor/core": "^8.5.3",
     "@capacitor/filesystem": "^8.1.5",
+    "@capacitor/local-notifications": "^8.3.1",
     "@capacitor/share": "^8.0.3",
     "html2canvas-pro": "^1.6.7",
     "jspdf": "^4.2.1",
