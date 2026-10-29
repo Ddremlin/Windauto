@@ -69,7 +69,7 @@ export function ClientList({ orders, onOpenClient }: ListProps) {
           return (
             <button key={c.key} className={'card client-card' + (risky ? ' risky' : '')} onClick={() => onOpenClient(c.key)}>
               <div className="card-row">
-                <b className="client-name">{risky && '⚠ '}{c.name || c.phone}</b>
+                <b className="client-name">{risky && '⚠ '}{c.name || c.phone || t('cl.noName')}</b>
                 {c.profile.rated ? (
                   <span className="client-stars">
                     <Stars value={c.profile.avg} size="sm" /> {avgText(c.profile.avg)}
@@ -151,7 +151,7 @@ export function ClientPage({ client, onBack, onOpen, onSave, onNewOrder }: PageP
     <div className="screen">
       <header className="topbar">
         <button className="icon-btn" aria-label={t('app.back')} onClick={onBack}>←</button>
-        <h1>{client.name || client.phone}</h1>
+        <h1>{client.name || client.phone || t('cl.noName')}</h1>
         <span className="topbar-spacer" />
       </header>
       <main className="content">

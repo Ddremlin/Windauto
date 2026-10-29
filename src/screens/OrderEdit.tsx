@@ -211,7 +211,7 @@ export default function OrderEdit({ initial, onSave, onDelete, onBack }: Props) 
             <button className={'order-client' + (isRisky(cprof) ? ' risky' : '')} onClick={() => (location.hash = clientPath(ckey))}>
               <span>
                 {isRisky(cprof) ? '⚠ ' : '👤 '}
-                {order.client || order.phone}
+                {order.client || order.phone || t('cl.noName')}
                 {cprof.orders > 1 && <small className="muted"> · {t('cl.orders', { n: cprof.orders })}</small>}
               </span>
               {cprof.rated ? (

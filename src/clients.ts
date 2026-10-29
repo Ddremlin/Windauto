@@ -2,12 +2,17 @@
 // По ним — сколько раз приезжал и внутренняя оценка мастеров.
 import type { ClientRating, Order } from './types'
 
-/** Ключ клиента: последние 9 цифр телефона, иначе имя без регистра; пусто — не определить */
-export function clientKey(o: Pick<Order, 'phone' | 'client'>): string {
+/**
+ * Ключ клиента: последние 9 цифр телефона, иначе имя без регистра,
+ * а если не записали ни того, ни другого — номер машины. Пусто — не определить.
+ */
+export function clientKey(o: Pick<Order, 'phone' | 'client'> & Partial<Pick<Order, 'plate'>>): string {
   const d = o.phone.replace(/\D/g, '')
   if (d.length >= 7) return 'tel:' + d.slice(-9)
   const name = o.client.trim().toLowerCase().replace(/\s+/g, ' ')
-  return name.length >= 3 ? 'name:' + name : ''
+  if (name.length >= 2) return 'name:' + name
+  const plate = (o.plate ?? '').replace(/[^0-9A-Za-z]/g, '').toUpperCase()
+  return plate.length >= 3 ? 'car:' + plate : ''
 }
 
 export interface ClientProfile {

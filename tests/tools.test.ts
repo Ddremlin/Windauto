@@ -87,7 +87,9 @@ test('клиенты: один телефон в разной записи — �
     ({ id, phone, client, clientRating: stars ? { stars, note: `n${id}`, at } : undefined }) as never
   assert.equal(clientKey(o('1', '+48 600-100-200', '')), clientKey(o('2', '600100200', 'Jan')))
   assert.equal(clientKey(o('3', '', '  Jan  Kowalski ')), 'name:jan kowalski')
-  assert.equal(clientKey(o('4', '', 'Ja')), '')
+  assert.equal(clientKey(o('4', '', 'J')), '')
+  // ни имени, ни телефона — по номеру машины
+  assert.equal(clientKey({ phone: '', client: '', plate: 'W8 586E' }), 'car:W8586E')
   const p = clientProfiles([o('1', '600100200', 'Jan', 1, 5), o('2', '+48600100200', 'Jan', 2, 9), o('3', '600100200', 'Jan')])
   const jan = p.get('tel:600100200')!
   assert.equal(jan.orders, 3)

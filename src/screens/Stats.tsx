@@ -283,7 +283,7 @@ export default function Stats({ orders, onOpen }: Props) {
               {risky.map(({ o, avg, note }) => (
                 <li key={o.id} className="review-item">
                   <button className="link-btn" onClick={() => onOpen(o.id)}>
-                    {o.client || o.phone}
+                    {o.client || o.phone || t('cl.noName')}
                     {o.client && o.phone && <span className="muted"> · {o.phone}</span>}
                   </button>
                   <span className="overdue">{String(avg).replace('.', ',')}★</span>
