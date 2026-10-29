@@ -130,6 +130,12 @@ const ru: Dict = {
 
   // настройки
   'set.title': 'Настройки',
+  'menu.open': 'Меню',
+  'menu.home': 'На главный экран',
+  'menu.orders': 'Заказы',
+  'menu.sync': 'Синхронизация',
+  'menu.syncOff': 'Не подключено',
+  'menu.syncError': 'Ошибка — откройте раздел',
   'set.lang': 'Язык интерфейса',
   'set.docLang': 'Язык документов для клиента',
   'set.shop': 'Данные сервиса',
@@ -594,6 +600,12 @@ const pl: Dict = {
   'v.vinOk': '17 znaków, cyfra kontrolna poprawna',
 
   'set.title': 'Ustawienia',
+  'menu.open': 'Menu',
+  'menu.home': 'Ekran główny',
+  'menu.orders': 'Zlecenia',
+  'menu.sync': 'Synchronizacja',
+  'menu.syncOff': 'Nie połączono',
+  'menu.syncError': 'Błąd — otwórz sekcję',
   'set.lang': 'Język interfejsu',
   'set.docLang': 'Język dokumentów dla klienta',
   'set.shop': 'Dane warsztatu',

@@ -4,10 +4,11 @@ import OrderEdit from './screens/OrderEdit'
 import OrderList from './screens/OrderList'
 import Settings from './screens/Settings'
 import Stats from './screens/Stats'
+import Sync from './screens/Sync'
 import { newOrder, useOrders } from './storage'
 import type { Order } from './types'
 
-// Простая навигация через hash: #/ — список, #/order/<id> — заказ, #/new — новый, #/settings, #/stats
+// Простая навигация через hash: #/ — список, #/order/<id> — заказ, #/new — новый, #/settings, #/stats, #/sync
 function useRoute() {
   const [hash, setHash] = useState(location.hash)
   useEffect(() => {
@@ -61,9 +62,11 @@ export default function App() {
     )
   }
 
-  if (route === '/stats') return <Stats orders={orders} onOpen={(id) => go(`/order/${id}`)} onBack={() => go('/')} />
+  if (route === '/stats') return <Stats orders={orders} onOpen={(id) => go(`/order/${id}`)} />
 
-  if (route === '/settings') return <Settings orders={orders} onImport={replaceAll} onBack={() => go('/')} />
+  if (route === '/settings') return <Settings orders={orders} onImport={replaceAll} />
+
+  if (route === '/sync') return <Sync />
 
   const m = route.match(/^\/order\/(.+)$/)
   if (m) {
@@ -93,8 +96,6 @@ export default function App() {
         setDraft(newOrder())
         go('/new')
       }}
-      onSettings={() => go('/settings')}
-      onStats={() => go('/stats')}
       />
     </>
   )

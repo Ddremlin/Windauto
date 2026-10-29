@@ -1,8 +1,8 @@
 import { useMemo, useState } from 'react'
 import { orderNo } from '../docNumber'
 import { PlateBadge } from '../components/Plate'
+import TopBar from '../components/TopBar'
 import { useSettings } from '../settingsHooks'
-import { syncNow, useSyncStatus } from '../sync'
 import type { Order, OrderStatus } from '../types'
 import { formatPlate, normalizePlate } from '../validate'
 import { ACTIVE_STATUSES, STATUSES, WORK_BY_ID, formatMoney, orderTotals } from '../works'
@@ -27,11 +27,9 @@ interface Props {
   orders: Order[]
   onOpen: (id: string) => void
   onCreate: () => void
-  onSettings: () => void
-  onStats: () => void
 }
 
-export default function OrderList({ orders, onOpen, onCreate, onSettings, onStats }: Props) {
+export default function OrderList({ orders, onOpen, onCreate }: Props) {
   const { t, locale, settings } = useSettings()
   const [q, setQ] = useState('')
   const [filter, setFilterState] = useState<Filter>(loadFilter)
@@ -43,8 +41,6 @@ export default function OrderList({ orders, onOpen, onCreate, onSettings, onStat
       /* только на эту сессию */
     }
   }
-  const sync = useSyncStatus()
-  const syncIcon = sync.syncing ? '⟳' : sync.error || !sync.online ? '⚠' : sync.pending ? '↑' : '✓'
 
   const filtered = useMemo(() => {
     const nq = normalizePlate(q)
@@ -63,21 +59,7 @@ export default function OrderList({ orders, onOpen, onCreate, onSettings, onStat
 
   return (
     <div className="screen">
-      <header className="topbar">
-        <h1 className="brand">Windauto</h1>
-        {sync.connected && (
-          <button
-            className={'sync-badge' + (sync.error || !sync.online ? ' warn' : '') + (sync.syncing ? ' spin' : '')}
-            onClick={() => (sync.authError ? onSettings() : syncNow())}
-            title={sync.error ?? ''}
-            aria-label={t('sync.now')}
-          >
-            ☁ {syncIcon}
-          </button>
-        )}
-        <button className="icon-btn" aria-label={t('stats.title')} onClick={onStats}>📊</button>
-        <button className="icon-btn" aria-label={t('app.settings')} onClick={onSettings}>⚙</button>
-      </header>
+      <TopBar current="orders" />
 
       <div className="search">
         <input type="search" placeholder={t('list.search')} value={q} onChange={(e) => setQ(e.target.value)} />

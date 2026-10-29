@@ -80,6 +80,46 @@ textarea { resize: vertical; }
 }
 .topbar h1 { flex: 1; margin: 0; font-size: 19px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .brand { letter-spacing: 0.02em; }
+
+/* шапка разделов: меню слева, Windauto по центру — на главный экран */
+.topbar.centered { display: grid; grid-template-columns: 40px 1fr 40px; }
+.topbar-spacer { width: 40px; }
+.brand-btn {
+  justify-self: center; border: 0; background: transparent; color: var(--text);
+  font-size: 19px; font-weight: 700; letter-spacing: 0.02em; padding: 6px 12px; border-radius: 10px;
+}
+.brand-btn:active { background: var(--line); }
+.menu-btn { position: relative; color: var(--text); }
+.menu-dot { position: absolute; top: 7px; right: 6px; width: 9px; height: 9px; border-radius: 50%; background: var(--warn); }
+
+/* шторка с разделами, выезжает слева */
+.drawer-backdrop {
+  position: fixed; inset: 0; z-index: 30; background: rgb(0 0 0 / 0.55);
+  opacity: 0; pointer-events: none; transition: opacity 0.2s;
+}
+.drawer-backdrop.open { opacity: 1; pointer-events: auto; }
+.drawer {
+  position: fixed; top: 0; bottom: 0; left: 0; z-index: 31; width: min(300px, 82vw);
+  display: flex; flex-direction: column; gap: 2px;
+  padding: calc(12px + env(safe-area-inset-top)) 10px calc(12px + env(safe-area-inset-bottom));
+  background: var(--panel); box-shadow: 4px 0 24px rgb(0 0 0 / 0.2);
+  transform: translateX(-105%); transition: transform 0.22s ease-out; overflow-y: auto;
+}
+.drawer.open { transform: none; }
+.drawer-head { font-size: 20px; font-weight: 700; padding: 8px 12px 14px; letter-spacing: 0.02em; }
+.drawer-row { display: flex; align-items: center; gap: 6px; border-radius: 10px; }
+.drawer-row.active { background: color-mix(in srgb, var(--accent) 12%, transparent); }
+.drawer-item {
+  flex: 1; display: flex; align-items: center; gap: 14px; min-width: 0; text-align: left;
+  border: 0; background: transparent; color: var(--text); padding: 12px; border-radius: 10px; font-size: 16px;
+}
+.drawer-row.active .drawer-item { color: var(--accent); font-weight: 600; }
+.drawer-icon { font-size: 20px; width: 26px; text-align: center; }
+.drawer-text { display: flex; flex-direction: column; min-width: 0; }
+.drawer-text small { color: var(--muted); font-size: 13px; font-weight: 400; }
+.drawer-text small.warn { color: var(--warn); }
+.drawer-row .sync-badge { margin-right: 8px; }
+.drawer-foot { margin-top: auto; padding: 12px; color: var(--muted); font-size: 13px; }
 .icon-btn {
   width: 40px; height: 40px; border: 0; border-radius: 10px;
   background: transparent; font-size: 22px; line-height: 1;

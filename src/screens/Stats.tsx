@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { getLayout } from '../body'
+import TopBar from '../components/TopBar'
 import { useSettings } from '../settingsHooks'
 import type { Order, WorkId } from '../types'
 import { formatPlate } from '../validate'
@@ -8,7 +9,6 @@ import { ACTIVE_STATUSES, STATUSES, WORKS, WORK_BY_ID, formatMoney, orderTotals 
 interface Props {
   orders: Order[]
   onOpen: (id: string) => void
-  onBack: () => void
 }
 
 type Period = 'month' | 'prev' | 'year' | 'all'
@@ -25,7 +25,7 @@ function range(p: Period, now = new Date()): [number, number] {
 
 // Простая статистика по заказам на этом телефоне (в общей базе — по всем сотрудникам).
 // Суммы — по заказам, принятым в выбранный период, брутто.
-export default function Stats({ orders, onOpen, onBack }: Props) {
+export default function Stats({ orders, onOpen }: Props) {
   const { t, locale, settings } = useSettings()
   const [period, setPeriod] = useState<Period>('month')
 
@@ -90,10 +90,7 @@ export default function Stats({ orders, onOpen, onBack }: Props) {
 
   return (
     <div className="screen">
-      <header className="topbar">
-        <button className="icon-btn" aria-label={t('app.back')} onClick={onBack}>←</button>
-        <h1>{t('stats.title')}</h1>
-      </header>
+      <TopBar current="stats" />
 
       <main className="content">
         <div className="seg-row four" role="radiogroup" aria-label={t('stats.period')}>

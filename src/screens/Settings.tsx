@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type InputHTMLAttributes } from 'react'
-import SyncSection from '../components/SyncSection'
+import TopBar from '../components/TopBar'
 import { LANGS } from '../i18n'
 import { rodoClause } from '../rodo'
 import { useSettings } from '../settingsHooks'
@@ -12,12 +12,11 @@ import { WORKS } from '../works'
 interface Props {
   orders: Order[]
   onImport: (list: Order[]) => void
-  onBack: () => void
 }
 
 const fmtBytes = (n: number) => (n > 1e6 ? `${(n / 1e6).toFixed(1)} MB` : `${Math.round(n / 1e3)} KB`)
 
-export default function Settings({ orders, onImport, onBack }: Props) {
+export default function Settings({ orders, onImport }: Props) {
   const { t, settings, update } = useSettings()
   const fileRef = useRef<HTMLInputElement>(null)
   const [used, setUsed] = useState<string>('')
@@ -58,14 +57,9 @@ export default function Settings({ orders, onImport, onBack }: Props) {
 
   return (
     <div className="screen">
-      <header className="topbar">
-        <button className="icon-btn" aria-label={t('app.back')} onClick={onBack}>←</button>
-        <h1>{t('set.title')}</h1>
-      </header>
+      <TopBar current="settings" />
 
       <main className="content">
-        <SyncSection />
-
         <section className="panel">
           <h2>{t('set.lang')}</h2>
           <div className="seg-row two">
