@@ -529,6 +529,26 @@ const ru: Dict = {
   'imp.works': 'Элементов с работами: {n}',
   'imp.readFail': 'Не удалось прочитать файл {name}',
   'imp.again': 'Начать заново',
+
+  // оценки
+  'rate.title': 'Оценка клиента',
+  'rate.notePh': 'Заметка для своих: платит вовремя, спорит из-за цены…',
+  'rate.hint': 'Видна только сотрудникам сервиса, в документы не попадает. Повторное нажатие на звезду снимает оценку.',
+  'rate.past': 'Уже был у нас: заказов {n}',
+  'rate.risky': 'Клиент с низкой оценкой',
+  'review.title': 'Отзыв клиента',
+  'review.hint': 'Отправьте клиенту ссылку — он оценит ремонт звёздами и напишет отзыв. Ответ появится здесь и в статистике.',
+  'review.ask': 'Попросить клиента оценить ремонт',
+  'review.again': 'Отправить ссылку ещё раз',
+  'review.waiting': 'Ссылка отправлена {d}, клиент ещё не ответил.',
+  'review.check': 'Проверить',
+  'review.other': 'Другое',
+  'review.msg': 'Здравствуйте! {shop} благодарит вас за ремонт {car}. Пожалуйста, оцените нашу работу — это займёт минуту: {url}',
+  'stats.reviews': 'Отзывы клиентов',
+  'stats.reviewsNone': 'Ссылок отправлено: {n}, ответов пока нет',
+  'stats.reviewsCount': 'ответили {n} из {m}',
+  'stats.reviewsLast': 'Последние отзывы',
+  'stats.risky': 'Клиенты с низкой оценкой: {n}',
 }
 
 const pl: Dict = {
@@ -1040,6 +1060,26 @@ const pl: Dict = {
   'imp.works': 'Elementów z pracami: {n}',
   'imp.readFail': 'Nie udało się odczytać pliku {name}',
   'imp.again': 'Zacznij od nowa',
+
+  // oceny
+  'rate.title': 'Ocena klienta',
+  'rate.notePh': 'Notatka wewnętrzna: płaci w terminie, negocjuje cenę…',
+  'rate.hint': 'Widoczna tylko dla pracowników, nie trafia do dokumentów. Ponowne dotknięcie gwiazdki usuwa ocenę.',
+  'rate.past': 'Był już u nas: zleceń {n}',
+  'rate.risky': 'Klient z niską oceną',
+  'review.title': 'Opinia klienta',
+  'review.hint': 'Wyślij klientowi link — oceni naprawę gwiazdkami i napisze opinię. Odpowiedź pojawi się tutaj i w statystykach.',
+  'review.ask': 'Poproś klienta o ocenę naprawy',
+  'review.again': 'Wyślij link ponownie',
+  'review.waiting': 'Link wysłany {d}, klient jeszcze nie odpowiedział.',
+  'review.check': 'Sprawdź',
+  'review.other': 'Inne',
+  'review.msg': 'Dzień dobry! {shop} dziękuje za naprawę {car}. Prosimy o ocenę naszej pracy — zajmie to minutę: {url}',
+  'stats.reviews': 'Opinie klientów',
+  'stats.reviewsNone': 'Wysłano linków: {n}, brak odpowiedzi',
+  'stats.reviewsCount': 'odpowiedziało {n} z {m}',
+  'stats.reviewsLast': 'Ostatnie opinie',
+  'stats.risky': 'Klienci z niską oceną: {n}',
 }
 
 // Элементы кузова: [рус. полное, рус. краткое, пол. полное, пол. краткое]

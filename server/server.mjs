@@ -12,7 +12,7 @@ import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { mailFor, sendMail } from './mail.mjs'
 import { changedKeys, getField, mergeOrders, sameOrder } from './merge.mjs'
-import { legalPage, messagePage, pageText, passwordPage } from './pages.mjs'
+import { legalPage, messagePage, pageText, passwordPage, reviewPage, reviewText } from './pages.mjs'
 
 const PORT = Number(process.env.PORT ?? 8080)
 const DATA = process.env.DATA_DIR ?? './data'
@@ -47,6 +47,10 @@ const AI_PER_DAY = Number(process.env.AI_PER_DAY ?? 500)
 const ORG_QUOTA = Number(process.env.ORG_QUOTA_GB ?? 20) * 1024 ** 3
 // приглашения сотрудникам — письма на чужие адреса: не больше стольких в сутки на компанию
 const INVITES_PER_DAY = Number(process.env.INVITES_PER_DAY ?? 20)
+// ссылка на отзыв действует 90 дней; ссылок в день на компанию
+const REVIEW_DAYS = 90
+const REVIEW_LINKS_PER_DAY = Number(process.env.REVIEW_LINKS_PER_DAY ?? 300)
+const REVIEW_COMMENT_MAX = 1000
 const ai = process.env.ANTHROPIC_API_KEY ? new Anthropic() : null
 
 const log = (...a) => console.log(new Date().toISOString(), ...a)
@@ -73,6 +77,11 @@ const ACCOUNTS_SCHEMA = `
     hash TEXT PRIMARY KEY, user_id TEXT NOT NULL, kind TEXT NOT NULL, expires INTEGER NOT NULL
   );
   CREATE TABLE IF NOT EXISTS limits (key TEXT PRIMARY KEY, count INTEGER NOT NULL, first INTEGER NOT NULL);
+  -- ссылки «оцените ремонт» для клиентов: в базе только хеш, по нему — компания и заказ
+  CREATE TABLE IF NOT EXISTS review_links (
+    hash TEXT PRIMARY KEY, org_id TEXT NOT NULL, order_id TEXT NOT NULL, lang TEXT NOT NULL, created INTEGER NOT NULL
+  );
+  CREATE INDEX IF NOT EXISTS review_links_order ON review_links(org_id, order_id);
 `
 
 const ORG_SCHEMA = `
@@ -91,6 +100,10 @@ const ORG_SCHEMA = `
     user_id TEXT, action TEXT NOT NULL, changes TEXT NOT NULL DEFAULT '[]'
   );
   CREATE INDEX IF NOT EXISTS history_order ON history(order_id, at);
+  -- отзывы клиентов о ремонте: один на заказ, клиент может исправить
+  CREATE TABLE IF NOT EXISTS reviews (
+    order_id TEXT PRIMARY KEY, sent_at INTEGER NOT NULL, stars INTEGER, comment TEXT NOT NULL DEFAULT '', at INTEGER
+  );
 `
 
 // --- переход со старой схемы (одна база data/windauto.db на всех) ---
@@ -275,6 +288,7 @@ const cleanup = () => {
   db.prepare('DELETE FROM limits WHERE first < ?').run(now() - 86400_000)
   db.prepare('DELETE FROM sessions WHERE created < ?').run(now() - SESSION_DAYS * 86400_000)
   db.prepare('DELETE FROM tokens WHERE expires < ?').run(now())
+  db.prepare('DELETE FROM review_links WHERE created < ?').run(now() - REVIEW_DAYS * 86400_000)
 }
 cleanup()
 setInterval(cleanup, 3600_000).unref()
@@ -920,6 +934,35 @@ const routes = {
     }
   },
 
+  // ссылка «оцените ремонт» для клиента; прежняя ссылка по этому заказу перестаёт работать
+  'POST /api/reviews/link': async (req, url) => {
+    const u = auth(req, url)
+    const { orderId, lang } = await readJson(req, MAX_FORM)
+    const row = typeof orderId === 'string' && u.org.db.prepare('SELECT deleted FROM orders WHERE id = ?').get(orderId)
+    // заказ должен уже быть на сервере — иначе клиенту нечего показать
+    if (!row || row.deleted) throw new HttpError(404, 'Заказ ещё не на сервере — дождитесь синхронизации', 'no_order')
+    rateLimit('review:' + u.orgId, REVIEW_LINKS_PER_DAY, 86400_000)
+    const token = randomBytes(18).toString('base64url')
+    db.prepare('DELETE FROM review_links WHERE org_id = ? AND order_id = ?').run(u.orgId, orderId)
+    db.prepare('INSERT INTO review_links (hash, org_id, order_id, lang, created) VALUES (?, ?, ?, ?, ?)').run(
+      sha(token), u.orgId, orderId, lang === 'ru' ? 'ru' : 'pl', now(),
+    )
+    u.org.db
+      .prepare('INSERT INTO reviews (order_id, sent_at) VALUES (?, ?) ON CONFLICT(order_id) DO UPDATE SET sent_at = excluded.sent_at')
+      .run(orderId, now())
+    return { url: `${baseUrl(req)}/r/${token}` }
+  },
+
+  // отзывы клиентов компании
+  'GET /api/reviews': (req, url) => {
+    const u = auth(req, url)
+    const reviews = u.org.db
+      .prepare('SELECT order_id, sent_at, stars, comment, at FROM reviews')
+      .all()
+      .map((r) => ({ orderId: r.order_id, sentAt: r.sent_at, stars: r.stars ?? 0, comment: r.comment, at: r.at ?? 0 }))
+    return { reviews }
+  },
+
   // забрать изменения своей компании, новее since
   'GET /api/sync': (req, url) => {
     const { org: o } = auth(req, url)
@@ -1138,8 +1181,45 @@ const routes = {
   },
 }
 
-// /api/users/:id, /api/platform/orgs/:id, /api/orders/:id/history, /api/photos/:id и /api/videos/:id
+// страница отзыва для клиента: /r/<токен>
+async function reviewRoute(req, res, token) {
+  const link = db.prepare('SELECT * FROM review_links WHERE hash = ?').get(sha(token))
+  const org = link && db.prepare('SELECT name, blocked FROM orgs WHERE id = ?').get(link.org_id)
+  const lang = link?.lang ?? 'pl'
+  const txt = reviewText(lang)
+  if (!link || !org || org.blocked || now() - link.created > REVIEW_DAYS * 86400_000)
+    return sendHtml(res, 404, messagePage(lang, txt.badLink, false))
+  const o = orgStore(link.org_id)
+  const row = o.db.prepare('SELECT data, deleted FROM orders WHERE id = ?').get(link.order_id)
+  if (!row || row.deleted) return sendHtml(res, 404, messagePage(lang, txt.badLink, false))
+  const data = JSON.parse(row.data)
+  // клиенту — только марка и модель, без номера и прочих данных заказа
+  const car = [data.make, data.model].filter(Boolean).join(' ')
+  const cur = o.db.prepare('SELECT stars, comment FROM reviews WHERE order_id = ?').get(link.order_id)
+  const page = { token, shop: org.name, car, stars: cur?.stars ?? 0, comment: cur?.comment ?? '' }
+
+  if (req.method === 'GET') return sendHtml(res, 200, reviewPage(lang, page))
+  if (req.method !== 'POST') throw new HttpError(405, 'Метод не поддерживается')
+  rateLimit('rv:' + clientIp(req), 30, 3600_000)
+  const form = new URLSearchParams((await readBody(req, 10_000)).toString('utf8'))
+  const stars = Number(form.get('stars'))
+  const comment = String(form.get('comment') ?? '').trim().slice(0, REVIEW_COMMENT_MAX)
+  if (!Number.isInteger(stars) || stars < 1 || stars > 5) return sendHtml(res, 400, reviewPage(lang, { ...page, comment, error: txt.pick }))
+  o.db
+    .prepare(
+      `INSERT INTO reviews (order_id, sent_at, stars, comment, at) VALUES (?, ?, ?, ?, ?)
+       ON CONFLICT(order_id) DO UPDATE SET stars = excluded.stars, comment = excluded.comment, at = excluded.at`,
+    )
+    .run(link.order_id, link.created, stars, comment, now())
+  log(`отзыв: компания ${link.org_id}, заказ ${link.order_id}, ${stars}★`)
+  return sendHtml(res, 200, messagePage(lang, stars >= 4 ? txt.thanks : txt.thanksLow))
+}
+
+// /api/users/:id, /api/platform/orgs/:id, /api/orders/:id/history, /api/photos/:id, /api/videos/:id и /r/<токен>
 async function dynamicRoute(req, res, url) {
+  const r = url.pathname.match(/^\/r\/([A-Za-z0-9_-]{20,40})$/)
+  if (r) return reviewRoute(req, res, r[1])
+
   let m = url.pathname.match(/^\/api\/users\/([\w-]+)$/)
   if (m) {
     const me = auth(req, url)

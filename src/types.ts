@@ -84,6 +84,15 @@ export interface Consent {
   at?: number
 }
 
+// внутренняя оценка клиента мастером (клиенту не показывается и в документы не попадает)
+export interface ClientRating {
+  // 1–5
+  stars: number
+  note: string
+  at: number
+  by?: string
+}
+
 export interface Order {
   id: string
   // номер заказа «2026/0142»; пусто — ещё не выдан (выдаёт сервер)
@@ -116,6 +125,7 @@ export interface Order {
   consent: Consent
   signatures: Partial<Record<SignatureKind, Signature>>
   walkaround?: VideoRef
+  clientRating?: ClientRating
   elements: Record<string, ElementWork>
   // время последнего изменения каждого поля (для слияния правок с разных телефонов):
   // ключ — имя поля или «el:<id элемента>»

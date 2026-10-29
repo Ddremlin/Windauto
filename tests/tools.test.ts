@@ -80,3 +80,18 @@ test('импорт текста: несколько заказов, даты, к
   const cp1250 = new Uint8Array([0x5a, 0x61, 0xbf, 0xf3, 0xb3, 0xe6])
   assert.equal(decodeText(cp1250.buffer), 'Zażółć')
 })
+
+test('клиенты: один телефон в разной записи — один клиент, средняя оценка', async () => {
+  const { clientKey, clientProfiles, isRisky } = await import('../src/clients.ts')
+  const o = (id: string, phone: string, client: string, stars?: number, at = 0) =>
+    ({ id, phone, client, clientRating: stars ? { stars, note: `n${id}`, at } : undefined }) as never
+  assert.equal(clientKey(o('1', '+48 600-100-200', '')), clientKey(o('2', '600100200', 'Jan')))
+  assert.equal(clientKey(o('3', '', '  Jan  Kowalski ')), 'name:jan kowalski')
+  assert.equal(clientKey(o('4', '', 'Ja')), '')
+  const p = clientProfiles([o('1', '600100200', 'Jan', 1, 5), o('2', '+48600100200', 'Jan', 2, 9), o('3', '600100200', 'Jan')])
+  const jan = p.get('tel:600100200')!
+  assert.equal(jan.orders, 3)
+  assert.equal(jan.avg, 1.5)
+  assert.equal(jan.last?.note, 'n2')
+  assert.equal(isRisky(jan), true)
+})

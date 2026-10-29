@@ -1,6 +1,9 @@
 import { useMemo, useState } from 'react'
 import { getLayout } from '../body'
+import { Stars } from '../components/ClientRating'
 import TopBar from '../components/TopBar'
+import { clientKey, clientProfiles, isRisky } from '../clients'
+import { useReviews } from '../reviews'
 import { useSettings } from '../settingsHooks'
 import type { Order, WorkId } from '../types'
 import { formatPlate } from '../validate'
@@ -84,6 +87,32 @@ export default function Stats({ orders, onOpen }: Props) {
       byAssignee: [...byAssignee.entries()].sort((a, b) => b[1] - a[1]),
     }
   }, [orders, period, settings, locale])
+
+  const reviews = useReviews()
+  const rv = useMemo(() => {
+    const [from, to] = range(period)
+    const byId = new Map(orders.map((o) => [o.id, o]))
+    const sent = [...reviews.values()].filter((r) => byId.has(r.orderId) && r.sentAt >= from && r.sentAt < to)
+    const got = sent.filter((r) => r.stars > 0).sort((a, b) => b.at - a.at)
+    const avg = got.length ? Math.round((got.reduce((s, r) => s + r.stars, 0) / got.length) * 10) / 10 : 0
+    const dist = [5, 4, 3, 2, 1].map((n) => ({ n, count: got.filter((r) => r.stars === n).length }))
+    return { sent: sent.length, got, avg, dist, byId }
+  }, [reviews, orders, period])
+
+  // клиенты, которых мастера оценили на 2 и ниже — по всем заказам, не по периоду
+  const risky = useMemo(() => {
+    const seen = new Set<string>()
+    const profiles = clientProfiles(orders)
+    const out: { o: Order; avg: number; note?: string }[] = []
+    for (const o of [...orders].sort((a, b) => b.updatedAt - a.updatedAt)) {
+      const k = clientKey(o)
+      const p = profiles.get(k)
+      if (!k || seen.has(k) || !p || !isRisky(p)) continue
+      seen.add(k)
+      out.push({ o, avg: p.avg, note: p.last?.note })
+    }
+    return out
+  }, [orders])
 
   const maxWork = Math.max(1, ...data.workList.map((w) => w.n))
   const maxMonth = Math.max(1, ...data.months.map((m) => m.sum))
@@ -200,6 +229,70 @@ export default function Stats({ orders, onOpen }: Props) {
             </>
           )}
         </section>
+
+        {rv.sent > 0 && (
+          <section className="panel">
+            <h2>{t('stats.reviews')}</h2>
+            {rv.got.length === 0 ? (
+              <p className="muted">{t('stats.reviewsNone', { n: rv.sent })}</p>
+            ) : (
+              <>
+                <div className="review-sum">
+                  <b>{String(rv.avg).replace('.', ',')}</b>
+                  <span>
+                    <Stars value={rv.avg} />
+                    <small className="muted">{t('stats.reviewsCount', { n: rv.got.length, m: rv.sent })}</small>
+                  </span>
+                </div>
+                <ul className="plain-list">
+                  {rv.dist.map((d) => (
+                    <li key={d.n} className="review-dist">
+                      <span>{d.n}★</span>
+                      <div className="hbar-track">
+                        <div className="hbar" style={{ width: `${(d.count / rv.got.length) * 100}%` }} />
+                      </div>
+                      <span className="muted">{d.count}</span>
+                    </li>
+                  ))}
+                </ul>
+                <h2 className="sub">{t('stats.reviewsLast')}</h2>
+                <ul className="plain-list">
+                  {rv.got.slice(0, 8).map((r) => {
+                    const o = rv.byId.get(r.orderId)!
+                    return (
+                      <li key={r.orderId} className="review-item">
+                        <button className="link-btn" onClick={() => onOpen(o.id)}>
+                          {o.plate ? formatPlate(o.plate, o.plateCountry) : [o.make, o.model].filter(Boolean).join(' ') || '—'}
+                          {o.client && <span className="muted"> · {o.client}</span>}
+                        </button>
+                        <span className={r.stars <= 2 ? 'overdue' : 'stars-text'}>{'★'.repeat(r.stars)}</span>
+                        {r.comment && <p className="review-comment">{r.comment}</p>}
+                      </li>
+                    )
+                  })}
+                </ul>
+              </>
+            )}
+          </section>
+        )}
+
+        {risky.length > 0 && (
+          <section className="panel">
+            <h2>⚠ {t('stats.risky', { n: risky.length })}</h2>
+            <ul className="plain-list">
+              {risky.map(({ o, avg, note }) => (
+                <li key={o.id} className="review-item">
+                  <button className="link-btn" onClick={() => onOpen(o.id)}>
+                    {o.client || o.phone}
+                    {o.client && o.phone && <span className="muted"> · {o.phone}</span>}
+                  </button>
+                  <span className="overdue">{String(avg).replace('.', ',')}★</span>
+                  {note && <p className="review-comment">{note}</p>}
+                </li>
+              ))}
+            </ul>
+          </section>
+        )}
 
         {data.overdue.length > 0 && (
           <section className="panel">

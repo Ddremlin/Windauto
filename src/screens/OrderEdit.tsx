@@ -3,6 +3,7 @@ import { BODY_TYPES, getLayout } from '../body'
 import { MAKES, canonMake, canonModel, isKnownModel, modelsOf } from '../cars'
 import AcceptanceNo from '../components/AcceptanceNo'
 import BodyMap, { DAMAGE_COLOR } from '../components/BodyMap'
+import { ClientRatingBlock, ReviewPanel } from '../components/ClientRating'
 import Combo from '../components/Combo'
 import ElementSheet from '../components/ElementSheet'
 import Field from '../components/Field'
@@ -16,6 +17,7 @@ import { WalkaroundPanel } from '../components/Walkaround'
 import { COUNTRIES } from '../countries'
 import { deletePhotos, elementPhotoIds, orderPhotoIds } from '../photos'
 import { useSettings } from '../settingsHooks'
+import { useOrders } from '../storage'
 import { listStaff, useSyncStatus, type RecognizedDoc } from '../sync'
 import type { BodyType, ElementWork, Order, Signature, SignatureKind } from '../types'
 import { checkEmail, checkPlate, checkVin, formatPlate, normalizePlate, normalizeVin } from '../validate'
@@ -44,6 +46,7 @@ function stamp(order: Order, patch: Partial<Order>): Order {
 export default function OrderEdit({ initial, onSave, onDelete, onBack }: Props) {
   const { t, locale, settings } = useSettings()
   const sync = useSyncStatus()
+  const { orders: allOrders } = useOrders()
   const [order, setOrder] = useState(initial)
   const [sheet, setSheet] = useState<string | null>(null)
   const [share, setShare] = useState(false)
@@ -318,6 +321,12 @@ export default function OrderEdit({ initial, onSave, onDelete, onBack }: Props) 
               check={checkEmail(order.email)}
             />
           </div>
+          <ClientRatingBlock
+            order={order}
+            orders={allOrders}
+            by={sync.user?.name || sync.user?.login || ''}
+            onChange={(clientRating) => update({ clientRating })}
+          />
           <ConsentBlock consent={order.consent} onChange={(consent) => update({ consent })} />
         </section>
 
@@ -432,6 +441,8 @@ export default function OrderEdit({ initial, onSave, onDelete, onBack }: Props) 
         <WalkaroundPanel order={order} onChange={(walkaround) => update({ walkaround })} />
 
         <SignaturesPanel order={order} master={sync.user?.name || sync.user?.login || ''} onChange={setSignature} />
+
+        <ReviewPanel order={order} />
 
         <HistoryPanel orderId={order.id} />
 

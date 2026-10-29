@@ -551,6 +551,21 @@ export interface RecognizedDoc {
 
 export const canRecognize = () => Boolean(state.token)
 
+// --- отзывы клиентов о ремонте ---
+export interface Review {
+  orderId: string
+  // когда отправили ссылку
+  sentAt: number
+  // 0 — клиент ещё не ответил
+  stars: number
+  comment: string
+  at: number
+}
+
+export const reviewLink = (orderId: string, lang: string) =>
+  api<{ url: string }>('/api/reviews/link', { method: 'POST', body: JSON.stringify({ orderId, lang }) }).then((r) => r.url)
+export const listReviews = () => api<{ reviews: Review[] }>('/api/reviews').then((r) => r.reviews)
+
 // для чтения мелких символов хватает 1600 px по большей стороне (техпаспорт — 2000)
 async function toJpegBase64(file: Blob, maxSide = 1600): Promise<string> {
   const bmp = await createImageBitmap(file, { imageOrientation: 'from-image' })

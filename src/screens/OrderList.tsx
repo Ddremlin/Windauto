@@ -1,6 +1,9 @@
 import { useMemo, useState } from 'react'
 import { orderNo } from '../docNumber'
+import { Stars } from '../components/ClientRating'
 import { PlateBadge } from '../components/Plate'
+import { clientKey, clientProfiles, isRisky } from '../clients'
+import { useReviews } from '../reviews'
 import TopBar from '../components/TopBar'
 import { useSettings } from '../settingsHooks'
 import type { Order, OrderStatus } from '../types'
@@ -55,6 +58,9 @@ export default function OrderList({ orders, onOpen, onCreate }: Props) {
     )
   }, [orders, q, filter])
 
+  const profiles = useMemo(() => clientProfiles(orders), [orders])
+  const reviews = useReviews()
+
   const counts = useMemo(() => Object.fromEntries(FILTERS.map((f) => [f, orders.filter((o) => matches(o, f)).length])), [orders])
 
   return (
@@ -99,6 +105,8 @@ export default function OrderList({ orders, onOpen, onCreate }: Props) {
           const marked = Object.entries(o.elements).filter(([, v]) => v.works.length || v.parts)
           const workIds = [...new Set(marked.flatMap(([, v]) => v.works))]
           const total = orderTotals(o, settings).gross
+          const profile = profiles.get(clientKey(o))
+          const review = reviews.get(o.id)
           const overdue = o.dueDate && ACTIVE_STATUSES.includes(o.status) && o.status !== 'done' && o.dueDate < today()
           return (
             <button key={o.id} className="card" onClick={() => onOpen(o.id)}>
@@ -116,7 +124,11 @@ export default function OrderList({ orders, onOpen, onCreate }: Props) {
               </div>
               {(o.assignee || o.dueDate || o.client) && (
                 <div className="card-row muted small">
-                  <span>{[o.client, o.assignee && `👷 ${o.assignee}`].filter(Boolean).join(' · ')}</span>
+                  <span>
+                    {isRisky(profile) && <span className="risky-mark" title={t('rate.risky')}>⚠ </span>}
+                    {[o.client, o.assignee && `👷 ${o.assignee}`].filter(Boolean).join(' · ')}
+                    {profile?.rated ? <> · <Stars value={profile.avg} size="sm" /></> : null}
+                  </span>
                   {o.dueDate && (
                     <span className={overdue ? 'overdue' : undefined}>
                       {overdue ? '⚠ ' : '⏱ '}
@@ -129,6 +141,7 @@ export default function OrderList({ orders, onOpen, onCreate }: Props) {
                 <span className="muted">
                   {marked.length ? t('list.elements', { n: marked.length }) : t('list.noWorks')}
                   {o.signatures.acceptClient ? ' · ✍' : ''}
+                  {review?.stars ? ` · ⭐${review.stars}` : ''}
                   {total > 0 && <strong className="card-sum"> · {formatMoney(total)}</strong>}
                 </span>
                 <span className="dots">

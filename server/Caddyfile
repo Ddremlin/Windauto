@@ -12,8 +12,8 @@
 		-Via
 	}
 
-	# сервер синхронизации, ссылки из писем, юридические тексты
-	@api path /api/* /auth/* /legal/*
+	# сервер синхронизации, ссылки из писем, юридические тексты, отзывы клиентов (/r/…)
+	@api path /api/* /auth/* /legal/* /r/*
 	handle @api {
 		reverse_proxy api:8080 {
 			flush_interval -1

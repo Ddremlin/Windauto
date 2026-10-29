@@ -403,3 +403,35 @@ test('защита: квота места компании; заказ со сл
   const next = { ...bad, notes: 'ok', updatedAt: 200, _ft: { ...bad._ft, notes: 200 } }
   assert.equal((await api('/api/sync', staff, { orders: [{ id: 'p1', updatedAt: 200, deleted: false, data: next }] })).status, 200)
 })
+
+test('отзыв клиента: ссылка, страница, оценка, чужая компания не видит', async () => {
+  await api('/api/sync', admin, { orders: [{ id: 'rv1', updatedAt: 100, deleted: false, data: order({ id: 'rv1', make: 'Škoda', model: 'Octavia', plate: 'WA 777', client: 'Jan' }) }] })
+  assert.equal((await api('/api/reviews/link', staff, { orderId: 'nope', lang: 'pl' })).status, 404)
+  const r = await api('/api/reviews/link', staff, { orderId: 'rv1', lang: 'pl' })
+  assert.equal(r.status, 200)
+  const path = new URL(r.body.url).pathname
+  assert.match(path, /^\/r\/[\w-]{20,40}$/)
+
+  const page = await (await fetch(URL_ + path)).text()
+  assert.match(page, /Škoda Octavia/)
+  // номер и имя клиента на страницу не попадают
+  assert.doesNotMatch(page, /WA 777|Jan\b/)
+
+  const post = (body: Record<string, string>) =>
+    fetch(URL_ + path, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams(body) })
+  assert.equal((await post({ stars: '7' })).status, 400)
+  assert.equal((await post({ stars: '5', comment: '<b>Super</b>' })).status, 200)
+  assert.equal((await post({ stars: '4', comment: 'Dobrze' })).status, 200)
+  const list = (await api('/api/reviews', admin)).body.reviews
+  const mine = list.find((x: { orderId: string }) => x.orderId === 'rv1')
+  assert.equal(mine.stars, 4)
+  assert.equal(mine.comment, 'Dobrze')
+  assert.match(await (await fetch(URL_ + path)).text(), /value="4" checked/)
+
+  // новая ссылка заменяет старую
+  const r2 = await api('/api/reviews/link', admin, { orderId: 'rv1', lang: 'ru' })
+  assert.equal((await fetch(URL_ + path)).status, 404)
+  assert.match(await (await fetch(URL_ + new URL(r2.body.url).pathname)).text(), /Оцените ремонт/)
+  assert.equal((await fetch(URL_ + '/r/' + 'x'.repeat(24))).status, 404)
+  assert.equal((await api('/api/reviews', '')).status, 401)
+})

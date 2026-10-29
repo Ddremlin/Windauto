@@ -732,3 +732,33 @@ input:disabled { opacity: 0.6; }
 .imp-check input { width: 20px; height: 20px; margin: 0; flex: none; accent-color: var(--accent); }
 .imp-src { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 45%; }
 .imp-notes { font-size: 13px; color: var(--muted); white-space: pre-wrap; max-height: 6em; overflow: hidden; border-left: 3px solid var(--line); padding-left: 8px; }
+
+/* --- оценки клиентов и отзывы --- */
+.stars-view { color: var(--line); letter-spacing: 1px; white-space: nowrap; }
+.stars-view .on { color: #f5a623; }
+.stars-view.sm { font-size: 12px; letter-spacing: 0; }
+.stars-view.md { font-size: 18px; }
+.stars-text { color: #f5a623; }
+.client-rating { margin-top: 12px; display: flex; flex-direction: column; gap: 8px; }
+.client-rating .hint { margin: 0; }
+.client-rating-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.star-picker { display: flex; gap: 2px; }
+.star-picker button { border: 0; background: none; font-size: 30px; line-height: 1; padding: 2px 3px; color: var(--line); }
+.star-picker button.on { color: #f5a623; }
+.client-past {
+  display: flex; flex-direction: column; gap: 2px; padding: 8px 10px; border-radius: 8px; font-size: 14px;
+  background: color-mix(in srgb, var(--accent) 8%, transparent);
+}
+.client-past small { color: var(--muted); font-size: 13px; }
+.client-past.risky { background: color-mix(in srgb, var(--danger) 12%, transparent); color: var(--danger); font-weight: 600; }
+.client-past.risky small { font-weight: 400; }
+.risky-mark { color: var(--danger); }
+.review-got { margin-bottom: 10px; }
+.review-comment { margin: 4px 0 0; white-space: pre-wrap; font-size: 14px; flex-basis: 100%; color: var(--text); }
+.review-text { font-size: 14px; background: var(--bg); border-radius: 8px; padding: 10px; margin: 0 0 10px; overflow-wrap: anywhere; }
+.review-sum { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }
+.review-sum b { font-size: 36px; font-variant-numeric: tabular-nums; }
+.review-sum span { display: flex; flex-direction: column; }
+.review-dist { display: grid !important; grid-template-columns: 32px 1fr 28px; align-items: center; }
+.review-dist span:last-child { text-align: right; }
+.review-item { flex-wrap: wrap; }

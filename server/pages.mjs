@@ -141,3 +141,69 @@ export function legalPage(kind, lang) {
   const other = lang === 'ru' ? ['pl', 'Polski'] : ['ru', 'Русский']
   return layout(lang, title, `<h1>${esc(title)}</h1>${body}<p class="muted"><a href="?lang=${other[0]}">${other[1]}</a></p>`)
 }
+
+// --- отзыв клиента о ремонте: звёзды и комментарий, без JavaScript ---
+const REVIEW = {
+  ru: {
+    title: 'Оцените ремонт',
+    intro: (shop, car) => `${shop ? `«${shop}»` : 'Сервис'} благодарит вас за доверие${car ? ` и ремонт ${car}` : ''}. Пожалуйста, оцените нашу работу.`,
+    stars: ['Очень плохо', 'Плохо', 'Нормально', 'Хорошо', 'Отлично'],
+    comment: 'Комментарий (необязательно)',
+    commentPh: 'Что понравилось, что улучшить',
+    send: 'Отправить оценку',
+    again: 'Вы уже оценили ремонт — можно изменить оценку.',
+    pick: 'Выберите оценку — от 1 до 5 звёзд',
+    badLink: ['Ссылка недействительна', 'Ссылка устарела или заказ удалён. Если хотите оставить отзыв, свяжитесь с сервисом.'],
+    thanks: ['Спасибо за оценку!', 'Рады, что вам понравилось. Ждём вас снова.'],
+    thanksLow: ['Спасибо за оценку', 'Нам жаль, что не всё получилось. Сервис получил ваш отзыв и свяжется с вами.'],
+  },
+  pl: {
+    title: 'Oceń naprawę',
+    intro: (shop, car) => `${shop ? `„${shop}”` : 'Warsztat'} dziękuje za zaufanie${car ? ` i naprawę ${car}` : ''}. Prosimy o ocenę naszej pracy.`,
+    stars: ['Bardzo źle', 'Źle', 'Przeciętnie', 'Dobrze', 'Doskonale'],
+    comment: 'Komentarz (opcjonalnie)',
+    commentPh: 'Co się podobało, co poprawić',
+    send: 'Wyślij ocenę',
+    again: 'Ta naprawa jest już oceniona — możesz zmienić ocenę.',
+    pick: 'Wybierz ocenę — od 1 do 5 gwiazdek',
+    badLink: ['Link jest nieważny', 'Link wygasł lub zlecenie zostało usunięte. Jeśli chcesz zostawić opinię, skontaktuj się z warsztatem.'],
+    thanks: ['Dziękujemy za ocenę!', 'Cieszymy się, że jesteś zadowolony. Zapraszamy ponownie.'],
+    thanksLow: ['Dziękujemy za ocenę', 'Przykro nam, że nie wszystko się udało. Warsztat otrzymał Twoją opinię i skontaktuje się z Tobą.'],
+  },
+}
+export const reviewText = (lang) => REVIEW[lang] ?? REVIEW.pl
+
+const STAR_CSS = `<style>
+.stars{display:flex;flex-direction:row-reverse;justify-content:center;gap:4px;margin:16px 0 4px}
+.stars input{position:absolute;opacity:0;width:1px;height:1px}
+.stars label{margin:0;font-size:44px;line-height:1;color:var(--line);cursor:pointer;padding:0 2px}
+.stars input:checked~label,.stars label:hover,.stars label:hover~label{color:#f5a623}
+.stars input:focus-visible+label{outline:2px solid var(--accent);border-radius:6px}
+.star-hint{text-align:center;color:var(--muted);font-size:14px;min-height:21px;margin:0}
+textarea{width:100%;font:inherit;color:var(--text);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px 12px;resize:vertical}
+</style>`
+
+export function reviewPage(lang, { token, shop, car, stars, comment, error }) {
+  const t = reviewText(lang)
+  // row-reverse: в разметке 5…1, на экране 1…5 слева направо
+  const radios = [5, 4, 3, 2, 1]
+    .map(
+      (n) =>
+        `<input type="radio" id="s${n}" name="stars" value="${n}"${stars === n ? ' checked' : ''} required><label for="s${n}" title="${esc(t.stars[n - 1])}" aria-label="${n} — ${esc(t.stars[n - 1])}">★</label>`,
+    )
+    .join('')
+  return layout(
+    lang,
+    t.title,
+    `${STAR_CSS}<h1>${esc(t.title)}</h1><p>${esc(t.intro(shop, car))}</p>
+${stars ? `<p class="muted">${esc(t.again)}</p>` : ''}
+<form method="post" action="/r/${esc(token)}">
+<div class="stars" role="radiogroup" aria-label="${esc(t.title)}">${radios}</div>
+<p class="star-hint">${esc(t.stars[0])} — ${esc(t.stars[4])}</p>
+<label for="c">${esc(t.comment)}</label>
+<textarea id="c" name="comment" rows="4" maxlength="1000" placeholder="${esc(t.commentPh)}">${esc(comment)}</textarea>
+${error ? `<p class="error">${esc(error)}</p>` : ''}
+<button type="submit">${esc(t.send)}</button>
+</form>`,
+  )
+}
