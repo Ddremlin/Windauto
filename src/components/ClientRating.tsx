@@ -20,7 +20,7 @@ export function Stars({ value, size = 'md' }: { value: number; size?: 'sm' | 'md
   )
 }
 
-function StarPicker({ value, onChange, label }: { value: number; onChange: (v: number) => void; label: string }) {
+export function StarPicker({ value, onChange, label }: { value: number; onChange: (v: number) => void; label: string }) {
   return (
     <div className="star-picker" role="radiogroup" aria-label={label}>
       {[1, 2, 3, 4, 5].map((n) => (

@@ -3,7 +3,8 @@ import { BODY_TYPES, getLayout } from '../body'
 import { MAKES, canonMake, canonModel, isKnownModel, modelsOf } from '../cars'
 import AcceptanceNo from '../components/AcceptanceNo'
 import BodyMap, { DAMAGE_COLOR } from '../components/BodyMap'
-import { ClientRatingBlock, ReviewPanel } from '../components/ClientRating'
+import { ClientRatingBlock, ReviewPanel, Stars } from '../components/ClientRating'
+import { clientKey, clientPath, isRisky, profileOf } from '../clients'
 import Combo from '../components/Combo'
 import ElementSheet from '../components/ElementSheet'
 import Field from '../components/Field'
@@ -170,6 +171,9 @@ export default function OrderEdit({ initial, onSave, onDelete, onBack }: Props) 
   }
 
   const title = order.plate ? formatPlate(order.plate, order.plateCountry) : t('app.new')
+  // клиент со звёздами вверху заказа — по всем его заказам, включая этот
+  const ckey = clientKey(order)
+  const cprof = ckey ? profileOf(allOrders.filter((o) => o.id === order.id || clientKey(o) === ckey).map((o) => (o.id === order.id ? order : o))) : null
 
   return (
     <div className="screen">
@@ -203,6 +207,22 @@ export default function OrderEdit({ initial, onSave, onDelete, onBack }: Props) 
               </button>
             ))}
           </div>
+          {cprof && (
+            <button className={'order-client' + (isRisky(cprof) ? ' risky' : '')} onClick={() => (location.hash = clientPath(ckey))}>
+              <span>
+                {isRisky(cprof) ? '⚠ ' : '👤 '}
+                {order.client || order.phone}
+                {cprof.orders > 1 && <small className="muted"> · {t('cl.orders', { n: cprof.orders })}</small>}
+              </span>
+              {cprof.rated ? (
+                <span className="client-stars">
+                  <Stars value={cprof.avg} size="sm" /> {String(cprof.avg).replace('.', ',')}
+                </span>
+              ) : (
+                <small className="muted">{t('cl.noRating')} ›</small>
+              )}
+            </button>
+          )}
           <ReadyNotice order={order} />
           <div className="grid meta-grid">
             <Combo label={t('order.assignee')} placeholder={t('order.assigneePh')} items={staff} {...field('assignee')} />

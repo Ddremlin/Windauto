@@ -2,10 +2,11 @@ import { useEffect, useState } from 'react'
 import { useSettings } from '../settingsHooks'
 import { syncNow, useSyncStatus } from '../sync'
 
-export type Section = 'orders' | 'calendar' | 'stats' | 'calc' | 'import' | 'sync' | 'settings'
+export type Section = 'orders' | 'clients' | 'calendar' | 'stats' | 'calc' | 'import' | 'sync' | 'settings'
 
 const PATHS: Record<Section, string> = {
   orders: '/',
+  clients: '/clients',
   calendar: '/calendar',
   stats: '/stats',
   calc: '/calc',
@@ -53,6 +54,7 @@ export default function TopBar({ current }: { current: Section }) {
 
   const items: { id: Section; icon: string; label: string; hint?: string }[] = [
     { id: 'orders', icon: '📋', label: t('menu.orders') },
+    { id: 'clients', icon: '👥', label: t('menu.clients') },
     { id: 'calendar', icon: '📅', label: t('menu.calendar') },
     { id: 'import', icon: '📄', label: t('menu.import') },
     { id: 'stats', icon: '📊', label: t('stats.title') },

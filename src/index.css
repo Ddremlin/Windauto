@@ -762,3 +762,22 @@ input:disabled { opacity: 0.6; }
 .review-dist { display: grid !important; grid-template-columns: 32px 1fr 28px; align-items: center; }
 .review-dist span:last-child { text-align: right; }
 .review-item { flex-wrap: wrap; }
+
+/* --- клиенты --- */
+.client-card.risky { border-color: color-mix(in srgb, var(--danger) 50%, var(--line)); }
+.client-name { font-size: 16px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.client-card.risky .client-name { color: var(--danger); }
+.client-stars { white-space: nowrap; font-size: 14px; font-weight: 600; display: inline-flex; align-items: center; gap: 4px; }
+.client-note { font-size: 13px; color: var(--muted); font-style: italic; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.client-contacts { display: flex; flex-wrap: wrap; gap: 8px 16px; margin-bottom: 12px; }
+.client-contacts a { color: var(--accent); text-decoration: none; font-size: 15px; }
+.client-tiles .tile b { font-size: 22px; }
+.client-tiles .tile b.smaller { font-size: 18px; }
+.client-risky { border-color: color-mix(in srgb, var(--danger) 50%, var(--line)); }
+.client-risky-text { color: var(--danger); font-weight: 600; margin: 0 0 10px; }
+.client-note-input { margin-top: 8px; }
+.order-client {
+  display: flex; justify-content: space-between; align-items: center; gap: 8px; width: 100%; margin: 10px 0 2px;
+  padding: 9px 12px; border: 1px solid var(--line); border-radius: 10px; background: var(--bg); text-align: left; font-size: 15px;
+}
+.order-client.risky { border-color: color-mix(in srgb, var(--danger) 50%, var(--line)); color: var(--danger); font-weight: 600; }

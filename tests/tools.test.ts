@@ -95,3 +95,15 @@ test('клиенты: один телефон в разной записи — �
   assert.equal(jan.last?.note, 'n2')
   assert.equal(isRisky(jan), true)
 })
+
+test('клиенты: список с последними контактами, свежие сверху', async () => {
+  const { listClients } = await import('../src/clients.ts')
+  const o = (id: string, createdAt: number, phone: string, client: string, email = '') => ({ id, createdAt, phone, client, email }) as never
+  const list = listClients([o('a', 1, '600100200', 'Jan', 'old@x.pl'), o('b', 5, '+48 600 100 200', '', 'new@x.pl'), o('c', 3, '', 'Anna Nowak')])
+  assert.equal(list.length, 2)
+  assert.equal(list[0].key, 'tel:600100200')
+  assert.equal(list[0].name, 'Jan')
+  assert.equal(list[0].email, 'new@x.pl')
+  assert.deepEqual(list[0].orders.map((x: { id: string }) => x.id), ['b', 'a'])
+  assert.equal(list[1].name, 'Anna Nowak')
+})

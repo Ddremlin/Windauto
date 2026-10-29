@@ -2,6 +2,8 @@ import { useEffect, useState } from 'react'
 import AppUpdate from './components/AppUpdate'
 import Calc from './screens/Calc'
 import Calendar from './screens/Calendar'
+import { ClientList, ClientPage } from './screens/Clients'
+import { clientPath, listClients } from './clients'
 import Import from './screens/Import'
 import OrderEdit from './screens/OrderEdit'
 import OrderList from './screens/OrderList'
@@ -12,7 +14,7 @@ import { newOrder, useOrders } from './storage'
 import type { Order } from './types'
 
 // Простая навигация через hash: #/ — список, #/order/<id> — заказ, #/new — новый,
-// #/settings, #/stats, #/sync, #/calendar, #/calc, #/import
+// #/settings, #/stats, #/sync, #/calendar, #/calc, #/import, #/clients, #/client/<ключ>
 function useRoute() {
   const [hash, setHash] = useState(location.hash)
   useEffect(() => {
@@ -73,6 +75,25 @@ export default function App() {
   if (route === '/sync') return <Sync />
 
   if (route === '/calc') return <Calc />
+
+  if (route === '/clients') return <ClientList orders={orders} onOpenClient={(key) => go(clientPath(key))} />
+
+  const cm = route.match(/^\/client\/(.+)$/)
+  if (cm) {
+    const key = decodeURIComponent(cm[1])
+    return (
+      <ClientPage
+        client={listClients(orders).find((c) => c.key === key)}
+        onBack={() => go('/clients')}
+        onOpen={(id) => go(`/order/${id}`)}
+        onSave={upsert}
+        onNewOrder={(c) => {
+          setDraft({ ...newOrder(), client: c.name, phone: c.phone, email: c.email })
+          go('/new')
+        }}
+      />
+    )
+  }
 
   if (route === '/calendar') return <Calendar orders={orders} onOpen={(id) => go(`/order/${id}`)} />
 
