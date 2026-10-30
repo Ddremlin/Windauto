@@ -6,8 +6,8 @@ import { appendFileSync } from 'node:fs'
 const FROM = process.env.MAIL_FROM || 'noreply@windauto.pl'
 const FROM_NAME = process.env.MAIL_FROM_NAME || 'Windauto'
 
-export async function sendMail({ to, subject, text, html }, log) {
-  if (process.env.MAIL_OUTBOX) appendFileSync(process.env.MAIL_OUTBOX, JSON.stringify({ to, subject, text }) + '\n')
+export async function sendMail({ to, subject, text, html, replyTo }, log) {
+  if (process.env.MAIL_OUTBOX) appendFileSync(process.env.MAIL_OUTBOX, JSON.stringify({ to, subject, text, replyTo }) + '\n')
   if (!process.env.BREVO_API_KEY) {
     log(`письмо не отправлено (нет BREVO_API_KEY) → ${to}: ${subject}\n${text}`)
     return
@@ -15,7 +15,10 @@ export async function sendMail({ to, subject, text, html }, log) {
   const res = await fetch('https://api.brevo.com/v3/smtp/email', {
     method: 'POST',
     headers: { 'api-key': process.env.BREVO_API_KEY, 'Content-Type': 'application/json', Accept: 'application/json' },
-    body: JSON.stringify({ sender: { email: FROM, name: FROM_NAME }, to: [{ email: to }], subject, textContent: text, htmlContent: html }),
+    body: JSON.stringify({
+      sender: { email: FROM, name: FROM_NAME }, to: [{ email: to }], subject, textContent: text, htmlContent: html,
+      ...(replyTo ? { replyTo: { email: replyTo } } : {}),
+    }),
   })
   if (!res.ok) {
     log('ошибка отправки письма', to, res.status, await res.text().catch(() => ''))

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useSettings } from '../settingsHooks'
 import { disconnect, syncNow, useSyncStatus } from '../sync'
 
-export type Section = 'orders' | 'clients' | 'calendar' | 'stats' | 'calc' | 'import' | 'sync' | 'settings'
+export type Section = 'orders' | 'clients' | 'calendar' | 'stats' | 'calc' | 'import' | 'sync' | 'settings' | 'help'
 
 const PATHS: Record<Section, string> = {
   orders: '/',
@@ -13,6 +13,7 @@ const PATHS: Record<Section, string> = {
   import: '/import',
   sync: '/sync',
   settings: '/settings',
+  help: '/help',
 }
 
 const go = (path: string) => {
@@ -68,6 +69,7 @@ export default function TopBar({ current }: { current: Section }) {
     { id: 'calc', icon: '🧮', label: t('menu.calc') },
     { id: 'sync', icon: '☁', label: t('menu.sync'), hint: syncState },
     { id: 'settings', icon: '⚙', label: t('app.settings') },
+    { id: 'help', icon: '❓', label: t('menu.help') },
   ]
 
   return (

@@ -411,6 +411,7 @@ input:disabled { opacity: 0.6; }
 .scan-note { margin: -2px 0 10px; }
 .spinner.small { width: 14px; height: 14px; }
 .warn-text { color: var(--warn); font-size: 13px; margin: 8px 0 0; }
+.ok-text { color: var(--ok); font-size: 14px; margin: 8px 0 0; }
 .vin-suggest {
   display: flex; align-items: center; justify-content: space-between; gap: 8px; grid-column: 1 / -1;
   padding: 8px 10px; border-radius: 8px; font-size: 14px;
@@ -815,3 +816,6 @@ input:disabled { opacity: 0.6; }
 .reminder-banner .reminder { background: var(--panel); }
 .reminder-banner a.btn { text-decoration: none; flex: none; }
 .lang-select { margin-bottom: 10px; }
+.plate-country { display: flex; align-items: center; gap: 8px; margin-top: 6px; max-width: 360px; }
+.plate-country .field-label { flex: none; margin: 0; }
+.plate-country select { flex: 1; min-width: 0; padding: 8px 10px; }

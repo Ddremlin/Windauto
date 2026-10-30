@@ -42,6 +42,7 @@ OPERATOR_NAME=Imię Nazwisko             # оператор сервиса — �
 OPERATOR_ADDRESS=ul. …, 00-000 Miasto
 OPERATOR_NIP=0000000000
 OPERATOR_EMAIL=kontakt@windauto.pl
+SUPPORT_EMAIL=help@windauto.pl          # куда приходят сообщения из «Помощь» (без него — на OPERATOR_EMAIL)
 # REGISTRATION=off                      # закрыть регистрацию новых компаний
 ```
 

@@ -250,7 +250,7 @@ export default function OrderEdit({ initial, onSave, onDelete, onBack }: Props) 
               value={order.plate}
               country={order.plateCountry}
               onChange={(v) => update({ plate: v })}
-              onCountry={(c) => update({ plateCountry: c })}
+              onCountry={(c) => update({ plateCountry: c, ...(order.plate ? { plate: formatPlate(order.plate, c) } : {}) })}
               onBlur={() => order.plate && update({ plate: formatPlate(order.plate, order.plateCountry) })}
               level={plateCheck.level}
               hint={plateCheck.message ? t(plateCheck.message, plateCheck.vars) : undefined}

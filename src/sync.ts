@@ -606,3 +606,14 @@ type Named = { id: string; name: string }
 
 export const parseVoice = (text: string, lists: { elements: Named[]; works: Named[]; damages: Named[] }) =>
   api<VoiceResult>('/api/voice', { method: 'POST', body: JSON.stringify({ text, ...lists }) })
+
+// --- «Помощь»: сообщение разработчику (можно и без входа — тогда на сервер обновлений) ---
+export interface SupportMessage {
+  message: string
+  contact: string
+  version: string
+  device: string
+  lang: string
+}
+export const sendSupport = (m: SupportMessage, fallbackServer: string) =>
+  api<{ ok: true }>('/api/support', { method: 'POST', body: JSON.stringify(m) }, state.server || fallbackServer, state.token)

@@ -9,6 +9,7 @@ import { clientPath, listClients } from './clients'
 import Import from './screens/Import'
 import OrderEdit from './screens/OrderEdit'
 import OrderList from './screens/OrderList'
+import Help from './screens/Help'
 import Settings from './screens/Settings'
 import Stats from './screens/Stats'
 import Sync from './screens/Sync'
@@ -77,6 +78,8 @@ export default function App() {
   if (route === '/settings') return <Settings orders={orders} onImport={replaceAll} />
 
   if (route === '/sync') return <Sync />
+
+  if (route === '/help') return <Help />
 
   if (route === '/calc') return <Calc />
 

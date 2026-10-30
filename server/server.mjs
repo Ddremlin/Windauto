@@ -34,6 +34,8 @@ const REGISTER_PER_HOUR = Number(process.env.REGISTER_PER_HOUR ?? 5)
 const MAX_JSON = 20 * 1024 * 1024
 // запросы без входа и небольшие формы — чтобы гигантским телом нельзя было занять память
 const MAX_FORM = 16 * 1024
+// сообщений разработчику в час — с одного аккаунта или IP
+const SUPPORT_PER_HOUR = Number(process.env.SUPPORT_PER_HOUR) || 10
 const MAX_PHOTO = 15 * 1024 * 1024
 // круговое видео при приёмке: ~2,5 Мбит/с × 3 мин ≈ 60 МБ, с запасом под видео из галереи
 const MAX_VIDEO = 300 * 1024 * 1024
@@ -772,6 +774,43 @@ const routes = {
     } catch {
       throw new HttpError(502, 'Компания создана, но письмо не отправилось — нажмите «Отправить письмо ещё раз»', 'mail_failed')
     }
+    return { ok: true }
+  },
+
+  // «Помощь» → «Написать разработчику»: письмо на SUPPORT_EMAIL (или OPERATOR_EMAIL). Можно и без входа.
+  'POST /api/support': async (req, url) => {
+    const to = process.env.SUPPORT_EMAIL || process.env.OPERATOR_EMAIL
+    if (!to) throw new HttpError(503, 'Адрес поддержки не настроен', 'no_support')
+    const b = await readJson(req, MAX_FORM)
+    const message = String(b.message ?? '').trim().slice(0, 5000)
+    const contact = String(b.contact ?? '').trim().slice(0, 200)
+    if (message.length < 3) throw new HttpError(400, 'Пустое сообщение', 'empty')
+    let u = null
+    try {
+      if (req.headers.authorization) u = auth(req, url)
+    } catch {
+      /* сессия кончилась — отправим как без входа */
+    }
+    rateLimit('support:' + (u?.id ?? clientIp(req)), SUPPORT_PER_HOUR, 3600_000)
+    const short = (v, n) => String(v ?? '').replace(/\s+/g, ' ').trim().slice(0, n) || '—'
+    const info = [
+      ['От', u ? `${u.name || u.login} (${u.login}${u.email ? ', ' + u.email : ''}), компания «${u.orgName}»` : 'без входа в общую базу'],
+      ['Связаться', contact || '—'],
+      ['Версия', short(b.version, 40)],
+      ['Устройство', short(b.device, 200)],
+      ['Язык', short(b.lang, 10)],
+      ['IP', clientIp(req)],
+    ]
+    const replyTo = EMAIL_RE.test(contact) ? contact : u?.email || undefined
+    try {
+      await sendMail(
+        { to, subject: `Windauto: сообщение от ${u ? u.orgName : 'пользователя без входа'}`, text: `${message}\n\n---\n${info.map(([k, v]) => `${k}: ${v}`).join('\n')}`, replyTo },
+        log,
+      )
+    } catch {
+      throw new HttpError(502, 'Письмо не отправилось — попробуйте позже', 'mail_failed')
+    }
+    log(`сообщение в поддержку от ${u ? u.login + ' / ' + u.orgName : clientIp(req)}`)
     return { ok: true }
   },
 

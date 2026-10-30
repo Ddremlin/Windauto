@@ -13,7 +13,7 @@ let proc: ChildProcess
 
 async function start() {
   proc = spawn(process.execPath, ['server/server.mjs'], {
-    env: { ...process.env, PORT: String(PORT), DATA_DIR: dir, ADMIN_PASSWORD: 'secret1', ORG_QUOTA_GB: '0.001', ANTHROPIC_API_KEY: '', MAIL_OUTBOX: join(dir, 'mail.jsonl'), REGISTER_PER_HOUR: '100', NODE_NO_WARNINGS: '1' },
+    env: { ...process.env, PORT: String(PORT), DATA_DIR: dir, ADMIN_PASSWORD: 'secret1', ORG_QUOTA_GB: '0.001', ANTHROPIC_API_KEY: '', MAIL_OUTBOX: join(dir, 'mail.jsonl'), SUPPORT_EMAIL: 'help@windauto.test', REGISTER_PER_HOUR: '100', NODE_NO_WARNINGS: '1' },
     stdio: 'ignore',
   })
   for (let i = 0; i < 50; i++) {
@@ -436,4 +436,18 @@ test('отзыв клиента: ссылка, страница, оценка, �
   assert.match(await (await fetch(URL_ + new URL(r3.body.url).pathname)).text(), /Оцініть ремонт/)
   assert.equal((await fetch(URL_ + '/r/' + 'x'.repeat(24))).status, 404)
   assert.equal((await api('/api/reviews', '')).status, 401)
+})
+
+test('помощь: сообщение разработчику — с входом и без', async () => {
+  const mails = () => readFileSync(join(dir, 'mail.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l)).filter((m) => m.to === 'help@windauto.test')
+  assert.equal((await api('/api/support', '', { message: '' })).status, 400)
+  const r = await api('/api/support', '', { message: 'Не работает камера', contact: 'jan@example.pl', version: '1.15.0', device: 'Pixel 7' })
+  assert.equal(r.status, 200)
+  const m = mails().at(-1)
+  assert.match(m.text, /Не работает камера/)
+  assert.match(m.text, /без входа/)
+  assert.match(m.text, /Pixel 7/)
+  assert.equal(m.replyTo, 'jan@example.pl')
+  assert.equal((await api('/api/support', admin, { message: 'Вопрос по ценам' })).status, 200)
+  assert.match(mails().at(-1).text, /\(admin/)
 })

@@ -111,11 +111,16 @@ interface InputProps {
   note?: string | null
 }
 
-/** Поле ввода номера; страна — нажатием на полосу */
+/** Поле ввода номера; страна — списком под номером или нажатием на полосу */
 export function PlateInput({ value, country, onChange, onCountry, onBlur, label, hint, level, action, note }: InputProps) {
   const { locale, t } = useSettings()
   const h = 60
   const border = level === 'error' ? '#c62828' : level === 'warn' ? '#b26a00' : '#111'
+  const options = COUNTRIES.map((c) => (
+    <option key={c.code} value={c.code}>
+      {c.code} — {countryName(c, locale)}
+    </option>
+  ))
   return (
     <label className={`field wide plate-field lvl-${level}`}>
       <span className="field-label">{label}</span>
@@ -128,12 +133,9 @@ export function PlateInput({ value, country, onChange, onCountry, onBlur, label,
             value={countryByCode(country).code}
             onChange={(e) => onCountry(e.target.value)}
             style={{ position: 'absolute', inset: 0, opacity: 0, width: '100%', height: '100%' }}
+            tabIndex={-1}
           >
-            {COUNTRIES.map((c) => (
-              <option key={c.code} value={c.code}>
-                {c.code} — {countryName(c, locale)}
-              </option>
-            ))}
+            {options}
           </select>
         </span>
         <input
@@ -161,6 +163,12 @@ export function PlateInput({ value, country, onChange, onCountry, onBlur, label,
         />
       </span>
       {action}
+      </span>
+      <span className="plate-country no-print">
+        <span className="field-label">{t('order.plateCountry')}</span>
+        <select value={countryByCode(country).code} onChange={(e) => onCountry(e.target.value)}>
+          {options}
+        </select>
       </span>
       {hint ? <span className="field-hint">{hint}</span> : null}
       {note ? <span className="field-hint field-note">{note}</span> : null}
