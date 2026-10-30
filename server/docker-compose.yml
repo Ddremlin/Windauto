@@ -24,6 +24,10 @@ services:
       OPERATOR_ADDRESS: ${OPERATOR_ADDRESS:-}
       OPERATOR_NIP: ${OPERATOR_NIP:-}
       OPERATOR_EMAIL: ${OPERATOR_EMAIL:-}
+      # «Помощь» → «Написать разработчику»: e-mail (иначе OPERATOR_EMAIL) и бот Telegram
+      SUPPORT_EMAIL: ${SUPPORT_EMAIL:-}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
     volumes:
       - ./data:/data
 
