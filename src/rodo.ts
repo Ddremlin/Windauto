@@ -29,9 +29,16 @@ const DEFAULT: Record<Lang, string> = {
     'Даныя захоўваюцца на працягу тэрміну, які патрабуе падатковае заканадаўства, і да заканчэння тэрміну даўнасці прэтэнзій. ' +
     'Вы маеце права на доступ да даных, іх выпраўленне, выдаленне або абмежаванне апрацоўкі, права пярэчыць супраць апрацоўкі ' +
     'і падаць скаргу Старшыні UODO. Прадастаўленне даных добраахвотнае, але неабходнае для выканання заказа.',
+  en:
+    'The controller of your personal data is {shop}. The data is processed to accept and carry out the vehicle repair order, ' +
+    'to contact you about the order and to issue settlement documents (Art. 6(1)(b) and (c) GDPR). ' +
+    'The data is kept for the period required by tax law and until claims become time-barred. ' +
+    'You have the right to access, rectify or erase your data or restrict its processing, to object to processing ' +
+    'and to lodge a complaint with the President of the Personal Data Protection Office (UODO). ' +
+    'Providing the data is voluntary but necessary to carry out the order.',
 }
 
-const SHOP: Record<Lang, string> = { pl: 'warsztat', ru: 'сервис', uk: 'сервіс', be: 'сэрвіс' }
+const SHOP: Record<Lang, string> = { pl: 'warsztat', ru: 'сервис', uk: 'сервіс', be: 'сэрвіс', en: 'the workshop' }
 
 export function rodoClause(s: Pick<SharedSettings, 'shopName' | 'shopAddress' | 'shopNip' | 'rodoText'>, lang: Lang): string {
   const shop = [s.shopName || SHOP[lang], s.shopAddress, s.shopNip && `NIP ${s.shopNip}`].filter(Boolean).join(', ')

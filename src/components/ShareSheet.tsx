@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
-import { LANGS, makeT, type Lang } from '../i18n'
+import { makeT, type Lang } from '../i18n'
+import LangSelect from './LangSelect'
 import { useSettings } from '../settingsHooks'
 import { isNative, openExternal, printNative } from '../native'
 import { downloadBlob, mailtoUrl, makePdf, orderText, pdfFileName, readyText, sharePdf, shareText, smsUrl, whatsappUrl } from '../share'
@@ -85,13 +86,7 @@ export default function ShareSheet({ order, onClose }: Props) {
           ))}
         </div>
 
-        <div className="seg-row two">
-          {LANGS.map((l) => (
-            <button key={l.id} className={'seg' + (lang === l.id ? ' active' : '')} onClick={() => setLang(l.id)}>
-              {l.label}
-            </button>
-          ))}
-        </div>
+        <LangSelect value={lang} onChange={setLang} label={t('set.docLang')} />
 
         <div className="share-list">
           {ready ? (

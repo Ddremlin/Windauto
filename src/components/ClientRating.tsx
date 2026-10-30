@@ -1,7 +1,8 @@
 // Оценки: внутренняя оценка клиента мастером (в блоке «Клиент») и отзыв клиента о ремонте (ссылка с сервера).
 import { useMemo, useState } from 'react'
 import { clientKey, isRisky, profileOf } from '../clients'
-import { LANGS, makeT, type Lang } from '../i18n'
+import { makeT, type Lang } from '../i18n'
+import LangSelect from './LangSelect'
 import { openExternal } from '../native'
 import { markSent, refreshReviews, useReviews } from '../reviews'
 import { shareText, smsUrl, whatsappUrl } from '../share'
@@ -160,13 +161,7 @@ export function ReviewPanel({ order }: { order: Order }) {
 
       {!link ? (
         <>
-          <div className="seg-row two">
-            {LANGS.map((l) => (
-              <button key={l.id} className={'seg' + (lang === l.id ? ' active' : '')} onClick={() => setLang(l.id)}>
-                {l.label}
-              </button>
-            ))}
-          </div>
+          <LangSelect value={lang} onChange={setLang} label={t('set.docLang')} />
           <button className="btn wide-btn" disabled={busy} onClick={create}>
             {busy ? '⏳' : '⭐'} {review?.sentAt ? t('review.again') : t('review.ask')}
           </button>

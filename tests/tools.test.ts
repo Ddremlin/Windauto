@@ -219,7 +219,7 @@ test('таблица .xlsx: общие и встроенные строки, д�
 
 test('языки: украинский и белорусский переведены целиком', async () => {
   const { LANGS, makeT, missingKeys } = await import('../src/i18n.ts')
-  for (const l of ['uk', 'be'] as const) {
+  for (const l of ['uk', 'be', 'en'] as const) {
     assert.deepEqual(missingKeys(l), [], l)
     assert.ok(LANGS.some((x) => x.id === l))
   }

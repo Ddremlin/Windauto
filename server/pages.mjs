@@ -197,6 +197,19 @@ REVIEW.be = {
   thanks: ['Дзякуй за ацэнку!', 'Рады, што вам спадабалася. Чакаем вас зноў.'],
   thanksLow: ['Дзякуй за ацэнку', 'Нам шкада, што не ўсё атрымалася. Сэрвіс атрымаў ваш водгук і звяжацца з вамі.'],
 }
+REVIEW.en = {
+  title: 'Rate the repair',
+  intro: (shop, car) => `${shop ? `“${shop}”` : 'The workshop'} thanks you for your trust${car ? ` and for the repair of ${car}` : ''}. Please rate our work.`,
+  stars: ['Very bad', 'Bad', 'OK', 'Good', 'Excellent'],
+  comment: 'Comment (optional)',
+  commentPh: 'What you liked, what to improve',
+  send: 'Send rating',
+  again: 'You have already rated this repair — you can change the rating.',
+  pick: 'Choose a rating — from 1 to 5 stars',
+  badLink: ['The link is not valid', 'The link has expired or the order was deleted. If you want to leave a review, please contact the workshop.'],
+  thanks: ['Thank you for your rating!', 'We are glad you liked it. See you again.'],
+  thanksLow: ['Thank you for your rating', 'We are sorry not everything went well. The workshop has received your review and will contact you.'],
+}
 export const REVIEW_LANGS = Object.keys(REVIEW)
 export const reviewText = (lang) => REVIEW[lang] ?? REVIEW.pl
 

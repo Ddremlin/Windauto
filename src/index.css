@@ -814,3 +814,4 @@ input:disabled { opacity: 0.6; }
 .reminder-banner { display: flex; flex-direction: column; gap: 6px; padding: 10px 16px 0; }
 .reminder-banner .reminder { background: var(--panel); }
 .reminder-banner a.btn { text-decoration: none; flex: none; }
+.lang-select { margin-bottom: 10px; }

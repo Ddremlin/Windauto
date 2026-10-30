@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type InputHTMLAttributes } from 'react'
 import TopBar from '../components/TopBar'
-import { LANGS } from '../i18n'
+import LangSelect from '../components/LangSelect'
 import { rodoClause } from '../rodo'
 import { useSettings } from '../settingsHooks'
 import { CURRENCIES, currencyOf, currencySymbol, type Currency, type Settings as S } from '../settingsStore'
@@ -62,26 +62,14 @@ export default function Settings({ orders, onImport }: Props) {
       <main className="content">
         <section className="panel">
           <h2>{t('set.lang')}</h2>
-          <div className="seg-row two">
-            {LANGS.map((l) => (
-              <button
-                key={l.id}
-                className={'seg' + (settings.lang === l.id ? ' active' : '')}
-                // польский интерфейс — и сообщения клиенту по-польски
-                onClick={() => update(l.id === 'pl' ? { lang: l.id, docLang: 'pl' } : { lang: l.id })}
-              >
-                {l.label}
-              </button>
-            ))}
-          </div>
+          <LangSelect
+            value={settings.lang}
+            label={t('set.lang')}
+            // польский интерфейс — и сообщения клиенту по-польски
+            onChange={(lang) => update(lang === 'pl' ? { lang, docLang: 'pl' } : { lang })}
+          />
           <h2>{t('set.docLang')}</h2>
-          <div className="seg-row two">
-            {LANGS.map((l) => (
-              <button key={l.id} className={'seg' + (settings.docLang === l.id ? ' active' : '')} onClick={() => update({ docLang: l.id })}>
-                {l.label}
-              </button>
-            ))}
-          </div>
+          <LangSelect value={settings.docLang} label={t('set.docLang')} onChange={(docLang) => update({ docLang })} />
           <h2>{t('set.currency')}</h2>
           {settings.lang === 'pl' ? (
             <p className="hint">{t('set.currencyPl')}</p>
