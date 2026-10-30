@@ -1,9 +1,16 @@
-export type Lang = 'ru' | 'pl'
+import { be, beElements } from './lang-be'
+import { uk, ukElements } from './lang-uk'
+
+export type Lang = 'ru' | 'pl' | 'uk' | 'be'
 
 export const LANGS: { id: Lang; label: string }[] = [
   { id: 'ru', label: 'Русский' },
   { id: 'pl', label: 'Polski' },
+  { id: 'uk', label: 'Українська' },
+  { id: 'be', label: 'Беларуская' },
 ]
+
+export const isLang = (v: unknown): v is Lang => LANGS.some((l) => l.id === v)
 
 type Dict = Record<string, string>
 
@@ -518,6 +525,7 @@ const ru: Dict = {
   'menu.calendar': 'Календарь',
   'menu.calc': 'Калькулятор',
   'menu.import': 'Заказ из файла',
+  'menu.logout': 'Выйти из аккаунта',
 
   // калькулятор
   'calc.memory': 'Память',
@@ -1088,6 +1096,7 @@ const pl: Dict = {
   'menu.calendar': 'Kalendarz',
   'menu.calc': 'Kalkulator',
   'menu.import': 'Zlecenie z pliku',
+  'menu.logout': 'Wyloguj z konta',
 
   // kalkulator
   'calc.memory': 'Pamięć',
@@ -1217,8 +1226,16 @@ for (const [k, [rl, rs, pll, pls]] of Object.entries(ELEMENTS)) {
   pl[`el.${k}`] = pll
   pl[`els.${k}`] = pls
 }
+for (const [d, els] of [[uk, ukElements], [be, beElements]] as const)
+  for (const [k, [full, short]] of Object.entries(els)) {
+    d[`el.${k}`] = full
+    d[`els.${k}`] = short
+  }
 
-const DICTS: Record<Lang, Dict> = { ru, pl }
+const DICTS: Record<Lang, Dict> = { ru, pl, uk, be }
+
+/** ключи, которых нет в словаре языка (для тестов) */
+export const missingKeys = (lang: Lang) => Object.keys(ru).filter((k) => !(k in DICTS[lang]))
 
 export type T = (key: string, vars?: Record<string, string | number>) => string
 
@@ -1231,4 +1248,7 @@ export function makeT(lang: Lang): T {
   }
 }
 
-export const LOCALE: Record<Lang, string> = { ru: 'ru-RU', pl: 'pl-PL' }
+export const LOCALE: Record<Lang, string> = { ru: 'ru-RU', pl: 'pl-PL', uk: 'uk-UA', be: 'be-BY' }
+
+/** «uk-UA» → 'uk' */
+export const langOfLocale = (locale: string): Lang => (Object.keys(LOCALE) as Lang[]).find((l) => LOCALE[l] === locale) ?? 'ru'

@@ -1,6 +1,7 @@
 // Лист приёмки и акт выдачи для клиента — рендерятся вне экрана и снимаются в PDF.
 // Стили простые (без var/color-mix), чтобы html2canvas отрисовал их точно.
 import { getLayout } from '../body'
+import { langOfLocale } from '../i18n'
 import { orderNo } from '../docNumber'
 import { rodoClause } from '../rodo'
 import { useSettings } from '../settingsHooks'
@@ -361,7 +362,7 @@ export default function AcceptanceDoc({ order, photoUrls, kind = 'acceptance' }:
       {!handover && (
         <div data-block>
           <h2>{t('consent.title')}</h2>
-          <div className="doc-rodo">{rodoClause(settings, locale.startsWith('ru') ? 'ru' : 'pl')}</div>
+          <div className="doc-rodo">{rodoClause(settings, langOfLocale(locale))}</div>
           <div className="doc-consent">
             <div>
               {check(order.consent.rodo)}

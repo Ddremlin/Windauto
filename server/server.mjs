@@ -12,7 +12,7 @@ import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { mailFor, sendMail } from './mail.mjs'
 import { changedKeys, getField, mergeOrders, sameOrder } from './merge.mjs'
-import { legalPage, messagePage, pageText, passwordPage, reviewPage, reviewText } from './pages.mjs'
+import { legalPage, messagePage, pageText, passwordPage, REVIEW_LANGS, reviewPage, reviewText } from './pages.mjs'
 
 const PORT = Number(process.env.PORT ?? 8080)
 const DATA = process.env.DATA_DIR ?? './data'
@@ -945,7 +945,7 @@ const routes = {
     const token = randomBytes(18).toString('base64url')
     db.prepare('DELETE FROM review_links WHERE org_id = ? AND order_id = ?').run(u.orgId, orderId)
     db.prepare('INSERT INTO review_links (hash, org_id, order_id, lang, created) VALUES (?, ?, ?, ?, ?)').run(
-      sha(token), u.orgId, orderId, lang === 'ru' ? 'ru' : 'pl', now(),
+      sha(token), u.orgId, orderId, REVIEW_LANGS.includes(lang) ? lang : 'pl', now(),
     )
     u.org.db
       .prepare('INSERT INTO reviews (order_id, sent_at) VALUES (?, ?) ON CONFLICT(order_id) DO UPDATE SET sent_at = excluded.sent_at')

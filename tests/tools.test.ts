@@ -216,3 +216,14 @@ test('таблица .xlsx: общие и встроенные строки, д�
     [4, ['', '2026-11-05', '601200300']],
   ])
 })
+
+test('языки: украинский и белорусский переведены целиком', async () => {
+  const { LANGS, makeT, missingKeys } = await import('../src/i18n.ts')
+  for (const l of ['uk', 'be'] as const) {
+    assert.deepEqual(missingKeys(l), [], l)
+    assert.ok(LANGS.some((x) => x.id === l))
+  }
+  assert.equal(makeT('uk')('el.hood'), 'Капот')
+  assert.equal(makeT('be')('order.client'), 'Кліент')
+  assert.equal(makeT('uk')('cl.orders', { n: 3 }), 'замовлень: 3')
+})

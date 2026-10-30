@@ -12,10 +12,13 @@ import { DAMAGES, WORKS } from '../works'
 type Lang = keyof typeof SPEECH_LANG
 const LANG_KEY = 'windauto.voiceLang'
 
-function savedLang(fallback: Lang): Lang {
+const isSpeechLang = (v: unknown): v is Lang => typeof v === 'string' && v in SPEECH_LANG
+
+function savedLang(ui: string): Lang {
+  const fallback = isSpeechLang(ui) ? ui : 'ru'
   try {
     const v = localStorage.getItem(LANG_KEY)
-    return v === 'ru' || v === 'pl' ? v : fallback
+    return isSpeechLang(v) ? v : fallback
   } catch {
     return fallback
   }
@@ -195,7 +198,7 @@ export default function VoiceFab({ order, onApply }: { order: Order; onApply: (p
               <>
                 <div className="voice-head">
                   <h2>{phase.step === 'parse' ? t('voice.parsing') : listeningNow ? t('voice.listening') : t('voice.button')}</h2>
-                  <div className="seg-row two voice-lang">
+                  <div className="seg-row voice-lang">
                     {(Object.keys(SPEECH_LANG) as Lang[]).map((l) => (
                       <button
                         key={l}

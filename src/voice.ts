@@ -37,7 +37,8 @@ const ctor = (): RecognitionCtor | undefined => {
 
 export const speechSupported = () => isNative || Boolean(ctor())
 
-export const SPEECH_LANG = { ru: 'ru-RU', pl: 'pl-PL' } as const
+// белорусский распознавание речи в Android не понимает — диктуют по-русски
+export const SPEECH_LANG = { ru: 'ru-RU', pl: 'pl-PL', uk: 'uk-UA' } as const
 
 export interface Listening {
   // закончить и отдать то, что успели сказать

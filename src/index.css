@@ -114,6 +114,7 @@ textarea { resize: vertical; }
   border: 0; background: transparent; color: var(--text); padding: 12px; border-radius: 10px; font-size: 16px;
 }
 .drawer-row.active .drawer-item { color: var(--accent); font-weight: 600; }
+.drawer-logout { color: var(--danger, #c0392b); border-top: 1px solid var(--line, rgba(127,127,127,.25)); }
 .drawer-icon { font-size: 20px; width: 26px; text-align: center; }
 .drawer-text { display: flex; flex-direction: column; min-width: 0; }
 .drawer-text small { color: var(--muted); font-size: 13px; font-weight: 400; }

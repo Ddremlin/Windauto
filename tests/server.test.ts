@@ -432,6 +432,8 @@ test('отзыв клиента: ссылка, страница, оценка, �
   const r2 = await api('/api/reviews/link', admin, { orderId: 'rv1', lang: 'ru' })
   assert.equal((await fetch(URL_ + path)).status, 404)
   assert.match(await (await fetch(URL_ + new URL(r2.body.url).pathname)).text(), /Оцените ремонт/)
+  const r3 = await api('/api/reviews/link', admin, { orderId: 'rv1', lang: 'uk' })
+  assert.match(await (await fetch(URL_ + new URL(r3.body.url).pathname)).text(), /Оцініть ремонт/)
   assert.equal((await fetch(URL_ + '/r/' + 'x'.repeat(24))).status, 404)
   assert.equal((await api('/api/reviews', '')).status, 401)
 })

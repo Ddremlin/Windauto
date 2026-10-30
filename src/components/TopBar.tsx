@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useSettings } from '../settingsHooks'
-import { syncNow, useSyncStatus } from '../sync'
+import { disconnect, syncNow, useSyncStatus } from '../sync'
 
 export type Section = 'orders' | 'clients' | 'calendar' | 'stats' | 'calc' | 'import' | 'sync' | 'settings'
 
@@ -52,6 +52,13 @@ export default function TopBar({ current }: { current: Section }) {
     if (s !== current) go(PATHS[s])
   }
 
+  const logout = async () => {
+    if (!confirm(t('sync.logoutConfirm'))) return
+    setOpen(false)
+    await disconnect()
+    go(PATHS.sync)
+  }
+
   const items: { id: Section; icon: string; label: string; hint?: string }[] = [
     { id: 'orders', icon: '📋', label: t('menu.orders') },
     { id: 'clients', icon: '👥', label: t('menu.clients') },
@@ -99,6 +106,17 @@ export default function TopBar({ current }: { current: Section }) {
             )}
           </div>
         ))}
+        {sync.connected && (
+          <div className="drawer-row">
+            <button className="drawer-item drawer-logout" onClick={logout}>
+              <span className="drawer-icon">⎋</span>
+              <span className="drawer-text">
+                {t('menu.logout')}
+                {sync.user && <small>{sync.user.name || sync.user.login}</small>}
+              </span>
+            </button>
+          </div>
+        )}
         <p className="drawer-foot">{t('set.version', { v: __APP_VERSION__ })}</p>
       </nav>
     </>
