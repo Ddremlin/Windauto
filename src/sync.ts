@@ -609,6 +609,7 @@ export const parseVoice = (text: string, lists: { elements: Named[]; works: Name
 
 // --- «Помощь»: сообщение разработчику (можно и без входа — тогда на сервер обновлений) ---
 export interface SupportMessage {
+  via: 'email' | 'telegram'
   message: string
   contact: string
   version: string

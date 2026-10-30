@@ -43,6 +43,8 @@ OPERATOR_ADDRESS=ul. …, 00-000 Miasto
 OPERATOR_NIP=0000000000
 OPERATOR_EMAIL=kontakt@windauto.pl
 SUPPORT_EMAIL=help@windauto.pl          # куда приходят сообщения из «Помощь» (без него — на OPERATOR_EMAIL)
+TELEGRAM_BOT_TOKEN=123456:ABC...         # бот от @BotFather — сообщения из «Помощь» в Telegram
+TELEGRAM_CHAT_ID=123456789               # кому бот пишет (ваш id или id группы)
 # REGISTRATION=off                      # закрыть регистрацию новых компаний
 ```
 

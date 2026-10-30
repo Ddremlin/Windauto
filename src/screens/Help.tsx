@@ -23,22 +23,25 @@ export default function Help() {
 
   const info = { version: __APP_VERSION__, device: device(), lang: settings.lang }
 
-  const sendEmail = async () => {
+  const send = async () => {
     setBusy(true)
     setError('')
+    setDone('')
     try {
-      await sendSupport({ message: message.trim(), contact: contact.trim(), ...info }, UPDATE_SERVER)
+      await sendSupport({ via, message: message.trim(), contact: contact.trim(), ...info }, UPDATE_SERVER)
       setDone(t('help.sent'))
       setMessage('')
     } catch (e) {
       const code = e instanceof ApiError ? e.code : undefined
+      // бот на сервере не настроен — открываем чат, текст вставят сами
+      if (code === 'no_telegram') return openTelegram()
       setError(code && t(`err.${code}`) !== `err.${code}` ? t(`err.${code}`) : (e as Error).message)
     } finally {
       setBusy(false)
     }
   }
 
-  // в Telegram текст не передать ссылкой на чат — копируем, человек вставляет сам
+  // ссылкой на чат текст не передать — копируем, человек вставляет сам
   const openTelegram = async () => {
     const text = `${message.trim()}\n\n— Windauto ${info.version}, ${info.device}`
     let copied = false
@@ -77,23 +80,20 @@ export default function Help() {
             <span className="field-label">{t('help.message')}</span>
             <textarea rows={6} maxLength={5000} placeholder={t('help.messagePh')} value={message} onChange={(e) => setMessage(e.target.value)} />
           </label>
-          {via === 'email' ? (
-            <>
-              <label className="field">
-                <span className="field-label">{t('help.contact')}</span>
-                <input type="text" inputMode="email" maxLength={200} placeholder={t('help.contactPh')} value={contact} onChange={(e) => setContact(e.target.value)} />
-              </label>
-              <button className="btn primary wide-btn" disabled={busy || message.trim().length < 3} onClick={sendEmail}>
-                {busy ? t('help.sending') : t('help.send')}
+          <label className="field">
+            <span className="field-label">{t('help.contact')}</span>
+            <input type="text" inputMode="email" maxLength={200} placeholder={t('help.contactPh')} value={contact} onChange={(e) => setContact(e.target.value)} />
+          </label>
+          <button className="btn primary wide-btn" disabled={busy || message.trim().length < 3} onClick={send}>
+            {busy ? t('help.sending') : t('help.send')}
+          </button>
+          {via === 'telegram' && (
+            <p className="hint">
+              {t('help.tgHint')}{' '}
+              <button className="link-btn" onClick={openTelegram}>
+                @windautohelp
               </button>
-            </>
-          ) : (
-            <>
-              <p className="hint">{t('help.tgHint')}</p>
-              <button className="btn primary wide-btn" onClick={openTelegram}>
-                ✈️ {t('help.tgOpen')}
-              </button>
-            </>
+            </p>
           )}
           {done && <p className="ok-text">✓ {done}</p>}
           {error && <p className="warn-text">⚠ {error}</p>}

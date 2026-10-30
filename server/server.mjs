@@ -12,6 +12,7 @@ import { join } from 'node:path'
 import { DatabaseSync } from 'node:sqlite'
 import { mailFor, sendMail } from './mail.mjs'
 import { changedKeys, getField, mergeOrders, sameOrder } from './merge.mjs'
+import { sendTelegram, telegramReady } from './telegram.mjs'
 import { legalPage, messagePage, pageText, passwordPage, REVIEW_LANGS, reviewPage, reviewText } from './pages.mjs'
 
 const PORT = Number(process.env.PORT ?? 8080)
@@ -777,11 +778,13 @@ const routes = {
     return { ok: true }
   },
 
-  // «Помощь» → «Написать разработчику»: письмо на SUPPORT_EMAIL (или OPERATOR_EMAIL). Можно и без входа.
+  // «Помощь» → «Написать разработчику»: письмо на SUPPORT_EMAIL (или OPERATOR_EMAIL) или в Telegram ботом.
+  // Можно и без входа.
   'POST /api/support': async (req, url) => {
-    const to = process.env.SUPPORT_EMAIL || process.env.OPERATOR_EMAIL
-    if (!to) throw new HttpError(503, 'Адрес поддержки не настроен', 'no_support')
     const b = await readJson(req, MAX_FORM)
+    const telegram = b.via === 'telegram'
+    const to = process.env.SUPPORT_EMAIL || process.env.OPERATOR_EMAIL
+    if (telegram ? !telegramReady() : !to) throw new HttpError(503, 'Канал поддержки не настроен', telegram ? 'no_telegram' : 'no_support')
     const message = String(b.message ?? '').trim().slice(0, 5000)
     const contact = String(b.contact ?? '').trim().slice(0, 200)
     if (message.length < 3) throw new HttpError(400, 'Пустое сообщение', 'empty')
@@ -802,15 +805,15 @@ const routes = {
       ['IP', clientIp(req)],
     ]
     const replyTo = EMAIL_RE.test(contact) ? contact : u?.email || undefined
+    const from = u ? u.orgName : 'пользователя без входа'
+    const text = `${message}\n\n---\n${info.map(([k, v]) => `${k}: ${v}`).join('\n')}`
     try {
-      await sendMail(
-        { to, subject: `Windauto: сообщение от ${u ? u.orgName : 'пользователя без входа'}`, text: `${message}\n\n---\n${info.map(([k, v]) => `${k}: ${v}`).join('\n')}`, replyTo },
-        log,
-      )
+      if (telegram) await sendTelegram(`📩 Windauto: сообщение от ${from}\n\n${text}`, log)
+      else await sendMail({ to, subject: `Windauto: сообщение от ${from}`, text, replyTo }, log)
     } catch {
-      throw new HttpError(502, 'Письмо не отправилось — попробуйте позже', 'mail_failed')
+      throw new HttpError(502, 'Сообщение не отправилось — попробуйте позже', 'mail_failed')
     }
-    log(`сообщение в поддержку от ${u ? u.login + ' / ' + u.orgName : clientIp(req)}`)
+    log(`сообщение в поддержку (${telegram ? 'Telegram' : 'e-mail'}) от ${u ? u.login + ' / ' + u.orgName : clientIp(req)}`)
     return { ok: true }
   },
 

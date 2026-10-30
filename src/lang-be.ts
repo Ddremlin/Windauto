@@ -521,7 +521,7 @@ export const be: Record<string, string> = {
   'help.send': "Адправіць",
   'help.sending': "Адпраўляю…",
   'help.sent': "Паведамленне адпраўлена — дзякуй! Адкажам на пазначаны кантакт.",
-  'help.tgHint': "Адкрыецца чат @windautohelp у Telegram. Тэкст паведамлення скапіюецца — устаўце яго ў чат і адпраўце.",
+  'help.tgHint': "Паведамленне прыйдзе распрацоўшчыку ў Telegram. Напісаць самому ў чат:",
   'help.tgOpen': "Адкрыць Telegram",
   'help.tgCopied': "Тэкст скапіяваны — устаўце яго ў чат Telegram",
   'help.about': "Пра праграму",

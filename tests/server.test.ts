@@ -13,7 +13,7 @@ let proc: ChildProcess
 
 async function start() {
   proc = spawn(process.execPath, ['server/server.mjs'], {
-    env: { ...process.env, PORT: String(PORT), DATA_DIR: dir, ADMIN_PASSWORD: 'secret1', ORG_QUOTA_GB: '0.001', ANTHROPIC_API_KEY: '', MAIL_OUTBOX: join(dir, 'mail.jsonl'), SUPPORT_EMAIL: 'help@windauto.test', REGISTER_PER_HOUR: '100', NODE_NO_WARNINGS: '1' },
+    env: { ...process.env, PORT: String(PORT), DATA_DIR: dir, ADMIN_PASSWORD: 'secret1', ORG_QUOTA_GB: '0.001', ANTHROPIC_API_KEY: '', MAIL_OUTBOX: join(dir, 'mail.jsonl'), SUPPORT_EMAIL: 'help@windauto.test', TELEGRAM_OUTBOX: join(dir, 'tg.jsonl'), REGISTER_PER_HOUR: '100', NODE_NO_WARNINGS: '1' },
     stdio: 'ignore',
   })
   for (let i = 0; i < 50; i++) {
@@ -450,4 +450,10 @@ test('помощь: сообщение разработчику — с вход�
   assert.equal(m.replyTo, 'jan@example.pl')
   assert.equal((await api('/api/support', admin, { message: 'Вопрос по ценам' })).status, 200)
   assert.match(mails().at(-1).text, /\(admin/)
+  // в Telegram — ботом
+  assert.equal((await api('/api/support', staff, { message: 'Помогите с импортом', via: 'telegram', contact: '+48 600 100 200' })).status, 200)
+  const tg = readFileSync(join(dir, 'tg.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l)).at(-1)
+  assert.match(tg.text, /Помогите с импортом/)
+  assert.match(tg.text, /\(jan/)
+  assert.match(tg.text, /\+48 600 100 200/)
 })

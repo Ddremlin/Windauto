@@ -521,7 +521,7 @@ export const en: Record<string, string> = {
   'help.send': "Send",
   'help.sending': "Sending…",
   'help.sent': "Message sent — thank you! We will reply to the contact you gave.",
-  'help.tgHint': "The @windautohelp chat will open in Telegram. The message text will be copied — paste it into the chat and send.",
+  'help.tgHint': "The message goes to the developer on Telegram. To write in the chat yourself:",
   'help.tgOpen': "Open Telegram",
   'help.tgCopied': "Text copied — paste it into the Telegram chat",
   'help.about': "About the app",

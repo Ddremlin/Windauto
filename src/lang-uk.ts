@@ -521,7 +521,7 @@ export const uk: Record<string, string> = {
   'help.send': "Надіслати",
   'help.sending': "Надсилаю…",
   'help.sent': "Повідомлення надіслано — дякуємо! Відповімо на вказаний контакт.",
-  'help.tgHint': "Відкриється чат @windautohelp у Telegram. Текст повідомлення скопіюється — вставте його в чат і надішліть.",
+  'help.tgHint': "Повідомлення надійде розробнику в Telegram. Написати самому в чат:",
   'help.tgOpen': "Відкрити Telegram",
   'help.tgCopied': "Текст скопійовано — вставте його в чат Telegram",
   'help.about': "Про застосунок",
