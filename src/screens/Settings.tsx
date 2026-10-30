@@ -3,7 +3,7 @@ import TopBar from '../components/TopBar'
 import { LANGS } from '../i18n'
 import { rodoClause } from '../rodo'
 import { useSettings } from '../settingsHooks'
-import type { Settings as S } from '../settingsStore'
+import { CURRENCIES, currencyOf, currencySymbol, type Currency, type Settings as S } from '../settingsStore'
 import { exportJson, importJson } from '../storage'
 import { useSyncStatus } from '../sync'
 import type { Order, WorkId } from '../types'
@@ -64,7 +64,12 @@ export default function Settings({ orders, onImport }: Props) {
           <h2>{t('set.lang')}</h2>
           <div className="seg-row two">
             {LANGS.map((l) => (
-              <button key={l.id} className={'seg' + (settings.lang === l.id ? ' active' : '')} onClick={() => update({ lang: l.id })}>
+              <button
+                key={l.id}
+                className={'seg' + (settings.lang === l.id ? ' active' : '')}
+                // польский интерфейс — и сообщения клиенту по-польски
+                onClick={() => update(l.id === 'pl' ? { lang: l.id, docLang: 'pl' } : { lang: l.id })}
+              >
                 {l.label}
               </button>
             ))}
@@ -77,6 +82,21 @@ export default function Settings({ orders, onImport }: Props) {
               </button>
             ))}
           </div>
+          <h2>{t('set.currency')}</h2>
+          {settings.lang === 'pl' ? (
+            <p className="hint">{t('set.currencyPl')}</p>
+          ) : (
+            <>
+              <select value={currencyOf(settings)} onChange={(e) => update({ currency: e.target.value as Currency })}>
+                {(Object.keys(CURRENCIES) as Currency[]).map((c) => (
+                  <option key={c} value={c}>
+                    {c} — {CURRENCIES[c]}
+                  </option>
+                ))}
+              </select>
+              <p className="hint">{t('set.currencyHint')}</p>
+            </>
+          )}
         </section>
 
         <section className="panel">
@@ -143,7 +163,7 @@ export default function Settings({ orders, onImport }: Props) {
                     onChange={(e) => setPrice(w.id, e.target.value)}
                     disabled={locked}
                   />
-                  <span>zł</span>
+                  <span>{currencySymbol()}</span>
                 </span>
               </label>
             ))}

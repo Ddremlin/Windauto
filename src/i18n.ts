@@ -155,6 +155,9 @@ const ru: Dict = {
   'set.pricesHint': 'Подставляются при отметке работы, если цена для элемента ещё не введена. Пустое поле — без подстановки.',
   'set.data': 'Данные',
   'set.storage': 'Занято на устройстве: {used}',
+  'set.currency': 'Валюта',
+  'set.currencyPl': 'При польском языке интерфейса суммы всегда в злотых.',
+  'set.currencyHint': 'Суммы в заказах, документах и сообщениях клиенту. При польском языке интерфейса — всегда злотый.',
   'set.version': 'Версия {v}',
 
 
@@ -730,6 +733,9 @@ const pl: Dict = {
   'set.pricesHint': 'Wstawiane przy zaznaczeniu pracy, jeśli cena dla elementu nie została jeszcze wpisana. Puste pole — bez podstawiania.',
   'set.data': 'Dane',
   'set.storage': 'Zajęte na urządzeniu: {used}',
+  'set.currency': 'Waluta',
+  'set.currencyPl': 'Przy polskim języku interfejsu kwoty są zawsze w złotych.',
+  'set.currencyHint': 'Kwoty w zleceniach, dokumentach i wiadomościach do klienta. Przy polskim interfejsie — zawsze złoty.',
   'set.version': 'Wersja {v}',
 
 

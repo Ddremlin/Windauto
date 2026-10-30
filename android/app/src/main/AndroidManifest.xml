@@ -59,5 +59,12 @@
         <intent>
             <action android:name="android.speech.RecognitionService" />
         </intent>
+        <!-- без этого Android 11+ не показывает приложению камеру, и <input capture> открывает галерею -->
+        <intent>
+            <action android:name="android.media.action.IMAGE_CAPTURE" />
+        </intent>
+        <intent>
+            <action android:name="android.media.action.VIDEO_CAPTURE" />
+        </intent>
     </queries>
 </manifest>

@@ -17,9 +17,14 @@ export interface SharedSettings {
   rodoText: string
 }
 
+export const CURRENCIES = { PLN: 'zł', EUR: '€', USD: '$', UAH: '₴', BYN: 'Br', RUB: '₽', CZK: 'Kč' } as const
+export type Currency = keyof typeof CURRENCIES
+
 export interface Settings extends SharedSettings {
   lang: Lang
   docLang: Lang
+  // валюта на этом телефоне; при польском интерфейсе всегда злотый
+  currency: Currency
   sharedUpdatedAt: number
 }
 
@@ -39,6 +44,7 @@ const KEY = 'windauto.settings.v1'
 const DEFAULTS: Settings = {
   lang: 'ru',
   docLang: 'pl',
+  currency: 'PLN',
   shopName: '',
   shopAddress: '',
   shopPhone: '',
@@ -63,6 +69,11 @@ const listeners = new Set<() => void>()
 const sharedListeners = new Set<() => void>()
 
 export const getSettings = () => settings
+
+/** Валюта сумм: польский интерфейс — злотый, иначе выбранная в Настройках */
+export const currencyOf = (s: Pick<Settings, 'lang' | 'currency'>): Currency =>
+  s.lang === 'pl' || !(s.currency in CURRENCIES) ? 'PLN' : s.currency
+export const currencySymbol = () => CURRENCIES[currencyOf(settings)]
 
 export const pickShared = (s: Settings): SharedSettings =>
   Object.fromEntries(SHARED_KEYS.map((k) => [k, s[k]])) as unknown as SharedSettings

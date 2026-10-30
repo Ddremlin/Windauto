@@ -1,6 +1,7 @@
 // Голосовой ввод. Речь в текст переводит сам телефон (Web Speech API: Google на Android, Apple на iPhone);
 // разбор текста по полям заказа — Claude на сервере (sync.parseVoice). Здесь — распознавание речи
 // и применение результата к заказу.
+import { currencySymbol } from './settingsStore'
 import { SpeechRecognition } from '@capacitor-community/speech-recognition'
 import { COUNTRIES } from './countries'
 import { isNative } from './native'
@@ -303,7 +304,7 @@ export function applyVoice(
     let priceNote = ''
     if (e.price > 0) {
       if (newWorks.length === 1) prices[newWorks[0]] = e.price
-      else priceNote = `${e.price} zł`
+      else priceNote = `${e.price} ${currencySymbol()}`
     }
     const damage = [...new Set([...(cur.damage ?? []), ...newDamage])]
     const extra = [note, priceNote].filter(Boolean).join(', ')

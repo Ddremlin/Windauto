@@ -1,3 +1,4 @@
+import { currencySymbol } from './settingsStore'
 import type { DamageId, ElementWork, IntakeItem, Order, OrderStatus, WorkId } from './types'
 
 // Подписи — в i18n.ts по ключу work.<id>
@@ -52,8 +53,8 @@ export const STATUSES: OrderStatus[] = ['new', 'in_work', 'waiting_parts', 'done
 // статусы «машина в сервисе»
 export const ACTIVE_STATUSES: OrderStatus[] = ['new', 'in_work', 'waiting_parts', 'done']
 
-const money = new Intl.NumberFormat('pl-PL', { style: 'currency', currency: 'PLN', maximumFractionDigits: 2 })
-export const formatMoney = (v: number) => money.format(v)
+const money = new Intl.NumberFormat('pl-PL', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+export const formatMoney = (v: number) => `${money.format(v)}\u00a0${currencySymbol()}`
 
 const round2 = (v: number) => Math.round(v * 100) / 100
 

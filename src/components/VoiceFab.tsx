@@ -4,6 +4,7 @@
 import { useEffect, useRef, useState } from 'react'
 import { getLayout } from '../body'
 import { useSettings } from '../settingsHooks'
+import { currencySymbol } from '../settingsStore'
 import { canRecognize, parseVoice } from '../sync'
 import type { Order } from '../types'
 import { SPEECH_LANG, VOICE_FIELD_LABEL, applyVoice, dictationTarget, insertText, listen, speechSupported, type Listening, type VoiceChange } from '../voice'
@@ -150,7 +151,7 @@ export default function VoiceFab({ order, onApply }: { order: Order; onApply: (p
           {[
             ...c.works.map((w) => t(`work.${w}`)),
             ...c.damage.map((d) => t(`damage.${d}`)),
-            c.price ? `${c.price} zł` : '',
+            c.price ? `${c.price} ${currencySymbol()}` : '',
             c.note ?? '',
           ]
             .filter(Boolean)

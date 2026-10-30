@@ -227,3 +227,12 @@ test('языки: украинский и белорусский перевед�
   assert.equal(makeT('be')('order.client'), 'Кліент')
   assert.equal(makeT('uk')('cl.orders', { n: 3 }), 'замовлень: 3')
 })
+
+test('валюта: польский интерфейс — всегда злотый, иначе выбранная', async () => {
+  const { currencyOf } = await import('../src/settingsStore.ts')
+  const { formatMoney } = await import('../src/works.ts')
+  assert.equal(currencyOf({ lang: 'pl', currency: 'EUR' }), 'PLN')
+  assert.equal(currencyOf({ lang: 'uk', currency: 'UAH' }), 'UAH')
+  assert.equal(currencyOf({ lang: 'ru', currency: 'XXX' as never }), 'PLN')
+  assert.equal(formatMoney(12000).replace(/\s/g, ' '), '12 000,00 zł')
+})

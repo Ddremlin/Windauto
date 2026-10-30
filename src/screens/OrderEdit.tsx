@@ -342,12 +342,6 @@ export default function OrderEdit({ initial, onSave, onDelete, onBack }: Props) 
               check={checkEmail(order.email)}
             />
           </div>
-          <ClientRatingBlock
-            order={order}
-            orders={allOrders}
-            by={sync.user?.name || sync.user?.login || ''}
-            onChange={(clientRating) => update({ clientRating })}
-          />
           <span className="field-label reminders-label">{t('rem.title')}</span>
           <RemindersBlock order={order} onChange={(reminders) => update({ reminders })} />
           <ConsentBlock consent={order.consent} onChange={(consent) => update({ consent })} />
@@ -468,6 +462,16 @@ export default function OrderEdit({ initial, onSave, onDelete, onBack }: Props) 
         <ReviewPanel order={order} />
 
         <HistoryPanel orderId={order.id} />
+
+        {/* внутренняя оценка — в самом низу, клиенту на глаза не попадается */}
+        <section className="panel no-print">
+          <ClientRatingBlock
+            order={order}
+            orders={allOrders}
+            by={sync.user?.name || sync.user?.login || ''}
+            onChange={(clientRating) => update({ clientRating })}
+          />
+        </section>
 
         <div className="print-only signatures">
           <span>{t('doc.signClient')}: ____________________</span>

@@ -1,6 +1,7 @@
 import { useEffect } from 'react'
 import { deletePhotos, elementPhotoIds } from '../photos'
 import { useSettings } from '../settingsHooks'
+import { currencySymbol } from '../settingsStore'
 import { PhotoStrip } from './Photos'
 import type { DamageId, ElementWork, WorkId } from '../types'
 import { DAMAGES, EXCLUSIVE, WORKS, elementTotal, formatMoney } from '../works'
@@ -108,7 +109,7 @@ export default function ElementSheet({ label, value, onChange, onClose }: Props)
                       onChange={(e) => setPrice(w.id, e.target.value)}
                       aria-label={t('sheet.price', { work: t(`work.${w.id}`) })}
                     />
-                    <span>zł</span>
+                    <span>{currencySymbol()}</span>
                   </label>
                 )}
               </div>
@@ -128,7 +129,7 @@ export default function ElementSheet({ label, value, onChange, onClose }: Props)
               onChange={(e) => commit({ parts: parsePrice(e.target.value) })}
               aria-label={t('sheet.parts')}
             />
-            <span>zł</span>
+            <span>{currencySymbol()}</span>
           </label>
         </div>
         <div className="sheet-total">
