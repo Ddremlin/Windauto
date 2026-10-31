@@ -162,6 +162,8 @@ let again = false
 let timer: ReturnType<typeof setTimeout> | undefined
 let interval: ReturnType<typeof setInterval> | undefined
 let events: EventSource | null = null
+let eventsRetry: ReturnType<typeof setTimeout> | undefined
+let liveGen = 0
 
 export function scheduleSync(delay = 1500) {
   if (!state.token) return
@@ -319,18 +321,40 @@ function startLive() {
   stopLive()
   if (!state.token) return
   interval = setInterval(() => void syncNow(), 60_000)
+  void openEvents()
+}
+
+// токен в адрес не кладём: берём одноразовый билет и подключаемся с ним.
+// Билет второй раз не примут, поэтому при обрыве — новый билет, а не переподключение EventSource
+async function openEvents() {
+  const gen = liveGen
+  let ticket: string
   try {
-    events = new EventSource(`${state.server}/api/events?token=${encodeURIComponent(state.token)}`)
+    ticket = (await api<{ ticket: string }>('/api/events/ticket', { method: 'POST' })).ticket
+  } catch {
+    if (gen === liveGen && state.token) eventsRetry = setTimeout(() => void openEvents(), 30_000)
+    return
+  }
+  if (gen !== liveGen) return
+  try {
+    events = new EventSource(`${state.server}/api/events?ticket=${encodeURIComponent(ticket)}`)
     events.addEventListener('rev', (e) => {
       if (Number((e as MessageEvent).data) > state.lastRev) scheduleSync(300)
     })
+    events.onerror = () => {
+      events?.close()
+      events = null
+      if (gen === liveGen) eventsRetry = setTimeout(() => void openEvents(), 5_000)
+    }
   } catch {
     events = null
   }
 }
 
 function stopLive() {
+  liveGen++
   clearInterval(interval)
+  clearTimeout(eventsRetry)
   events?.close()
   events = null
 }

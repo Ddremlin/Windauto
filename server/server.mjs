@@ -435,9 +435,24 @@ const readJson = async (req, limit = MAX_JSON) => {
   }
 }
 
-const auth = (req, url) => {
+// билеты для /api/events: EventSource не умеет заголовки, а токен в адресе попадает в журналы и историю.
+// Билет одноразовый, живёт минуту, хранится только в памяти
+const TICKET_MS = 60_000
+const eventTickets = new Map()
+const bearer = (req) => {
   const h = req.headers.authorization ?? ''
-  const token = h.startsWith('Bearer ') ? h.slice(7) : url.searchParams.get('token')
+  return h.startsWith('Bearer ') ? h.slice(7) : ''
+}
+
+const auth = (req, url) => {
+  let token = bearer(req)
+  if (!token && url.pathname === '/api/events') {
+    const key = sha(url.searchParams.get('ticket') ?? '')
+    const t = eventTickets.get(key)
+    eventTickets.delete(key)
+    // ?token= — старые версии приложения (до 1.19.0)
+    token = t && t.until > now() ? t.token : (url.searchParams.get('token') ?? '')
+  }
   if (!token) throw new HttpError(401, 'Нужен вход')
   const row = db
     .prepare(
@@ -1226,6 +1241,15 @@ const routes = {
         .all(u.orgId)
         .map(publicUser),
     }
+  },
+
+  'POST /api/events/ticket': (req, url) => {
+    const u = auth(req, url)
+    rateLimit('ticket:' + u.id, 30, 60_000)
+    for (const [k, t] of eventTickets) if (t.until < now()) eventTickets.delete(k)
+    const ticket = randomBytes(24).toString('base64url')
+    eventTickets.set(sha(ticket), { token: bearer(req), until: now() + TICKET_MS })
+    return { ticket }
   },
 
   'GET /api/events': (req, url, res) => {

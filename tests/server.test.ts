@@ -545,3 +545,20 @@ test('защита: страницы сервера с Content-Security-Policy',
   const r = await fetch(URL_ + '/legal/privacy')
   assert.match(r.headers.get('content-security-policy') ?? '', /default-src 'none'/)
 })
+
+test('живые обновления: одноразовый билет вместо токена в адресе', async () => {
+  const sse = async (q: string) => {
+    const ac = new AbortController()
+    const r = await fetch(URL_ + '/api/events?' + q, { signal: ac.signal })
+    ac.abort()
+    return r.status
+  }
+  assert.equal((await api('/api/events/ticket', '', {})).status, 401)
+  const { ticket } = (await api('/api/events/ticket', admin, {})).body
+  assert.equal(await sse('ticket=' + ticket), 200)
+  assert.equal(await sse('ticket=' + ticket), 401)
+  assert.equal(await sse('ticket=nope'), 401)
+  // токен в адресе — только для /api/events (старые версии), остальное — только заголовком
+  assert.equal(await sse('token=' + admin), 200)
+  assert.equal((await fetch(URL_ + '/api/me?token=' + admin)).status, 401)
+})
