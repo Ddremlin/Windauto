@@ -25,6 +25,8 @@ export interface SyncUser {
   orgName?: string
   owner?: boolean
   platform?: boolean
+  // Pro: ИИ и фото/видео на сервере
+  pro?: boolean
 }
 
 interface State {
@@ -209,8 +211,12 @@ export async function syncNow(): Promise<void> {
   running = true
   setStatus({ syncing: true })
   try {
-    // 1. новые фото — раньше заказов, чтобы на других телефонах они уже были
-    for (const id of getOrders().flatMap(orderPhotoIds)) {
+    // тариф и права могут смениться на сервере — освежаем раз в 10 минут
+    if (Date.now() - meAt > 600_000) await refreshMe()
+    // 1. новые фото — раньше заказов, чтобы на других телефонах они уже были.
+    // Без Pro фото и видео остаются на телефоне; после включения Pro загрузятся сами
+    const media = isPro()
+    for (const id of media ? getOrders().flatMap(orderPhotoIds) : []) {
       if (state.uploaded[id]) continue
       const blob = await getLocalPhoto(id)
       if (!blob) continue
@@ -219,7 +225,7 @@ export async function syncNow(): Promise<void> {
       persist()
     }
     // круговые видео — после фото: они большие и грузятся дольше
-    for (const id of getOrders().flatMap(orderVideoIds)) {
+    for (const id of media ? getOrders().flatMap(orderVideoIds) : []) {
       if (state.uploaded[id]) continue
       const blob = await getLocalVideo(id)
       if (!blob) continue
@@ -289,7 +295,12 @@ export async function syncNow(): Promise<void> {
     setStatus({ error: null, authError: false })
   } catch (e) {
     const err = e as ApiError
-    setStatus({ error: err.message, authError: err.status === 401 })
+    // Pro выключили — узнаём об этом и синхронизируем дальше без фото и видео
+    if (err.status === 402 && state.user?.pro) {
+      await refreshMe()
+      if (!state.user?.pro) again = true
+    }
+    setStatus({ error: err.status === 402 ? null : err.message, authError: err.status === 401 })
     if (err.status === 401) stopLive()
   } finally {
     running = false
@@ -432,6 +443,7 @@ export interface OrgSummary {
   name: string
   created: number
   blocked: boolean
+  pro: boolean
   owner: { name: string; login: string; email: string } | null
   users: number
   orders: number
@@ -440,6 +452,7 @@ export interface OrgSummary {
 export const listOrgs = () => api<{ orgs: OrgSummary[] }>('/api/platform/orgs').then((r) => r.orgs)
 export const setOrgBlocked = (id: string, blocked: boolean) =>
   api(`/api/platform/orgs/${id}`, { method: 'PATCH', body: JSON.stringify({ blocked }) })
+export const setOrgPro = (id: string, pro: boolean) => api(`/api/platform/orgs/${id}`, { method: 'PATCH', body: JSON.stringify({ pro }) })
 export const removeOrg = (id: string) => api(`/api/platform/orgs/${id}`, { method: 'DELETE' })
 
 // --- администрирование ---
@@ -517,7 +530,9 @@ export function initSync() {
 }
 
 /** Свежие данные о себе и компании (название, права); заодно запоминаем, чьи заказы на телефоне */
+let meAt = 0
 export async function refreshMe() {
+  meAt = Date.now()
   try {
     const { user } = await api<{ user: SyncUser }>('/api/me')
     state.user = user
@@ -549,7 +564,12 @@ export interface RecognizedDoc {
   confident: boolean
 }
 
-export const canRecognize = () => Boolean(state.token)
+/** Подключены к общей базе */
+export const isConnected = () => Boolean(state.token)
+/** Компания с Pro: ИИ и фото/видео на сервере */
+export const isPro = () => Boolean(state.token && state.user?.pro)
+/** ИИ на сервере — только в Pro */
+export const canRecognize = isPro
 
 // --- отзывы клиентов о ремонте ---
 export interface Review {

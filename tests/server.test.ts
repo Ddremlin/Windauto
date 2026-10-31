@@ -117,6 +117,10 @@ test('удаление и правка после удаления', async () =>
   assert.deepEqual(r2.body.accepted, ['o3'])
 })
 
+test('своя компания владельца платформы — всегда Pro', async () => {
+  assert.equal((await api('/api/me', staff)).body.user.pro, true)
+})
+
 test('распознавание без ключа — понятная ошибка; неизвестный kind отклоняется', async () => {
   const r = await api('/api/recognize', staff, { kind: 'doc', image: 'x' })
   assert.equal(r.status, 503)
@@ -205,7 +209,18 @@ test('компании не видят данные друг друга: зак�
   assert.deepEqual(seenByB, ['iso-b'])
 
   const photo = new Uint8Array([0xff, 0xd8, 1, 2, 3])
-  assert.equal((await fetch(`${URL_}/api/photos/photo-of-a1`, { method: 'PUT', headers: { Authorization: `Bearer ${a}` }, body: photo })).status, 200)
+  const putA = () => fetch(`${URL_}/api/photos/photo-of-a1`, { method: 'PUT', headers: { Authorization: `Bearer ${a}` }, body: photo })
+  // без Pro фото на сервер не принимаются, ИИ — тоже
+  const meA = (await api('/api/me', a)).body.user
+  assert.equal(meA.pro, false)
+  assert.equal((await putA()).status, 402)
+  assert.equal((await api('/api/voice', a, { text: 'x' })).body.code, 'pro_required')
+  // Pro включает только владелец платформы
+  assert.equal((await api(`/api/platform/orgs/${meA.orgId}`, a, { pro: true }, 'PATCH')).status, 403)
+  const on = await api(`/api/platform/orgs/${meA.orgId}`, admin, { pro: true }, 'PATCH')
+  assert.equal(on.body.org.pro, true)
+  assert.equal((await api('/api/me', a)).body.user.pro, true)
+  assert.equal((await putA()).status, 200)
   assert.equal((await fetch(`${URL_}/api/photos/photo-of-a1`, { headers: { Authorization: `Bearer ${a}` } })).status, 200)
   assert.equal((await fetch(`${URL_}/api/photos/photo-of-a1`, { headers: { Authorization: `Bearer ${b}` } })).status, 404)
 

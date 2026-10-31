@@ -5,7 +5,7 @@ import { useEffect, useRef, useState } from 'react'
 import { getLayout } from '../body'
 import { useSettings } from '../settingsHooks'
 import { currencySymbol } from '../settingsStore'
-import { canRecognize, parseVoice } from '../sync'
+import { canRecognize, isConnected, parseVoice } from '../sync'
 import type { Order } from '../types'
 import { SPEECH_LANG, VOICE_FIELD_LABEL, applyVoice, dictationTarget, insertText, listen, speechSupported, type Listening, type VoiceChange } from '../voice'
 import { DAMAGES, WORKS } from '../works'
@@ -91,7 +91,7 @@ export default function VoiceFab({ order, onApply }: { order: Order; onApply: (p
   }
 
   const analyse = async (said: string) => {
-    if (!canRecognize()) return setError(t('voice.needServer'))
+    if (!canRecognize()) return setError(t(isConnected() ? 'pro.voice' : 'voice.needServer'))
     setPhase({ step: 'parse' })
     try {
       const r = await parseVoice(said, {

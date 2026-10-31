@@ -546,6 +546,16 @@ const ru: Dict = {
   'help.device': "Устройство",
   'err.no_support': "Отправка на почту пока не настроена — напишите в Telegram",
   'err.empty': "Напишите сообщение",
+  'pro.planPro': "Тариф Pro: ИИ и фото/видео на сервере",
+  'pro.planFree': "Бесплатный тариф",
+  'pro.freeHint': "Фото и видео хранятся только на этом телефоне и не видны другим сотрудникам. Распознавание ИИ и синхронизация фото и видео — в Pro.",
+  'pro.needed': "Распознавание техпаспорта ИИ доступно в Pro",
+  'pro.voice': "Разбор ИИ доступен в Pro. Диктовка в поле — бесплатно: поставьте курсор в нужное поле.",
+  'pro.importAi': "Разбор свободного текста с ИИ — в Pro",
+  'pro.enable': "Включить Pro",
+  'pro.disable': "Выключить Pro",
+  'err.pro_required': "Доступно в версии Pro",
+  'scan.needServer': "Распознавание техпаспорта работает через общую базу — подключитесь в разделе «Синхронизация»",
   'menu.logout': 'Выйти из аккаунта',
 
   // калькулятор
@@ -1136,6 +1146,16 @@ const pl: Dict = {
   'help.device': "Urządzenie",
   'err.no_support': "Wysyłka e-mailem nie jest jeszcze skonfigurowana — napisz na Telegramie",
   'err.empty': "Napisz wiadomość",
+  'pro.planPro': "Pakiet Pro: AI oraz zdjęcia i wideo na serwerze",
+  'pro.planFree': "Pakiet bezpłatny",
+  'pro.freeHint': "Zdjęcia i wideo są przechowywane tylko na tym telefonie i nie widzą ich inni pracownicy. Rozpoznawanie AI i synchronizacja zdjęć oraz wideo — w Pro.",
+  'pro.needed': "Rozpoznawanie dowodu rejestracyjnego przez AI jest dostępne w Pro",
+  'pro.voice': "Analiza AI jest dostępna w Pro. Dyktowanie do pola jest bezpłatne — ustaw kursor w polu.",
+  'pro.importAi': "Analiza wolnego tekstu przez AI — w Pro",
+  'pro.enable': "Włącz Pro",
+  'pro.disable': "Wyłącz Pro",
+  'err.pro_required': "Dostępne w wersji Pro",
+  'scan.needServer': "Rozpoznawanie dowodu rejestracyjnego działa przez wspólną bazę — połącz się w sekcji «Synchronizacja»",
   'menu.logout': 'Wyloguj z konta',
 
   // kalkulator

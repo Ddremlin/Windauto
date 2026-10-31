@@ -4,7 +4,7 @@ import { PlateBadge } from '../components/Plate'
 import TopBar from '../components/TopBar'
 import { useSettings } from '../settingsHooks'
 import { newOrder } from '../storage'
-import { canRecognize, parseVoice } from '../sync'
+import { canRecognize, isConnected, parseVoice } from '../sync'
 import { isSheetFile, readSheets, sheetBlocks } from '../sheetImport'
 import { decodeText, parseOrderText, parsedToPatch, splitOrders } from '../textImport'
 import type { Order } from '../types'
@@ -183,6 +183,7 @@ export default function Import({ onCreate }: Props) {
               <span className="field-label">{t('imp.paste')}</span>
               <textarea rows={6} value={pasted} onChange={(e) => setPasted(e.target.value)} />
             </label>
+            {!canRecognize() && isConnected() && <p className="hint">⭐ {t('pro.importAi')}</p>}
             {canRecognize() && (
               <label className="consent-row imp-ai">
                 <input type="checkbox" checked={useAi} onChange={(e) => setUseAi(e.target.checked)} />

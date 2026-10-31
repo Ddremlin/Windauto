@@ -25,6 +25,7 @@ import {
   resendVerify,
   serverInfo,
   setOrgBlocked,
+  setOrgPro,
   syncNow,
   useSyncStatus,
   type OrgSummary,
@@ -70,6 +71,14 @@ export default function SyncSection() {
               {st.user?.role === 'admin' && <span className="tag">{t('users.admin')}</span>}
             </div>
             {st.user?.orgName && <div>{st.user.orgName}</div>}
+            {st.user?.pro ? (
+              <div className="plan pro">⭐ {t('pro.planPro')}</div>
+            ) : (
+              <div className="plan">
+                {t('pro.planFree')}
+                <small className="hint">{t('pro.freeHint')}</small>
+              </div>
+            )}
             <div className="hint">{st.server}</div>
           </div>
           <div className={'sync-state' + (st.error || !st.online ? ' warn' : '')}>{state}</div>
@@ -622,7 +631,7 @@ function PlatformPanel() {
         {orgs.map((o) => (
           <li key={o.id} className={o.blocked ? 'off' : ''}>
             <div>
-              <b>{o.name}</b> {o.blocked && <span className="tag danger">{t('platform.blocked')}</span>}
+              <b>{o.name}</b> {o.pro && <span className="tag pro">PRO</span>} {o.blocked && <span className="tag danger">{t('platform.blocked')}</span>}
               <div className="muted">{[o.owner?.name, o.owner?.email || o.owner?.login].filter(Boolean).join(' · ')}</div>
               <div className="muted">
                 {new Date(o.created).toLocaleDateString(locale)} · {t('platform.users', { n: o.users })} · {t('platform.orders', { n: o.orders })} ·{' '}
@@ -630,6 +639,9 @@ function PlatformPanel() {
               </div>
             </div>
             <div className="user-actions">
+              <button className={'btn small' + (o.pro ? '' : ' primary')} onClick={() => run(() => setOrgPro(o.id, !o.pro))}>
+                {o.pro ? t('pro.disable') : '⭐ ' + t('pro.enable')}
+              </button>
               <button
                 className="btn small"
                 onClick={() =>

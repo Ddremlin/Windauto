@@ -155,6 +155,8 @@ const db = new DatabaseSync(join(DATA, 'accounts.db'))
 db.exec(ACCOUNTS_SCHEMA)
 // новый email ждёт подтверждения по ссылке, до этого вход — по старому
 if (!db.prepare('PRAGMA table_info(users)').all().some((c) => c.name === 'new_email')) db.exec('ALTER TABLE users ADD COLUMN new_email TEXT')
+// Pro: ИИ и фото/видео на сервере; включает владелец платформы. Своя компания владельца — всегда Pro
+if (!db.prepare('PRAGMA table_info(orgs)').all().some((c) => c.name === 'pro')) db.exec('ALTER TABLE orgs ADD COLUMN pro INTEGER NOT NULL DEFAULT 0')
 // в базе — только хеш токена сессии: утечка базы или копии не даёт войти. Старые токены хешируем на месте
 const sha = (s) => createHash('sha256').update(s).digest('hex')
 {
@@ -192,6 +194,8 @@ if (!db.prepare('SELECT 1 FROM users LIMIT 1').get()) {
   ).run(userId, orgId, login, 'Администратор', hashPass(pass), 'admin', now())
   log(`Создан администратор: логин "${login}"` + (process.env.ADMIN_PASSWORD ? '' : `, пароль "${pass}" — смените его в приложении`))
 }
+// своя компания владельца платформы — всегда Pro
+db.exec('UPDATE orgs SET pro = 1 WHERE pro = 0 AND id IN (SELECT org_id FROM users WHERE platform = 1)')
 
 const dirBytes = (dir) => {
   let n = 0
@@ -409,7 +413,7 @@ const auth = (req, url) => {
   if (!token) throw new HttpError(401, 'Нужен вход')
   const row = db
     .prepare(
-      `SELECT u.*, s.created AS session_created, o.blocked, o.name AS org_name, o.owner_id
+      `SELECT u.*, s.created AS session_created, o.blocked, o.pro, o.name AS org_name, o.owner_id
        FROM sessions s JOIN users u ON u.id = s.user_id JOIN orgs o ON o.id = u.org_id WHERE s.token = ?`,
     )
     .get(sha(token))
@@ -421,6 +425,10 @@ const auth = (req, url) => {
 
 const adminOnly = (u) => {
   if (u.role !== 'admin') throw new HttpError(403, 'Только для администратора')
+}
+// ИИ и хранение фото/видео на сервере — только в Pro
+const proOnly = (u) => {
+  if (!u.pro) throw new HttpError(402, 'Доступно в версии Pro', 'pro_required')
 }
 const platformOnly = (u) => {
   if (!u.platform) throw new HttpError(403, 'Только для владельца платформы')
@@ -638,10 +646,10 @@ const publicUser = (u) => ({
   email: u.email ?? '', invited: !u.pass,
 })
 const userRow = (where, ...args) =>
-  db.prepare(`SELECT u.*, o.blocked, o.name AS org_name, o.owner_id FROM users u JOIN orgs o ON o.id = u.org_id WHERE ${where}`).get(...args)
+  db.prepare(`SELECT u.*, o.blocked, o.pro, o.name AS org_name, o.owner_id FROM users u JOIN orgs o ON o.id = u.org_id WHERE ${where}`).get(...args)
 // пользователь вместе с его компанией — для входа и /api/me
 const userInfo = (row) => ({
-  ...publicUser(row), newEmail: row.new_email ?? '', orgId: row.org_id, orgName: row.org_name, owner: row.owner_id === row.id, platform: !!row.platform, lang: row.lang,
+  ...publicUser(row), newEmail: row.new_email ?? '', orgId: row.org_id, orgName: row.org_name, owner: row.owner_id === row.id, platform: !!row.platform, pro: !!row.pro, lang: row.lang,
 })
 
 // язык страниц из писем: ?lang=, язык пользователя, язык браузера
@@ -680,7 +688,7 @@ const orgSummary = (org) => {
     /* папки компании нет */
   }
   return {
-    id: org.id, name: org.name, created: org.created, blocked: !!org.blocked,
+    id: org.id, name: org.name, created: org.created, blocked: !!org.blocked, pro: !!org.pro,
     owner: owner ? { name: owner.name, login: owner.login, email: owner.email ?? '' } : null,
     users: db.prepare('SELECT COUNT(*) AS n FROM users WHERE org_id = ?').get(org.id).n,
     orders, lastSeen: users.seen ?? 0,
@@ -931,6 +939,7 @@ const routes = {
   // фото (JPEG base64) → VIN или номер
   'POST /api/recognize': async (req, url) => {
     const u = auth(req, url)
+    proOnly(u)
     if (!ai) throw new HttpError(503, 'Распознавание не настроено на сервере (нет ANTHROPIC_API_KEY)')
     aiLimit(u)
     const { kind, image } = JSON.parse((await readBody(req, MAX_RECOGNIZE)).toString('utf8') || '{}')
@@ -954,6 +963,7 @@ const routes = {
   // голосовой ввод: текст → поля заказа, элементы и работы
   'POST /api/voice': async (req, url) => {
     const u = auth(req, url)
+    proOnly(u)
     if (!ai) throw new HttpError(503, 'Разбор голоса не настроен на сервере (нет ANTHROPIC_API_KEY)')
     aiLimit(u)
     const body = await readJson(req)
@@ -1314,14 +1324,20 @@ async function dynamicRoute(req, res, url) {
     if (!org) throw new HttpError(404, 'Нет такой компании')
     if (org.id === me.orgId) throw new HttpError(400, 'Это ваша компания')
     if (req.method === 'PATCH') {
-      const { blocked } = await readJson(req, MAX_FORM)
-      db.prepare('UPDATE orgs SET blocked = ? WHERE id = ?').run(blocked ? 1 : 0, org.id)
-      // заблокированные сразу теряют доступ
-      if (blocked) {
-        db.prepare('DELETE FROM sessions WHERE user_id IN (SELECT id FROM users WHERE org_id = ?)').run(org.id)
-        for (const r of orgStore(org.id).listeners) r.end()
+      const { blocked, pro } = await readJson(req, MAX_FORM)
+      if (pro !== undefined) {
+        db.prepare('UPDATE orgs SET pro = ? WHERE id = ?').run(pro ? 1 : 0, org.id)
+        log(`Pro ${pro ? 'включён' : 'выключен'}: «${org.name}»`)
       }
-      log(`компания ${blocked ? 'заблокирована' : 'разблокирована'}: «${org.name}»`)
+      if (blocked !== undefined) {
+        db.prepare('UPDATE orgs SET blocked = ? WHERE id = ?').run(blocked ? 1 : 0, org.id)
+        // заблокированные сразу теряют доступ
+        if (blocked) {
+          db.prepare('DELETE FROM sessions WHERE user_id IN (SELECT id FROM users WHERE org_id = ?)').run(org.id)
+          for (const r of orgStore(org.id).listeners) r.end()
+        }
+        log(`компания ${blocked ? 'заблокирована' : 'разблокирована'}: «${org.name}»`)
+      }
       return send(res, 200, { org: orgSummary(db.prepare('SELECT * FROM orgs WHERE id = ?').get(org.id)) })
     }
     if (req.method === 'DELETE') {
@@ -1347,6 +1363,8 @@ async function dynamicRoute(req, res, url) {
     const u = auth(req, url)
     const p = photoPath(u.org, m[1])
     if (req.method === 'PUT') {
+      // без Pro фото остаются на телефоне; уже загруженные можно скачивать
+      proOnly(u)
       const buf = await readBody(req, MAX_PHOTO)
       const old = fileBytes(p)
       checkQuota(u.org, buf.length - old)
@@ -1368,6 +1386,7 @@ async function dynamicRoute(req, res, url) {
     const u = auth(req, url)
     const { path, type } = videoPath(u.org, m[1])
     if (req.method === 'PUT') {
+      proOnly(u)
       const old = fileBytes(path)
       checkQuota(u.org, Number(req.headers['content-length'] ?? 0) - old)
       // без Content-Length — не дальше остатка квоты

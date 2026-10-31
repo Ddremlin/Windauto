@@ -528,6 +528,16 @@ export const en: Record<string, string> = {
   'help.device': "Device",
   'err.no_support': "E-mail sending is not set up yet — write on Telegram",
   'err.empty': "Write a message",
+  'pro.planPro': "Pro plan: AI and photos/videos on the server",
+  'pro.planFree': "Free plan",
+  'pro.freeHint': "Photos and videos are stored only on this phone and other employees cannot see them. AI recognition and photo/video sync are in Pro.",
+  'pro.needed': "AI recognition of the registration document is available in Pro",
+  'pro.voice': "AI processing is available in Pro. Dictating into a field is free — put the cursor in the field.",
+  'pro.importAi': "AI parsing of free text — in Pro",
+  'pro.enable': "Enable Pro",
+  'pro.disable': "Disable Pro",
+  'err.pro_required': "Available in the Pro version",
+  'scan.needServer': "Registration document recognition works through the shared database — connect in «Sync»",
   'menu.logout': 'Sign out',
 
   // calculator

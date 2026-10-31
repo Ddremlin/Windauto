@@ -819,3 +819,6 @@ input:disabled { opacity: 0.6; }
 .plate-country { display: flex; align-items: center; gap: 8px; margin-top: 6px; max-width: 360px; }
 .plate-country .field-label { flex: none; margin: 0; }
 .plate-country select { flex: 1; min-width: 0; padding: 8px 10px; }
+.tag.pro { background: color-mix(in srgb, #f5a623 22%, transparent); color: #b26a00; }
+.plan { margin-top: 4px; display: flex; flex-direction: column; gap: 2px; }
+.plan.pro { color: #b26a00; font-weight: 600; }

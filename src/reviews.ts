@@ -1,6 +1,6 @@
 // Отзывы клиентов с сервера: одна загрузка на всех, экраны подписываются через useReviews.
 import { useEffect, useSyncExternalStore } from 'react'
-import { canRecognize, listReviews, type Review } from './sync'
+import { isConnected, listReviews, type Review } from './sync'
 
 let reviews = new Map<string, Review>()
 let loadedAt = 0
@@ -14,7 +14,7 @@ const subscribe = (l: () => void) => {
 
 /** Загрузить заново; без общей базы — пусто. Чаще раза в 20 с — не ходим. */
 export function refreshReviews(force = false): Promise<void> {
-  if (!canRecognize()) return Promise.resolve()
+  if (!isConnected()) return Promise.resolve()
   if (loading) return loading
   if (!force && Date.now() - loadedAt < 20_000) return Promise.resolve()
   loading = listReviews()

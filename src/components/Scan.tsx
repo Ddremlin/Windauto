@@ -1,7 +1,7 @@
 import { useRef, useState } from 'react'
 import { recognizePhoto, type Recognized } from '../ocr'
 import { useT } from '../settingsHooks'
-import { canRecognize, recognize, type RecognizedDoc } from '../sync'
+import { canRecognize, isConnected, recognize, type RecognizedDoc } from '../sync'
 
 // Кнопка камеры у поля номера и VIN: с общей базой читает сервер (Claude), иначе — телефон.
 export function useScan(kind: 'vin' | 'plate', onResult: (r: Recognized) => void) {
@@ -66,7 +66,7 @@ export function useDocScan(onResult: (r: RecognizedDoc) => number) {
   const [message, setMessage] = useState<string | null>(null)
 
   const start = () => {
-    if (!canRecognize()) return setMessage(t('scan.needServer'))
+    if (!canRecognize()) return setMessage(t(isConnected() ? 'pro.needed' : 'scan.needServer'))
     setMessage(null)
     inputRef.current?.click()
   }
