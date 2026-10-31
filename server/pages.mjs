@@ -8,14 +8,14 @@ const layout = (lang, title, body) => `<!doctype html>
 <html lang="${lang}"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>${esc(title)} — Windauto</title>
 <style>
-:root{--bg:#f3f4f6;--panel:#fff;--text:#15181d;--muted:#6b7280;--line:#d9dde3;--accent:#0f62fe;--danger:#d32f2f;color-scheme:light}
-@media (prefers-color-scheme:dark){:root{--bg:#0f1115;--panel:#1a1d23;--text:#e8eaed;--muted:#9aa0a8;--line:#2d323a;--accent:#4c8dff;--danger:#ef5350;color-scheme:dark}}
+:root{--bg:#f4ede3;--panel:#fffaf3;--text:#2a1a10;--muted:#7a6a5c;--line:#e2d5c3;--accent:#8a5a2b;--accent-text:#fff;--danger:#d32f2f;color-scheme:light}
+@media (prefers-color-scheme:dark){:root{--bg:#170b03;--panel:#24150a;--text:#f1e6d4;--muted:#b3a28e;--line:#3d2b1c;--accent:#d9b27c;--accent-text:#291204;--danger:#ef5350;color-scheme:dark}}
 *{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--text);font:16px/1.5 system-ui,-apple-system,'Segoe UI',Roboto,sans-serif}
 main{max-width:640px;margin:0 auto;padding:24px 16px}.card{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:20px}
 h1{font-size:22px;margin:0 0 12px}h2{font-size:17px;margin:20px 0 6px}p,li{color:var(--text)}.muted{color:var(--muted)}
 .brand{font-weight:700;font-size:18px;margin-bottom:16px}label{display:block;margin:12px 0 4px;color:var(--muted);font-size:14px}
 input{width:100%;font:inherit;color:var(--text);background:var(--bg);border:1px solid var(--line);border-radius:8px;padding:10px 12px}
-button{width:100%;margin-top:16px;font:inherit;font-weight:600;border:0;border-radius:10px;padding:12px;background:var(--accent);color:#fff;cursor:pointer}
+button{width:100%;margin-top:16px;font:inherit;font-weight:600;border:0;border-radius:10px;padding:12px;background:var(--accent);color:var(--accent-text);cursor:pointer}
 .error{color:var(--danger)}.ok{font-size:40px}
 .show{display:flex;align-items:center;gap:8px;color:var(--text)}.show input{width:auto;margin:0}
 </style></head><body><main><div class="brand">Windauto</div><div class="card">${body}</div></main></body></html>`
