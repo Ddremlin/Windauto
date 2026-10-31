@@ -4,9 +4,14 @@
 set -euo pipefail
 cd "$(dirname "$0")"
 # BACKUP_PASSPHRASE — шифровать копию (AES-256); BACKUP_COPY_TO — куда ещё скопировать,
-# например u123456@u123456.your-storagebox.de:windauto/ (вход по ключу). Оба — в .env
+# например u123456@u123456.your-storagebox.de:windauto/ (вход по ключу), туда же досылаются новые видео;
+# HEALTHCHECK_URL — пинг healthchecks.io: начало, успех или /fail (нет пинга — придёт тревога). Всё — в .env
 BACKUP_PASSPHRASE=$(grep -s '^BACKUP_PASSPHRASE=' .env | cut -d= -f2- || true)
 BACKUP_COPY_TO=$(grep -s '^BACKUP_COPY_TO=' .env | cut -d= -f2- || true)
+HEALTHCHECK_URL=$(grep -s '^HEALTHCHECK_URL=' .env | cut -d= -f2- || true)
+ping_hc() { [ -z "$HEALTHCHECK_URL" ] || curl -fsS -m 10 --retry 3 -o /dev/null "$HEALTHCHECK_URL$1" || true; }
+trap 'ping_hc /fail' ERR
+ping_hc /start
 mkdir -p backups
 # снимки баз на ходу, без остановки сервера
 docker compose exec -T api node -e "
@@ -33,6 +38,12 @@ if [ -n "$BACKUP_PASSPHRASE" ]; then
   OUT="$OUT.enc"
 fi
 chmod 600 "$OUT"
-[ -n "$BACKUP_COPY_TO" ] && scp -q -o BatchMode=yes "$OUT" "$BACKUP_COPY_TO"
+if [ -n "$BACKUP_COPY_TO" ]; then
+  scp -q -o BatchMode=yes "$OUT" "$BACKUP_COPY_TO"
+  # видео — без шифрования (как и на самом сервере), передаются только новые; удалённые на сервере остаются в копии
+  VIDEOS=$(cd data && ls -d orgs/*/videos 2>/dev/null || true)
+  [ -z "$VIDEOS" ] || (cd data && rsync -aR -e 'ssh -o BatchMode=yes' $VIDEOS "${BACKUP_COPY_TO%/}/videos/")
+fi
 ls -1t backups/windauto-*.tar.gz* | tail -n +31 | xargs -r rm --
+ping_hc ""
 echo "Готово: $OUT"
