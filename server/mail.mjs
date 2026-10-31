@@ -52,6 +52,12 @@ const TEXTS = {
       button: 'Подтвердить email',
       foot: 'Ссылка действует 1 день. Если это были не вы — просто удалите это письмо.',
     },
+    exists: {
+      subject: 'Вы уже зарегистрированы — Windauto',
+      body: (v) => `Здравствуйте${v.name ? ', ' + v.name : ''}!\n\nКто-то пытался зарегистрировать в Windauto новую компанию на этот адрес, но аккаунт с ним уже есть (компания «${v.company}»). Если это были вы и вы не помните пароль — задайте новый:`,
+      button: 'Задать новый пароль',
+      foot: 'Ссылка действует 1 час. Если это были не вы — ничего не делайте, ваш аккаунт в порядке.',
+    },
   },
   pl: {
     verify: {
@@ -77,6 +83,12 @@ const TEXTS = {
       body: (v) => `Dzień dobry${v.name ? ', ' + v.name : ''}!\n\nTen adres został podany dla Twojego konta w firmie „${v.company}” w Windauto. Potwierdź go — potem możesz się nim logować i odzyskiwać hasło:`,
       button: 'Potwierdź e-mail',
       foot: 'Link jest ważny 1 dzień. Jeśli to nie Ty — po prostu usuń tę wiadomość.',
+    },
+    exists: {
+      subject: 'Masz już konto — Windauto',
+      body: (v) => `Dzień dobry${v.name ? ', ' + v.name : ''}!\n\nKtoś próbował zarejestrować w Windauto nową firmę na ten adres, ale konto z tym adresem już istnieje (firma „${v.company}”). Jeśli to Ty i nie pamiętasz hasła — ustaw nowe:`,
+      button: 'Ustaw nowe hasło',
+      foot: 'Link jest ważny 1 godzinę. Jeśli to nie Ty — nic nie rób, Twoje konto jest bezpieczne.',
     },
   },
 }

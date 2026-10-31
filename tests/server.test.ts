@@ -178,7 +178,11 @@ test('регистрация: проверки, письмо, вход толь�
   assert.equal((await api('/api/register', '', { company: 'Firma', email: 'a@b.pl', password: 'haslo1234' })).body.code, 'terms')
 
   assert.equal((await register('Owner@Firma.pl')).status, 200)
-  assert.equal((await register('owner@firma.pl')).body.code, 'email_taken')
+  // занятый email: ответ как при успехе (не узнать, чей адрес); не подтверждён — письмо с подтверждением ещё раз
+  const again = await register('owner@firma.pl')
+  assert.equal(again.status, 200)
+  assert.deepEqual(again.body, { ok: true })
+  await new Promise((r) => setTimeout(r, 100))
   const before = await api('/api/login', '', { login: 'owner@firma.pl', password: 'haslo1234' })
   assert.equal(before.status, 403)
   assert.equal(before.body.code, 'unverified')
@@ -188,6 +192,13 @@ test('регистрация: проверки, письмо, вход толь�
   const page = await fetch(URL_ + link.pathname + link.search)
   assert.equal(page.status, 200)
   assert.match(await page.text(), /E-mail potwierdzony/)
+  // подтверждённый — владельцу письмо «аккаунт уже есть» со ссылкой на новый пароль
+  assert.deepEqual((await register('owner@firma.pl')).body, { ok: true })
+  await new Promise((r) => setTimeout(r, 100))
+  const last = readFileSync(join(dir, 'mail.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l)).at(-1)
+  assert.equal(last.to, 'owner@firma.pl')
+  assert.match(last.subject, /Masz już konto/)
+  assert.equal(mailLink('owner@firma.pl').pathname, '/auth/reset')
   // ссылка одноразовая
   assert.equal((await fetch(URL_ + link.pathname + link.search)).status, 400)
 
@@ -402,6 +413,14 @@ test('защита: большие запросы без входа, хеш се
     await fetch(URL_ + '/api/login', { method: 'POST', headers: { 'x-forwarded-for': `10.0.0.${i}` }, body: JSON.stringify({ login: 'lock1', password: 'bad' + i }) })
   const r = await fetch(URL_ + '/api/login', { method: 'POST', headers: { 'x-forwarded-for': '10.0.1.1' }, body: JSON.stringify({ login: 'lock1', password: 'secret22' }) })
   assert.equal(r.status, 429)
+  // а владелец, который уже входил с этого адреса, входит — подбор не закрывает ему вход
+  await api('/api/users', admin, { login: 'lock2', name: 'L', password: 'secret22' })
+  const own = (ip: string, password: string) =>
+    fetch(URL_ + '/api/login', { method: 'POST', headers: { 'x-forwarded-for': ip }, body: JSON.stringify({ login: 'lock2', password }) })
+  assert.equal((await own('10.0.2.1', 'secret22')).status, 200)
+  for (let i = 0; i < 31; i++) await own(`10.0.3.${i}`, 'bad' + i)
+  assert.equal((await own('10.0.4.1', 'secret22')).status, 429)
+  assert.equal((await own('10.0.2.1', 'secret22')).status, 200)
 })
 
 test('защита: квота места компании; заказ со служебными именами полей не ломает слияние', async () => {
@@ -471,4 +490,58 @@ test('помощь: сообщение разработчику — с вход�
   assert.match(tg.text, /Помогите с импортом/)
   assert.match(tg.text, /\(jan/)
   assert.match(tg.text, /\+48 600 100 200/)
+})
+
+test('защита: сотрудник не удаляет чужие заказы; корзина и восстановление у администратора', async () => {
+  const mine = await api('/api/sync', staff, { orders: [{ id: 'del-own', updatedAt: 100, deleted: false, data: order({ id: 'del-own', client: 'Свой' }) }] })
+  assert.equal(mine.status, 200)
+  await api('/api/sync', admin, { orders: [{ id: 'del-adm', updatedAt: 100, deleted: false, data: order({ id: 'del-adm', client: 'Анна' }) }] })
+  // чужой заказ — не удалён, вернулся в rejected
+  const r = await api('/api/sync', staff, { orders: [{ id: 'del-adm', updatedAt: Date.now(), deleted: true, data: null }] })
+  assert.deepEqual(r.body.denied, ['del-adm'])
+  assert.equal(r.body.rejected[0].data.client, 'Анна')
+  // свой — удаляется и попадает в корзину
+  const own = await api('/api/sync', staff, { orders: [{ id: 'del-own', updatedAt: Date.now(), deleted: true, data: null }] })
+  assert.deepEqual(own.body.accepted, ['del-own'])
+  assert.equal((await api('/api/trash', staff)).status, 403)
+  const trash = await api('/api/trash', admin)
+  const item = trash.body.orders.find((o: { id: string }) => o.id === 'del-own')
+  assert.equal(item.client, 'Свой')
+  assert.equal(item.by, 'Jan')
+  assert.equal((await api('/api/trash/del-own/restore', staff, {})).status, 403)
+  assert.equal((await api('/api/trash/del-own/restore', admin, {})).status, 200)
+  const pull = await api('/api/sync?since=0', admin)
+  const back = pull.body.orders.find((o: { id: string }) => o.id === 'del-own')
+  assert.equal(back.deleted, false)
+  assert.equal(back.data.client, 'Свой')
+  assert.equal((await api('/api/trash/del-own/restore', admin, {})).body.code, 'not_in_trash')
+})
+
+test('защита: огромный заказ не принимается; ошибки без внутренних подробностей', async () => {
+  const big = await api('/api/sync', admin, { orders: [{ id: 'huge', updatedAt: 100, deleted: false, data: order({ id: 'huge', notes: 'A'.repeat(1_100_000) }) }] })
+  assert.equal(big.status, 200)
+  assert.deepEqual(big.body.accepted, [])
+  assert.equal((await api('/api/sync?since=0', admin)).body.orders.some((o: { id: string }) => o.id === 'huge'), false)
+  const bad = await api('/api/orders/%E0%A4%A/history', admin)
+  assert.equal(bad.status, 400)
+})
+
+test('защита: подбор текущего пароля с чужой сессией; выход на других устройствах', async () => {
+  await api('/api/users', admin, { login: 'pw1', name: 'P', password: 'secret22' })
+  const t1 = (await (await loginFrom('10.7.0.1', 'pw1', 'secret22')).json()).token
+  const t2 = (await (await loginFrom('10.7.0.2', 'pw1', 'secret22')).json()).token
+  const codes = []
+  for (let i = 0; i < 6; i++) codes.push((await api('/api/password', t1, { oldPassword: 'guess' + i, newPassword: 'newsecret1' })).status)
+  assert.deepEqual(codes, [400, 400, 400, 400, 400, 429])
+  // и правильный пароль теперь ждёт — подбор остановлен
+  assert.equal((await api('/api/password', t1, { oldPassword: 'secret22', newPassword: 'newsecret1' })).status, 429)
+  const out = await api('/api/logout/others', t1, {})
+  assert.equal(out.body.closed, 1)
+  assert.equal((await api('/api/me', t2)).status, 401)
+  assert.equal((await api('/api/me', t1)).status, 200)
+})
+
+test('защита: страницы сервера с Content-Security-Policy', async () => {
+  const r = await fetch(URL_ + '/legal/privacy')
+  assert.match(r.headers.get('content-security-policy') ?? '', /default-src 'none'/)
 })

@@ -16,13 +16,16 @@ import {
   getOrg,
   legalUrl,
   listOrgs,
+  listTrash,
   listUsers,
+  logoutOthers,
   patchUser,
   refreshMe,
   register,
   removeOrg,
   renameOrg,
   resendVerify,
+  restoreFromTrash,
   serverInfo,
   setOrgBlocked,
   setOrgPro,
@@ -30,6 +33,7 @@ import {
   useSyncStatus,
   type OrgSummary,
   type SyncUser,
+  type TrashItem,
 } from '../sync'
 
 /** Текст ошибки на языке интерфейса: по коду от сервера, иначе — как прислал сервер */
@@ -93,10 +97,12 @@ export default function SyncSection() {
           </div>
           <MyEmail me={st.user} />
           <MyPassword />
+          <LogoutOthers />
         </div>
       </section>
       {st.user?.role === 'admin' && <OrgPanel me={st.user} />}
       {st.user?.role === 'admin' && <UsersAdmin me={st.user} />}
+      {st.user?.role === 'admin' && <TrashPanel />}
       {st.user?.platform && <PlatformPanel />}
     </>
   )
@@ -399,6 +405,92 @@ function MyPassword() {
 }
 
 /** Своя компания: название; владелец может удалить её со всеми данными */
+/** Потерян телефон или кто-то знает пароль — закрыть все остальные входы */
+function LogoutOthers() {
+  const { t } = useSettings()
+  const [msg, setMsg] = useState('')
+  const run = async () => {
+    if (!confirm(t('sync.logoutOthersConfirm'))) return
+    try {
+      setMsg(t('sync.logoutOthersDone', { n: await logoutOthers() }))
+    } catch (e) {
+      setMsg(errText(t, e))
+    }
+  }
+  return (
+    <>
+      <button className="btn ghost" onClick={run}>
+        {t('sync.logoutOthers')}
+      </button>
+      {msg && <p className="hint">{msg}</p>}
+    </>
+  )
+}
+
+/** Корзина: удалённые заказы, которые можно вернуть */
+function TrashPanel() {
+  const { t, locale } = useSettings()
+  const [open, setOpen] = useState(false)
+  const [items, setItems] = useState<TrashItem[] | null>(null)
+  const [days, setDays] = useState(30)
+  const [err, setErr] = useState('')
+
+  const load = () =>
+    listTrash()
+      .then((r) => {
+        setItems(r.orders)
+        setDays(r.days)
+      })
+      .catch((e) => setErr(errText(t, e)))
+
+  const restore = async (id: string) => {
+    setErr('')
+    try {
+      await restoreFromTrash(id)
+      setItems((list) => list?.filter((x) => x.id !== id) ?? null)
+    } catch (e) {
+      setErr(errText(t, e))
+    }
+  }
+
+  return (
+    <section className="panel">
+      <h2>🗑 {t('trash.title')}</h2>
+      <p className="hint">{t('trash.hint', { days })}</p>
+      {!open ? (
+        <button
+          className="btn"
+          onClick={() => {
+            setOpen(true)
+            void load()
+          }}
+        >
+          {t('trash.show')}
+        </button>
+      ) : (
+        <div className="stack">
+          {items?.length === 0 && <p className="muted">{t('trash.empty')}</p>}
+          {items?.map((o) => (
+            <div key={o.id} className="trash-row">
+              <div>
+                <b>{[o.number, o.plate].filter(Boolean).join(' · ') || '—'}</b>
+                <div className="hint">
+                  {[[o.make, o.model].filter(Boolean).join(' '), o.client].filter(Boolean).join(' · ')}
+                </div>
+                <div className="hint">{t('trash.by', { name: o.by, time: new Date(o.deletedAt).toLocaleString(locale) })}</div>
+              </div>
+              <button className="btn small" onClick={() => restore(o.id)}>
+                ↩ {t('trash.restore')}
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      {err && <p className="error-text">{err}</p>}
+    </section>
+  )
+}
+
 function OrgPanel({ me }: { me: SyncUser }) {
   const { t } = useSettings()
   const [name, setName] = useState(me.orgName ?? '')

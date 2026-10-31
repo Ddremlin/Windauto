@@ -5,6 +5,7 @@ import { useSyncExternalStore } from 'react'
 import { deletePhotos, getLocalPhoto, markRemoteSource, orderPhotoIds } from './photos'
 import { deleteVideos, getLocalVideo, markRemoteVideoSource, orderVideoIds, videoType } from './videos'
 import { applyRemoteShared, getSettings, hasShared, onSharedChange, pickShared, resetShared, setSharedStamp, type SharedSettings } from './settingsStore'
+import { makeT } from './i18n'
 import { mergeOrders } from './merge'
 import { getOrders, migrate, onLocalChange, removeOrder, replaceAllOrders, setServerNumbering, upsertOrder } from './storage'
 import type { Order } from './types'
@@ -261,7 +262,7 @@ export async function syncNow(): Promise<void> {
     const s = getSettings()
     const sharedSent = state.sharedDirty ? s.sharedUpdatedAt : 0
     if (payload.length || sharedSent) {
-      const res = await api<{ accepted: string[]; rejected?: RemoteOrder[]; merged?: RemoteOrder[]; rev: number }>('/api/sync', {
+      const res = await api<{ accepted: string[]; rejected?: RemoteOrder[]; merged?: RemoteOrder[]; denied?: string[]; rev: number }>('/api/sync', {
         method: 'POST',
         body: JSON.stringify({ orders: payload, settings: sharedSent ? { data: pickShared(s), updatedAt: sharedSent } : undefined }),
       })
@@ -281,6 +282,8 @@ export async function syncNow(): Promise<void> {
       }
       if (sharedSent && getSettings().sharedUpdatedAt === sharedSent) state.sharedDirty = false
       persist()
+      // сотрудник удалил чужой заказ — сервер не принял, заказ вернулся
+      if (res.denied?.length) alert(makeT(getSettings().lang)('sync.deleteDenied', { n: res.denied.length }))
     }
 
     // 3. чужие изменения
@@ -404,6 +407,27 @@ export async function disconnect() {
   setServerNumbering(false)
   staffCache = []
   setStatus({ error: null, authError: false })
+}
+
+/** Выйти на всех остальных устройствах; возвращает, сколько сессий закрыто */
+export const logoutOthers = () => api<{ closed: number }>('/api/logout/others', { method: 'POST' }).then((r) => r.closed)
+
+// --- корзина: удалённые заказы (администратор) ---
+export interface TrashItem {
+  id: string
+  deletedAt: number
+  by: string
+  number: string
+  plate: string
+  make: string
+  model: string
+  client: string
+}
+export const listTrash = () => api<{ orders: TrashItem[]; days: number }>('/api/trash')
+export async function restoreFromTrash(id: string) {
+  await api(`/api/trash/${encodeURIComponent(id)}/restore`, { method: 'POST' })
+  // забрать восстановленный заказ сразу, не дожидаясь живого обновления
+  await syncNow()
 }
 
 // --- регистрация компании и письма (без входа) ---

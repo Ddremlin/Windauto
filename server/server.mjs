@@ -41,6 +41,18 @@ const MAX_PHOTO = 15 * 1024 * 1024
 // круговое видео при приёмке: ~2,5 Мбит/с × 3 мин ≈ 60 МБ, с запасом под видео из галереи
 const MAX_VIDEO = 300 * 1024 * 1024
 const SESSION_DAYS = 180
+// сессия, которой не пользовались столько дней, — недействительна (потерянный телефон)
+const SESSION_IDLE_DAYS = Number(process.env.SESSION_IDLE_DAYS ?? 30)
+// один заказ: подписи (PNG) и тексты; фото и видео хранятся отдельно — больше не нужно
+const MAX_ORDER = 1024 * 1024
+// база заказов компании (без фото и видео)
+const ORG_DB_MAX = Number(process.env.ORG_DB_MB ?? 500) * 1024 ** 2
+// удалённые заказы хранятся в корзине, администратор может их вернуть
+const TRASH_DAYS = 30
+// сотрудник (не администратор) удаляет не больше стольких заказов в час
+const STAFF_DELETES_PER_HOUR = 20
+// открытых соединений «живого обновления» на одного пользователя
+const MAX_EVENTS_PER_USER = 5
 const PASS_MIN = 8
 const MAX_RECOGNIZE = 8 * 1024 * 1024
 const AI_MODEL = process.env.AI_MODEL || 'claude-opus-5-5'
@@ -156,6 +168,8 @@ db.exec(ACCOUNTS_SCHEMA)
 // новый email ждёт подтверждения по ссылке, до этого вход — по старому
 if (!db.prepare('PRAGMA table_info(users)').all().some((c) => c.name === 'new_email')) db.exec('ALTER TABLE users ADD COLUMN new_email TEXT')
 // Pro: ИИ и фото/видео на сервере; включает владелец платформы. Своя компания владельца — всегда Pro
+// адрес, с которого вошли: с него вход не блокируется, даже если аккаунт кто-то подбирает
+if (!db.prepare('PRAGMA table_info(sessions)').all().some((c) => c.name === 'ip')) db.exec('ALTER TABLE sessions ADD COLUMN ip TEXT')
 if (!db.prepare('PRAGMA table_info(orgs)').all().some((c) => c.name === 'pro')) db.exec('ALTER TABLE orgs ADD COLUMN pro INTEGER NOT NULL DEFAULT 0')
 // в базе — только хеш токена сессии: утечка базы или копии не даёт войти. Старые токены хешируем на месте
 const sha = (s) => createHash('sha256').update(s).digest('hex')
@@ -226,10 +240,18 @@ function orgStore(id) {
   odb.exec(ORG_SCHEMA)
   // после переноса со старой схемы аккаунты живут в accounts.db
   odb.exec('DROP TABLE IF EXISTS users; DROP TABLE IF EXISTS sessions; DROP TABLE IF EXISTS login_attempts;')
+  // корзина: данные удалённого заказа и когда его удалили (время сервера)
+  if (!odb.prepare('PRAGMA table_info(orders)').all().some((c) => c.name === 'trash'))
+    odb.exec('ALTER TABLE orders ADD COLUMN trash TEXT; ALTER TABLE orders ADD COLUMN deleted_at INTEGER')
+  emptyTrash(odb)
   o = { id, dir, db: odb, listeners: new Set(), bytes: dirBytes(join(dir, 'photos')) + dirBytes(join(dir, 'videos')) }
   ORGS.set(id, o)
   return o
 }
+function emptyTrash(odb) {
+  odb.prepare('UPDATE orders SET trash = NULL WHERE trash IS NOT NULL AND deleted_at < ?').run(now() - TRASH_DAYS * 86400_000)
+}
+const dbBytes = (o) => fileBytes(join(o.dir, 'org.db')) + fileBytes(join(o.dir, 'org.db-wal'))
 function closeOrg(id) {
   const o = ORGS.get(id)
   if (!o) return
@@ -296,20 +318,22 @@ const cleanup = () => {
   db.prepare('DELETE FROM sessions WHERE created < ?').run(now() - SESSION_DAYS * 86400_000)
   db.prepare('DELETE FROM tokens WHERE expires < ?').run(now())
   db.prepare('DELETE FROM review_links WHERE created < ?').run(now() - REVIEW_DAYS * 86400_000)
+  db.prepare('DELETE FROM sessions WHERE last_seen < ?').run(now() - SESSION_IDLE_DAYS * 86400_000)
+  for (const o of ORGS.values()) emptyTrash(o.db)
 }
 cleanup()
 setInterval(cleanup, 3600_000).unref()
 
 // --- письма ---
 const baseUrl = (req) => PUBLIC_URL || `${req.headers['x-forwarded-proto'] ?? 'http'}://${req.headers['x-forwarded-host'] ?? req.headers.host}`
-async function mailUser(req, user, kind, to = user.email) {
+async function mailUser(req, user, kind, to = user.email, text = kind) {
   // на один адрес — не больше 5 писем в час, с каких бы IP ни просили
   rateLimit('to:' + to, 5, 3600_000)
   const token = makeToken(user.id, kind)
   const link = `${baseUrl(req)}${kind === 'verify' || kind === 'email' ? '/auth/verify' : '/auth/reset'}?t=${token}`
   const org = db.prepare('SELECT name FROM orgs WHERE id = ?').get(user.org_id)
   try {
-    await sendMail({ to, ...mailFor(kind, user.lang, { link, company: org?.name ?? '', name: user.name }) }, log)
+    await sendMail({ to, ...mailFor(text, user.lang, { link, company: org?.name ?? '', name: user.name }) }, log)
   } catch {
     throw new HttpError(502, 'Письмо не отправилось — попробуйте позже', 'mail_failed')
   }
@@ -377,7 +401,11 @@ const send = (res, status, body, headers = {}) => {
   res.end(body === undefined ? '' : JSON.stringify(body))
 }
 const sendHtml = (res, status, html) => {
-  res.writeHead(status, { 'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer' })
+  res.writeHead(status, {
+    'Content-Type': 'text/html; charset=utf-8', 'Cache-Control': 'no-store', 'Referrer-Policy': 'no-referrer',
+    // страницы сервера: свои стили и одна строчка «показать пароль», внешнего — ничего
+    'Content-Security-Policy': "default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline'; img-src data:; form-action 'self'; frame-ancestors 'none'; base-uri 'none'",
+  })
   res.end(html)
 }
 
@@ -413,14 +441,23 @@ const auth = (req, url) => {
   if (!token) throw new HttpError(401, 'Нужен вход')
   const row = db
     .prepare(
-      `SELECT u.*, s.created AS session_created, o.blocked, o.pro, o.name AS org_name, o.owner_id
+      `SELECT u.*, s.created AS session_created, s.last_seen AS session_seen, o.blocked, o.pro, o.name AS org_name, o.owner_id
        FROM sessions s JOIN users u ON u.id = s.user_id JOIN orgs o ON o.id = u.org_id WHERE s.token = ?`,
     )
     .get(sha(token))
-  if (!row || row.disabled || now() - row.session_created > SESSION_DAYS * 86400_000) throw new HttpError(401, 'Сессия недействительна')
+  if (!row || row.disabled || now() - row.session_created > SESSION_DAYS * 86400_000 || now() - row.session_seen > SESSION_IDLE_DAYS * 86400_000)
+    throw new HttpError(401, 'Сессия недействительна')
   if (row.blocked && !row.platform) throw new HttpError(403, 'Компания заблокирована', 'blocked')
   db.prepare('UPDATE sessions SET last_seen = ? WHERE token = ?').run(now(), sha(token))
   return { ...userInfo(row), token: sha(token), org: orgStore(row.org_id) }
+}
+
+// проверка текущего пароля с украденной сессией — не подбор: 5 попыток за 15 минут
+const checkMyPass = (u, password) => {
+  rateLimit('pass:' + u.id, 5, 15 * 60_000)
+  const ok = checkPass(String(password ?? ''), db.prepare('SELECT pass FROM users WHERE id = ?').get(u.id).pass)
+  if (!ok) throw new HttpError(400, 'Неверный пароль', 'old_password')
+  clearLimit('pass:' + u.id)
 }
 
 const adminOnly = (u) => {
@@ -706,13 +743,9 @@ const aiLimit = (u) => {
 }
 const inviteLimit = (u) => rateLimit('invite:' + u.orgId, INVITES_PER_DAY, 86400_000)
 // письма по запросу без входа: ответ одинаковый, даже если лимит на адрес исчерпан
-async function mailQuiet(req, user, kind) {
-  try {
-    await mailUser(req, user, kind)
-  } catch (e) {
-    if (e.code !== 'too_many') throw e
-    log(`письмо не отправлено (лимит на адрес): ${kind} → ${user.email}`)
-  }
+// и не ждём отправки: по времени ответа тоже не узнать, есть ли такой адрес
+function mailBackground(req, user, kind, text = kind) {
+  mailUser(req, user, kind, user.email, text).catch((e) => log(`письмо не отправлено (${e.code ?? e.message}): ${text} → ${user.email}`))
 }
 
 const routes = {
@@ -728,8 +761,11 @@ const routes = {
     const l = String(login ?? '').trim().toLowerCase().slice(0, 254)
     // и на аккаунт — подбор пароля с множества адресов
     const userKey = 'login-user:' + l
-    if (l && limited(userKey, MAX_USER_ATTEMPTS, 3600_000)) throw new HttpError(429, 'Слишком много попыток, подождите 15 минут', 'too_many')
     const u = l ? userRow('u.login = ? OR u.email = ?', l, l) : null
+    // аккаунт подбирают с разных адресов — блокируем новые адреса, а с тех, откуда уже входили, пускаем:
+    // иначе чужой человек мог бы закрыть вход владельцу
+    const knownIp = u && db.prepare('SELECT 1 FROM sessions WHERE user_id = ? AND ip = ?').get(u.id, clientIp(req))
+    if (l && !knownIp && limited(userKey, MAX_USER_ATTEMPTS, 3600_000)) throw new HttpError(429, 'Слишком много попыток, подождите 15 минут', 'too_many')
     // проверка пароля и для несуществующего логина — по времени ответа не узнать, есть ли такой
     const ok = checkPass(String(password ?? ''), u?.pass || DUMMY_PASS)
     if (!u || u.disabled || !u.pass || !ok) {
@@ -738,11 +774,11 @@ const routes = {
       throw new HttpError(401, 'Неверный логин или пароль', 'login_failed')
     }
     clearLimit(key)
-    clearLimit(userKey)
+    if (!knownIp) clearLimit(userKey)
     if (u.email && !u.email_verified) throw new HttpError(403, 'Подтвердите email — ссылка в письме', 'unverified')
     if (u.blocked && !u.platform) throw new HttpError(403, 'Компания заблокирована', 'blocked')
     const token = randomBytes(32).toString('base64url')
-    db.prepare('INSERT INTO sessions (token, user_id, created, last_seen) VALUES (?, ?, ?, ?)').run(sha(token), u.id, now(), now())
+    db.prepare('INSERT INTO sessions (token, user_id, created, last_seen, ip) VALUES (?, ?, ?, ?, ?)').run(sha(token), u.id, now(), now(), clientIp(req))
     log(`вход: ${u.login} (${u.org_name})`)
     return { token, user: userInfo(u) }
   },
@@ -762,8 +798,16 @@ const routes = {
     if (password.length < PASS_MIN) throw new HttpError(400, `Пароль — минимум ${PASS_MIN} символов`, 'weak_password')
     if (!b.accept) throw new HttpError(400, 'Нужно принять условия', 'terms')
     rateLimit('register:' + clientIp(req), REGISTER_PER_HOUR, 3600_000)
-    if (db.prepare('SELECT 1 FROM users WHERE email = ? OR login = ?').get(email, email))
-      throw new HttpError(409, 'Этот email уже зарегистрирован', 'email_taken')
+    // email уже занят — отвечаем так же, как при успехе (по ответу не узнать, чей это адрес),
+    // а владельцу адреса пишем, что аккаунт уже есть, со ссылкой «задать новый пароль»
+    const taken = userRow('u.email = ? OR u.login = ?', email, email)
+    if (taken) {
+      // ещё не подтверждён — повторяем письмо с подтверждением
+      if (taken.email && !taken.disabled)
+        if (taken.pass && !taken.email_verified) mailBackground(req, taken, 'verify')
+        else mailBackground(req, taken, taken.pass ? 'reset' : 'invite', 'exists')
+      return { ok: true }
+    }
     const orgId = newId()
     const userId = newId()
     db.exec('BEGIN')
@@ -829,7 +873,7 @@ const routes = {
     rateLimit('mail:' + clientIp(req), 5, 15 * 60_000)
     const email = normEmail((await readJson(req, MAX_FORM)).email)
     const u = email ? userRow('u.email = ?', email) : null
-    if (u && u.pass && !u.email_verified) await mailQuiet(req, u, 'verify')
+    if (u && u.pass && !u.email_verified) mailBackground(req, u, 'verify')
     // одинаковый ответ — по нему не узнать, есть ли такой email
     return { ok: true }
   },
@@ -839,7 +883,7 @@ const routes = {
     const l = normEmail((await readJson(req, MAX_FORM)).login)
     const u = l ? userRow('u.email = ? OR u.login = ?', l, l) : null
     // приглашённый, но ещё не задавший пароль, получает приглашение заново
-    if (u?.email && !u.disabled) await mailQuiet(req, u, u.pass ? 'reset' : 'invite')
+    if (u?.email && !u.disabled) mailBackground(req, u, u.pass ? 'reset' : 'invite')
     return { ok: true }
   },
 
@@ -902,6 +946,15 @@ const routes = {
     return { ok: true }
   },
 
+  // выйти на всех остальных устройствах (телефон потерян, уволенный сотрудник знал пароль)
+  'POST /api/logout/others': (req, url) => {
+    const u = auth(req, url)
+    const n = db.prepare('DELETE FROM sessions WHERE user_id = ? AND token != ?').run(u.id, u.token).changes
+    for (const r of u.org.listeners) if (r.userId === u.id && r.token !== u.token) r.end()
+    log(`выход на других устройствах: ${u.login}, сессий: ${n}`)
+    return { ok: true, closed: n }
+  },
+
   'GET /api/me': (req, url) => {
     const { token: _, org: __, ...u } = auth(req, url)
     return { user: u }
@@ -910,8 +963,7 @@ const routes = {
   'POST /api/password': async (req, url) => {
     const u = auth(req, url)
     const { oldPassword, newPassword } = await readJson(req, MAX_FORM)
-    const row = db.prepare('SELECT pass FROM users WHERE id = ?').get(u.id)
-    if (!checkPass(String(oldPassword ?? ''), row.pass)) throw new HttpError(400, 'Текущий пароль неверный', 'old_password')
+    checkMyPass(u, oldPassword)
     if (String(newPassword ?? '').length < PASS_MIN) throw new HttpError(400, `Пароль — минимум ${PASS_MIN} символов`, 'weak_password')
     db.prepare('UPDATE users SET pass = ? WHERE id = ?').run(hashPass(newPassword), u.id)
     db.prepare('DELETE FROM sessions WHERE user_id = ? AND token != ?').run(u.id, u.token)
@@ -925,8 +977,8 @@ const routes = {
     const { email, password } = await readJson(req, MAX_FORM)
     const e = normEmail(email)
     if (!EMAIL_RE.test(e)) throw new HttpError(400, 'Неверный email', 'bad_email')
+    checkMyPass(u, password)
     const row = db.prepare('SELECT * FROM users WHERE id = ?').get(u.id)
-    if (!checkPass(String(password ?? ''), row.pass)) throw new HttpError(400, 'Неверный пароль', 'old_password')
     if (e === row.email && row.email_verified) return { ok: true, newEmail: '' }
     if (db.prepare('SELECT 1 FROM users WHERE (email = ? OR login = ?) AND id != ?').get(e, e, u.id))
       throw new HttpError(409, 'Этот email уже зарегистрирован', 'email_taken')
@@ -1033,11 +1085,20 @@ const routes = {
   'POST /api/sync': async (req, url) => {
     const u = auth(req, url)
     const o = u.org
+    // приложение синхронизирует раз в несколько секунд; больше — это уже не телефон
+    rateLimit('sync:' + u.id, 120, 60_000)
     const { orders = [], settings } = await readJson(req)
+    if (!Array.isArray(orders)) throw new HttpError(400, 'orders — список')
     const accepted = []
     const rejected = []
     const merged = []
+    // удаление чужого заказа сотрудником — не принято, заказ вернётся на телефон
+    const denied = []
     let changed = false
+    const full = dbBytes(o) > ORG_DB_MAX
+    const isAdmin = u.role === 'admin'
+    // кто создал заказ: сотрудник удаляет только свои
+    const author = o.db.prepare("SELECT user_id FROM history WHERE order_id = ? AND action = 'create' ORDER BY id LIMIT 1")
     const asRemote = (row) => ({ id: row.id, updatedAt: row.updated_at, deleted: !!row.deleted, data: row.deleted ? null : JSON.parse(row.data) })
     o.db.exec('BEGIN')
     try {
@@ -1045,10 +1106,14 @@ const routes = {
       const put = o.db.prepare(
         `INSERT INTO orders (id, data, updated_at, deleted, rev, updated_by) VALUES (?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET data = excluded.data, updated_at = excluded.updated_at,
-           deleted = excluded.deleted, rev = excluded.rev, updated_by = excluded.updated_by`,
+           deleted = excluded.deleted, rev = excluded.rev, updated_by = excluded.updated_by, trash = NULL, deleted_at = NULL`,
+      )
+      // удалённый заказ уходит в корзину: данные остаются ещё TRASH_DAYS дней
+      const toTrash = o.db.prepare(
+        `UPDATE orders SET data = NULL, updated_at = ?, deleted = 1, rev = ?, updated_by = ?, trash = ?, deleted_at = ? WHERE id = ?`,
       )
       for (const x of orders) {
-        if (typeof x?.id !== 'string' || !x.id || typeof x.updatedAt !== 'number') continue
+        if (typeof x?.id !== 'string' || !x.id || x.id.length > 100 || typeof x.updatedAt !== 'number') continue
         const cur = get.get(x.id)
         const curData = cur && !cur.deleted ? { ...JSON.parse(cur.data), updatedAt: cur.updated_at } : null
 
@@ -1058,16 +1123,33 @@ const routes = {
             rejected.push(asRemote(cur))
             continue
           }
-          if (!cur?.deleted) {
-            put.run(x.id, null, x.updatedAt, 1, nextRev(o), u.id)
+          if (cur && !cur.deleted && !isAdmin) {
+            const by = author.get(x.id)?.user_id
+            const tooMany = limited('del:' + u.id, STAFF_DELETES_PER_HOUR, 3600_000)
+            if ((by && by !== u.id) || tooMany) {
+              log(`удаление отклонено (${tooMany ? 'лимит' : 'чужой заказ'}): ${u.login}, заказ ${x.id}`)
+              rejected.push(asRemote(cur))
+              denied.push(x.id)
+              continue
+            }
+            bump('del:' + u.id, 3600_000)
+          }
+          if (cur && !cur.deleted) {
+            toTrash.run(x.updatedAt, nextRev(o), u.id, cur.data, now(), x.id)
             addHistory(o, x.id, u.id, 'delete', [])
             changed = true
-          }
+          } else if (!cur) put.run(x.id, null, x.updatedAt, 1, nextRev(o), u.id)
           accepted.push(x.id)
           continue
         }
 
         if (!x.data || typeof x.data !== 'object') continue
+        // огромный заказ (фото внутри текста) или база компании переполнена — не принимаем;
+        // на телефоне заказ остаётся неотправленным
+        if (full || JSON.stringify(x.data).length > MAX_ORDER) {
+          log(`заказ не принят (${full ? 'база компании заполнена' : 'слишком большой'}): ${u.login}, ${x.id}`)
+          continue
+        }
         // удалён на сервере позже этой правки
         if (cur?.deleted && cur.updated_at > x.updatedAt) {
           rejected.push(asRemote(cur))
@@ -1097,7 +1179,7 @@ const routes = {
         if (byServer) merged.push({ id: x.id, updatedAt: data.updatedAt, deleted: false, data })
         else accepted.push(x.id)
       }
-      if (settings && typeof settings.updatedAt === 'number' && u.role === 'admin') {
+      if (settings && typeof settings.updatedAt === 'number' && u.role === 'admin' && JSON.stringify(settings.data ?? null).length <= MAX_ORDER) {
         const cur = o.db.prepare("SELECT updated_at FROM shared WHERE key = 'settings'").get()
         if (!cur || cur.updated_at <= settings.updatedAt) {
           o.db.prepare(
@@ -1114,7 +1196,25 @@ const routes = {
     }
     const rev = currentRev(o)
     if (changed) broadcast(o, rev)
-    return { accepted, rejected, merged, rev }
+    return { accepted, rejected, merged, denied, rev }
+  },
+
+  // корзина: удалённые заказы за последние TRASH_DAYS дней — только администратор
+  'GET /api/trash': (req, url) => {
+    const u = auth(req, url)
+    adminOnly(u)
+    const names = new Map(db.prepare('SELECT id, name, login FROM users WHERE org_id = ?').all(u.orgId).map((r) => [r.id, r.name || r.login]))
+    const orders = u.org.db
+      .prepare('SELECT id, trash, deleted_at, updated_by FROM orders WHERE trash IS NOT NULL ORDER BY deleted_at DESC LIMIT 500')
+      .all()
+      .map((r) => {
+        const d = JSON.parse(r.trash)
+        return {
+          id: r.id, deletedAt: r.deleted_at, by: names.get(r.updated_by) ?? '—',
+          number: d.number ?? '', plate: d.plate ?? '', make: d.make ?? '', model: d.model ?? '', client: d.client ?? '',
+        }
+      })
+    return { orders, days: TRASH_DAYS }
   },
 
   // сотрудники компании для выбора ответственного — доступно всем в компании
@@ -1129,7 +1229,16 @@ const routes = {
   },
 
   'GET /api/events': (req, url, res) => {
-    const { org: o } = auth(req, url)
+    const u = auth(req, url)
+    const o = u.org
+    // старые соединения того же пользователя закрываем: открыть их без счёта нельзя
+    const mine = [...o.listeners].filter((r) => r.userId === u.id)
+    for (const r of mine.slice(0, Math.max(0, mine.length - MAX_EVENTS_PER_USER + 1))) {
+      o.listeners.delete(r)
+      r.end()
+    }
+    res.userId = u.id
+    res.token = u.token
     res.writeHead(200, { 'Content-Type': 'text/event-stream', 'Cache-Control': 'no-cache', Connection: 'keep-alive', 'X-Accel-Buffering': 'no' })
     res.write(`event: rev\ndata: ${currentRev(o)}\n\n`)
     o.listeners.add(res)
@@ -1217,8 +1326,7 @@ const routes = {
     const u = auth(req, url)
     if (!u.owner) throw new HttpError(403, 'Удалить компанию может только её владелец', 'not_owner')
     const { password } = await readJson(req, MAX_FORM)
-    if (!checkPass(String(password ?? ''), db.prepare('SELECT pass FROM users WHERE id = ?').get(u.id).pass))
-      throw new HttpError(400, 'Неверный пароль', 'old_password')
+    checkMyPass(u, password)
     if (db.prepare('SELECT 1 FROM users WHERE org_id = ? AND platform = 1').get(u.orgId))
       throw new HttpError(400, 'Компанию владельца платформы удалить нельзя', 'platform_org')
     log(`компания удалена владельцем: «${u.orgName}» (${u.orgId}), ${u.login}`)
@@ -1265,6 +1373,14 @@ async function reviewRoute(req, res, token) {
     .run(link.order_id, link.created, stars, comment, now())
   log(`отзыв: компания ${link.org_id}, заказ ${link.order_id}, ${stars}★`)
   return sendHtml(res, 200, messagePage(lang, stars >= 4 ? txt.thanks : txt.thanksLow))
+}
+
+const safeDecode = (s) => {
+  try {
+    return decodeURIComponent(s)
+  } catch {
+    throw new HttpError(400, 'Неверный адрес')
+  }
 }
 
 // /api/users/:id, /api/platform/orgs/:id, /api/orders/:id/history, /api/photos/:id, /api/videos/:id и /r/<токен>
@@ -1347,13 +1463,31 @@ async function dynamicRoute(req, res, url) {
     }
   }
 
+  m = url.pathname.match(/^\/api\/trash\/([^/]+)\/restore$/)
+  if (m && req.method === 'POST') {
+    const u = auth(req, url)
+    adminOnly(u)
+    const o = u.org
+    const row = o.db.prepare('SELECT trash FROM orders WHERE id = ? AND deleted = 1 AND trash IS NOT NULL').get(m[1])
+    if (!row) throw new HttpError(404, 'Заказа нет в корзине', 'not_in_trash')
+    const data = { ...JSON.parse(row.trash), updatedAt: now() }
+    const rev = nextRev(o)
+    o.db
+      .prepare('UPDATE orders SET data = ?, updated_at = ?, deleted = 0, rev = ?, updated_by = ?, trash = NULL, deleted_at = NULL WHERE id = ?')
+      .run(JSON.stringify(data), data.updatedAt, rev, u.id, m[1])
+    addHistory(o, m[1], u.id, 'restore', [])
+    broadcast(o, rev)
+    log(`заказ восстановлен из корзины: ${u.login}, ${m[1]}`)
+    return send(res, 200, { ok: true })
+  }
+
   m = url.pathname.match(/^\/api\/orders\/([^/]+)\/history$/)
   if (m && req.method === 'GET') {
     const u = auth(req, url)
     const names = new Map(db.prepare('SELECT id, name, login FROM users WHERE org_id = ?').all(u.orgId).map((r) => [r.id, r.name || r.login]))
     const history = u.org.db
       .prepare('SELECT at, action, changes, user_id FROM history WHERE order_id = ? ORDER BY id DESC LIMIT 200')
-      .all(decodeURIComponent(m[1]))
+      .all(safeDecode(m[1]))
       .map((r) => ({ at: r.at, user: names.get(r.user_id) ?? '—', action: r.action, changes: JSON.parse(r.changes) }))
     return send(res, 200, { history })
   }
@@ -1390,8 +1524,15 @@ async function dynamicRoute(req, res, url) {
       const old = fileBytes(path)
       checkQuota(u.org, Number(req.headers['content-length'] ?? 0) - old)
       // без Content-Length — не дальше остатка квоты
-      const size = await saveStream(req, path, Math.min(MAX_VIDEO, ORG_QUOTA - u.org.bytes + old))
-      u.org.bytes += size - old
+      const limit = Math.min(MAX_VIDEO, ORG_QUOTA - u.org.bytes + old)
+      // место занимаем сразу — несколько загрузок одновременно не превысят квоту
+      u.org.bytes += limit - old
+      let size = old
+      try {
+        size = await saveStream(req, path, limit)
+      } finally {
+        u.org.bytes += size - limit
+      }
       return send(res, 200, { ok: true })
     }
     if (req.method === 'GET' || req.method === 'HEAD') {
@@ -1442,7 +1583,9 @@ const server = createServer(async (req, res) => {
   } catch (e) {
     const status = e instanceof HttpError ? e.status : 500
     if (status === 500) log('ошибка', req.method, url.pathname, e)
-    if (!res.headersSent) send(res, status, { error: e.message, ...(e.code ? { code: e.code } : {}) })
+    // текст внутренних ошибок — только в журнал
+    const error = status === 500 ? 'Внутренняя ошибка сервера' : e.message
+    if (!res.headersSent) send(res, status, { error, ...(e instanceof HttpError && e.code ? { code: e.code } : {}) })
     else res.end()
   }
 })

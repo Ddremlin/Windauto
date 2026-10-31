@@ -82,5 +82,5 @@ export const printNative = (name: string) => Print.print({ name })
 /** Ссылка в новой вкладке; в приложении — в своём приложении (WhatsApp, браузер), а не внутри Windauto */
 export function openExternal(url: string) {
   if (isNative) window.location.href = url
-  else window.open(url, '_blank')
+  else window.open(url, '_blank', 'noopener')
 }

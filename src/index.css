@@ -823,3 +823,6 @@ input:disabled { opacity: 0.6; }
 .tag.pro { background: color-mix(in srgb, #f5a623 22%, transparent); color: #b26a00; }
 .plan { margin-top: 4px; display: flex; flex-direction: column; gap: 2px; }
 .plan.pro { color: #b26a00; font-weight: 600; }
+
+.trash-row { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 0; border-bottom: 1px solid var(--line); }
+.trash-row:last-child { border-bottom: 0; }
