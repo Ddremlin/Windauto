@@ -16,7 +16,30 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  # автотесты интерфейса: своя сборка + настоящий сервер, браузер как у телефона (Pixel 7).
+  # В образе Playwright — браузер уже стоит (версия образа = @playwright/test в package.json)
+  e2e:
+    runs-on: ubuntu-latest
+    container: mcr.microsoft.com/playwright:v1.56.0-noble
+    steps:
+      - uses: actions/checkout@v4
+      - run: npm ci
+      - run: npm ci --omit=dev
+        working-directory: server
+      - run: npm run e2e
+        env:
+          HOME: /root
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: |
+            playwright-report
+            test-results
+          retention-days: 14
+
   deploy:
+    needs: e2e
     runs-on: ubuntu-latest
     environment:
       name: github-pages
@@ -31,17 +54,6 @@ jobs:
       - run: npm ci --omit=dev
         working-directory: server
       - run: npm test
-      # автотесты интерфейса: своя сборка + настоящий сервер, браузер как у телефона (Pixel 7)
-      - run: npx playwright install --with-deps chromium
-      - run: npm run e2e
-      - uses: actions/upload-artifact@v4
-        if: failure()
-        with:
-          name: playwright-report
-          path: |
-            playwright-report
-            test-results
-          retention-days: 14
       - run: npm run build
       # веб-версия переехала на https://app.dmerlinauto.vip: здесь — страница переезда,
       # а прежняя версия — в old/, чтобы дослать изменения, не успевшие уйти на сервер
