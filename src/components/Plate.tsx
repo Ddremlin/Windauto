@@ -138,7 +138,9 @@ export function PlateInput({ value, country, onChange, onCountry, onBlur, label,
             {options}
           </select>
         </span>
+        {/* label достаётся первому полю внутри — списку стран, поэтому имя номеру задаём явно */}
         <input
+          aria-label={label}
           value={value}
           placeholder={country === 'PL' ? 'WA 12345' : ''}
           autoCapitalize="characters"

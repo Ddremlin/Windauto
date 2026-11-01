@@ -23,3 +23,8 @@ dist-ssr
 *.sln
 *.sw?
 release-apk
+
+# автотесты интерфейса
+dist-e2e
+test-results
+playwright-report

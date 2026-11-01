@@ -22,7 +22,19 @@ npm run dev        # разработка, http://<ip>:5173
 npm run build      # сборка в dist/
 npm run preview    # просмотр сборки, http://<ip>:4173
 npm test           # тесты (Node 22.6+): слияние, VIN, смета, сервер целиком
+npm run e2e        # автотесты интерфейса (Playwright): своя сборка + настоящий сервер
 ```
+
+Автотесты интерфейса (`e2e/`) открывают приложение в Chromium как на телефоне (Pixel 7): заказ, работы по элементу,
+поиск, PDF, два телефона через сервер с живыми обновлениями, отчёт об ошибке. Без установки браузера — в образе Playwright:
+
+```bash
+docker run --rm --network host --ipc=host -v "$PWD":/app -w /app -u $(id -u):$(id -g) -e HOME=/tmp \
+  mcr.microsoft.com/playwright:v1.56.0-noble npm run e2e
+```
+
+Версия образа должна совпадать с `@playwright/test` в `package.json`. При падении — снимок экрана и трасса в `test-results/`
+(`npx playwright show-trace …/trace.zip`). В GitHub Actions автотесты идут перед каждой выкладкой, отчёт — в артефактах.
 
 Справочники: виды работ, повреждения, комплектность — `src/works.ts`, элементы кузова — `src/body.ts`, проверки — `src/validate.ts`,
 коды производителей VIN — `src/vin.ts`, текст RODO по умолчанию — `src/rodo.ts`.
