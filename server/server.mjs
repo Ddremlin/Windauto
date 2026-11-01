@@ -37,6 +37,10 @@ const MAX_JSON = 20 * 1024 * 1024
 const MAX_FORM = 16 * 1024
 // сообщений разработчику в час — с одного аккаунта или IP
 const SUPPORT_PER_HOUR = Number(process.env.SUPPORT_PER_HOUR) || 10
+// отчётов об ошибках в час — с одного аккаунта или IP
+const ERRORS_PER_HOUR = 30
+// версии у сервера нет — в сводке ошибок показываем, когда выложен server.mjs
+const SERVER_VERSION = 'от ' + statSync(import.meta.filename).mtime.toISOString().slice(0, 10)
 const MAX_PHOTO = 15 * 1024 * 1024
 // круговое видео при приёмке: ~2,5 Мбит/с × 3 мин ≈ 60 МБ, с запасом под видео из галереи
 const MAX_VIDEO = 300 * 1024 * 1024
@@ -97,6 +101,13 @@ const ACCOUNTS_SCHEMA = `
     hash TEXT PRIMARY KEY, org_id TEXT NOT NULL, order_id TEXT NOT NULL, lang TEXT NOT NULL, created INTEGER NOT NULL
   );
   CREATE INDEX IF NOT EXISTS review_links_order ON review_links(org_id, order_id);
+  -- ошибки приложения и сервера: одинаковые склеиваются по sig, fresh — сколько раз с последней сводки
+  CREATE TABLE IF NOT EXISTS client_errors (
+    sig TEXT PRIMARY KEY, source TEXT NOT NULL, version TEXT NOT NULL, device TEXT NOT NULL, place TEXT NOT NULL,
+    message TEXT NOT NULL, stack TEXT NOT NULL, who TEXT NOT NULL, count INTEGER NOT NULL, fresh INTEGER NOT NULL,
+    first INTEGER NOT NULL, last INTEGER NOT NULL
+  );
+  CREATE TABLE IF NOT EXISTS server_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
 `
 
 const ORG_SCHEMA = `
@@ -313,6 +324,59 @@ const findToken = (t, kinds) => {
 }
 
 // просроченное — раз в час
+// --- ошибки: из приложения (POST /api/errors) и свои 500-е; раз в сутки — сводка разработчику ---
+const ERRORS_DAYS = 30
+const ERRORS_MAX = 1000
+const recordError = ({ source, version, device, place, message, stack, who }) => {
+  const cut = (v, n) => String(v ?? '').trim().slice(0, n)
+  const e = { source, version: cut(version, 40), device: cut(device, 200), place: cut(place, 200), message: cut(message, 1000) || '—', stack: cut(stack, 4000), who: cut(who, 200) }
+  // номер строки/столбца меняется от сборки к сборке, а вот версия — часть подписи
+  const sig = sha([e.source, e.version, e.message, e.stack.split('\n').slice(0, 3).join('\n')].join('|'))
+  const t = now()
+  const hit = db.prepare('UPDATE client_errors SET count = count + 1, fresh = fresh + 1, last = ?, device = ?, place = ?, who = ? WHERE sig = ?').run(t, e.device, e.place, e.who, sig)
+  if (hit.changes) return
+  if (db.prepare('SELECT count(*) AS n FROM client_errors').get().n >= ERRORS_MAX) return
+  db.prepare('INSERT INTO client_errors (sig, source, version, device, place, message, stack, who, count, fresh, first, last) VALUES (?, ?, ?, ?, ?, ?, ?, ?, 1, 1, ?, ?)')
+    .run(sig, e.source, e.version, e.device, e.place, e.message, e.stack, e.who, t, t)
+}
+
+let mailingErrors = false
+async function mailErrors() {
+  const last = Number(db.prepare("SELECT value FROM server_meta WHERE key = 'errors_mailed'").get()?.value ?? 0)
+  if (mailingErrors || now() - last < 23 * 3600_000) return
+  const rows = db.prepare('SELECT * FROM client_errors WHERE fresh > 0 ORDER BY fresh DESC LIMIT 30').all()
+  if (!rows.length) return
+  const to = process.env.SUPPORT_EMAIL || process.env.OPERATOR_EMAIL
+  if (!to && !telegramReady()) return
+  const total = db.prepare('SELECT sum(fresh) AS n, count(*) AS k FROM client_errors WHERE fresh > 0').get()
+  const date = (t) => new Date(t).toISOString().slice(0, 16).replace('T', ' ')
+  const text = [
+    `Ошибок за сутки: ${total.n}, разных: ${total.k}.`,
+    ...rows.map((r) =>
+      [
+        `\n#${r.fresh}× (всего ${r.count}, впервые ${date(r.first)}, последний раз ${date(r.last)} UTC)`,
+        `${r.source === 'server' ? 'Сервер' : 'Приложение'} ${r.version}${r.device ? ' — ' + r.device : ''}`,
+        r.who && `Кто: ${r.who}`,
+        r.place && `Где: ${r.place}`,
+        r.message,
+        // в стеке Chrome первая строка повторяет текст ошибки
+        r.stack.split('\n').filter((l, i) => !(i === 0 && l.trim() === r.message)).slice(0, 6).join('\n'),
+      ].filter(Boolean).join('\n'),
+    ),
+  ].join('\n')
+  mailingErrors = true
+  try {
+    if (to) await sendMail({ to, subject: `Windauto: ошибки за сутки (${total.n})`, text }, log)
+    else await sendTelegram(`⚠️ Windauto: ошибки за сутки\n\n${text}`.slice(0, 4000), log)
+    db.prepare('UPDATE client_errors SET fresh = 0').run()
+    db.prepare("INSERT INTO server_meta (key, value) VALUES ('errors_mailed', ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value").run(String(now()))
+  } catch (e) {
+    log('сводка ошибок не отправилась', e.message)
+  } finally {
+    mailingErrors = false
+  }
+}
+
 const cleanup = () => {
   db.prepare('DELETE FROM limits WHERE first < ?').run(now() - 86400_000)
   db.prepare('DELETE FROM sessions WHERE created < ?').run(now() - SESSION_DAYS * 86400_000)
@@ -320,6 +384,8 @@ const cleanup = () => {
   db.prepare('DELETE FROM review_links WHERE created < ?').run(now() - REVIEW_DAYS * 86400_000)
   db.prepare('DELETE FROM sessions WHERE last_seen < ?').run(now() - SESSION_IDLE_DAYS * 86400_000)
   for (const o of ORGS.values()) emptyTrash(o.db)
+  db.prepare('DELETE FROM client_errors WHERE last < ?').run(now() - ERRORS_DAYS * 86400_000)
+  void mailErrors()
 }
 cleanup()
 setInterval(cleanup, 3600_000).unref()
@@ -842,6 +908,20 @@ const routes = {
     } catch {
       throw new HttpError(502, 'Компания создана, но письмо не отправилось — нажмите «Отправить письмо ещё раз»', 'mail_failed')
     }
+    return { ok: true }
+  },
+
+  // ошибка в приложении: без данных клиентов, только текст ошибки, версия и устройство. Можно и без входа
+  'POST /api/errors': async (req, url) => {
+    const b = await readJson(req, MAX_FORM)
+    let u = null
+    try {
+      if (req.headers.authorization) u = auth(req, url)
+    } catch {
+      /* сессия кончилась — запишем как без входа */
+    }
+    rateLimit('errors:' + (u?.id ?? clientIp(req)), ERRORS_PER_HOUR, 3600_000)
+    recordError({ source: 'app', version: b.version, device: b.device, place: b.place, message: b.message, stack: b.stack, who: u ? `${u.login}, «${u.orgName}»` : 'без входа' })
     return { ok: true }
   },
 
@@ -1606,7 +1686,14 @@ const server = createServer(async (req, res) => {
     await dynamicRoute(req, res, url)
   } catch (e) {
     const status = e instanceof HttpError ? e.status : 500
-    if (status === 500) log('ошибка', req.method, url.pathname, e)
+    if (status === 500) {
+      log('ошибка', req.method, url.pathname, e)
+      try {
+        recordError({ source: 'server', version: SERVER_VERSION, device: '', place: `${req.method} ${url.pathname}`, message: e?.message ?? String(e), stack: e?.stack ?? '', who: '' })
+      } catch {
+        /* база недоступна — останется в журнале */
+      }
+    }
     // текст внутренних ошибок — только в журнал
     const error = status === 500 ? 'Внутренняя ошибка сервера' : e.message
     if (!res.headersSent) send(res, status, { error, ...(e instanceof HttpError && e.code ? { code: e.code } : {}) })

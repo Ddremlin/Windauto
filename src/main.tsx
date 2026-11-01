@@ -5,8 +5,11 @@ import { requestPersistence } from './photos'
 import { SettingsProvider } from './settings'
 import { isNative } from './native'
 import { initStorage } from './storage'
-import { initSync } from './sync'
+import { initSync, reportTarget } from './sync'
+import { initErrorReports } from './errorReport'
 import './index.css'
+
+initErrorReports(reportTarget)
 
 // заказы читаются из IndexedDB асинхронно — показываем приложение, когда они загружены
 initStorage().finally(() => {

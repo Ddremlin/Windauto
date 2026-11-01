@@ -6,6 +6,7 @@ import { deletePhotos, getLocalPhoto, markRemoteSource, orderPhotoIds } from './
 import { deleteVideos, getLocalVideo, markRemoteVideoSource, orderVideoIds, videoType } from './videos'
 import { applyRemoteShared, getSettings, hasShared, onSharedChange, pickShared, resetShared, setSharedStamp, type SharedSettings } from './settingsStore'
 import { makeT } from './i18n'
+import { UPDATE_SERVER } from './native'
 import { mergeOrders } from './merge'
 import { getOrders, migrate, onLocalChange, removeOrder, replaceAllOrders, setServerNumbering, upsertOrder } from './storage'
 import type { Order } from './types'
@@ -111,10 +112,14 @@ export class ApiError extends Error {
   code?: string
   constructor(status: number, message: string, code?: string) {
     super(message)
+    this.name = 'ApiError'
     this.status = status
     this.code = code
   }
 }
+
+// куда слать отчёты об ошибках: в свою базу, а без неё — на сервер обновлений
+export const reportTarget = () => ({ server: state.server || UPDATE_SERVER, token: state.token })
 
 async function api<T>(path: string, init: RequestInit = {}, server = state.server, token = state.token): Promise<T> {
   const headers: Record<string, string> = { ...(init.headers as Record<string, string>) }

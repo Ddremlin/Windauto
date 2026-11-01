@@ -3,12 +3,12 @@ import TopBar from '../components/TopBar'
 import { UPDATE_SERVER, openExternal } from '../native'
 import { useSettings } from '../settingsHooks'
 import { ApiError, sendSupport, useSyncStatus } from '../sync'
+import { device } from '../errorReport'
 
 const TELEGRAM = 'https://t.me/windautohelp'
 type Via = 'email' | 'telegram'
 
 // «Android 16; Pixel 7» из user agent — чтобы разработчик знал, на чём ошибка
-const device = () => navigator.userAgent.match(/\(([^)]+)\)/)?.[1].replace(/; wv\b/, '').slice(0, 120) ?? navigator.platform
 
 // Помощь: написать разработчику — письмом через сервер или в Telegram
 export default function Help() {

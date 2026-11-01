@@ -40,9 +40,18 @@ fi
 chmod 600 "$OUT"
 if [ -n "$BACKUP_COPY_TO" ]; then
   scp -q -o BatchMode=yes "$OUT" "$BACKUP_COPY_TO"
-  # видео — без шифрования (как и на самом сервере), передаются только новые; удалённые на сервере остаются в копии
-  VIDEOS=$(cd data && ls -d orgs/*/videos 2>/dev/null || true)
-  [ -z "$VIDEOS" ] || (cd data && rsync -aR -e 'ssh -o BatchMode=yes' $VIDEOS "${BACKUP_COPY_TO%/}/videos/")
+  # там тоже не дольше 30 дней (обещано в политике конфиденциальности)
+  REMOTE_HOST=${BACKUP_COPY_TO%%:*}
+  REMOTE_DIR=${BACKUP_COPY_TO#*:}
+  REMOTE_DIR=${REMOTE_DIR%/}
+  OLD=$(date -d '30 days ago' +%F)
+  for f in $(ssh -o BatchMode=yes "$REMOTE_HOST" ls "$REMOTE_DIR" | grep -E '^windauto-[0-9]{4}-[0-9]{2}-[0-9]{2}\.tar\.gz' || true); do
+    if [[ "${f:9:10}" < "$OLD" ]]; then ssh -o BatchMode=yes "$REMOTE_HOST" rm "$REMOTE_DIR/$f"; fi
+  done
+  # видео — без шифрования (как и на самом сервере), передаются только новые; удалённые на сервере
+  # пропадают и из копии (остаются в снимках Storage Box)
+  rsync -a --delete --include='orgs/' --include='orgs/*/' --include='orgs/*/videos/***' --exclude='*' \
+    -e 'ssh -o BatchMode=yes' data/ "$REMOTE_HOST:$REMOTE_DIR/videos/"
 fi
 ls -1t backups/windauto-*.tar.gz* | tail -n +31 | xargs -r rm --
 ping_hc ""

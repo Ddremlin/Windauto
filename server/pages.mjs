@@ -93,6 +93,7 @@ const LEGAL = {
 <p>Dane konta przetwarzamy, aby świadczyć usługę (art. 6 ust. 1 lit. b RODO): logowanie, wysyłka wiadomości o potwierdzeniu adresu i zmianie hasła, bezpieczeństwo.</p>
 <h2>Przechowywanie</h2>
 <p>Dane są przechowywane na serwerze w Unii Europejskiej (Hetzner, Niemcy/Finlandia). Rozpoznawanie numerów i dokumentów ze zdjęć oraz mowy odbywa się z użyciem usługi Anthropic (USA) — zdjęcie lub tekst są przekazywane tylko w momencie użycia tej funkcji. E-maile wysyłamy przez Brevo (UE).</p>
+<p>Gdy w aplikacji wystąpi błąd, wysyła ona raport techniczny (treść błędu, wersja aplikacji, model urządzenia, login) — bez danych klientów i pojazdów. Raporty służą naprawie błędów (art. 6 ust. 1 lit. f RODO) i są usuwane po 30 dniach.</p>
 <p>Dane przechowujemy do czasu usunięcia konta firmy. Usunięcie firmy w aplikacji kasuje wszystkie jej dane z serwera; kopie zapasowe są nadpisywane w ciągu 30 dni.</p>
 <h2>Twoje prawa</h2>
 <p>Masz prawo dostępu do danych, ich sprostowania, usunięcia, ograniczenia przetwarzania, przeniesienia oraz wniesienia skargi do Prezesa UODO. Napisz do nas: ${esc(o.email)}.</p>`],
@@ -104,6 +105,7 @@ const LEGAL = {
 <p>Данные аккаунта обрабатываются для оказания услуги (ст. 6 п. 1 б GDPR): вход, письма о подтверждении адреса и смене пароля, безопасность.</p>
 <h2>Хранение</h2>
 <p>Данные хранятся на сервере в ЕС (Hetzner, Германия/Финляндия). Распознавание номеров, документов и речи выполняется сервисом Anthropic (США) — фото или текст передаются только в момент использования функции. Письма отправляются через Brevo (ЕС).</p>
+<p>При ошибке приложение отправляет технический отчёт (текст ошибки, версия приложения, модель устройства, логин) — без данных клиентов и автомобилей. Отчёты нужны для исправления ошибок (ст. 6 п. 1 f GDPR) и удаляются через 30 дней.</p>
 <p>Данные хранятся до удаления компании. Удаление компании в приложении стирает все её данные с сервера; резервные копии перезаписываются в течение 30 дней.</p>
 <h2>Ваши права</h2>
 <p>Доступ, исправление, удаление, ограничение обработки, перенос данных, жалоба в UODO. Пишите: ${esc(o.email)}.</p>`],

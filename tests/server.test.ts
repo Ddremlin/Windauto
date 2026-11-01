@@ -562,3 +562,29 @@ test('живые обновления: одноразовый билет вме�
   assert.equal(await sse('token=' + admin), 200)
   assert.equal((await fetch(URL_ + '/api/me?token=' + admin)).status, 401)
 })
+
+test('отчёты об ошибках: склеиваются, сводка разработчику раз в сутки', async () => {
+  const err = (message: string, token = '') => api('/api/errors', token, { message, stack: 'at f (index.js:1:2)', place: '#/order/:id', version: '1.19.0', device: 'Pixel' })
+  assert.equal((await err('TypeError: x is undefined', staff)).status, 200)
+  await err('TypeError: x is undefined', staff)
+  await err('RangeError: boom')
+  const mails = () => readFileSync(join(dir, 'mail.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l)).filter((m) => m.subject.startsWith('Windauto: ошибки'))
+  const before_ = mails().length
+  // сводка уходит при обслуживании (раз в час и при запуске)
+  await stop()
+  await start()
+  await new Promise((r) => setTimeout(r, 300))
+  const m = mails()
+  assert.equal(m.length, before_ + 1)
+  const last = m[m.length - 1]
+  assert.equal(last.to, 'help@windauto.test')
+  assert.match(last.subject, /\(3\)/)
+  assert.match(last.text, /#2× .*\n.*1\.19\.0 — Pixel\nКто: jan, «/)
+  assert.match(last.text, /Кто: без входа/)
+  // следующая — не раньше чем через сутки
+  await err('Error: again')
+  await stop()
+  await start()
+  await new Promise((r) => setTimeout(r, 300))
+  assert.equal(mails().length, before_ + 1)
+})
