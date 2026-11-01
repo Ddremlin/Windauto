@@ -15,6 +15,8 @@ export interface SharedSettings {
   pricesGross: boolean
   // свой текст информации RODO; пусто — стандартный
   rodoText: string
+  // логотип в шапке документов (data: URL, до ~100 КБ) — Pro
+  shopLogo: string
 }
 
 export const CURRENCIES = { PLN: 'zł', EUR: '€', USD: '$', UAH: '₴', BYN: 'Br', RUB: '₽', CZK: 'Kč' } as const
@@ -37,6 +39,7 @@ export const SHARED_KEYS: (keyof SharedSettings)[] = [
   'vatRate',
   'pricesGross',
   'rodoText',
+  'shopLogo',
 ]
 
 const KEY = 'windauto.settings.v1'
@@ -53,6 +56,7 @@ const DEFAULTS: Settings = {
   vatRate: 23,
   pricesGross: true,
   rodoText: '',
+  shopLogo: '',
   sharedUpdatedAt: 0,
 }
 

@@ -13,6 +13,7 @@ import { DatabaseSync } from 'node:sqlite'
 import { mailFor, sendMail } from './mail.mjs'
 import { changedKeys, getField, mergeOrders, sameOrder } from './merge.mjs'
 import { sendTelegram, telegramReady } from './telegram.mjs'
+import { periodEnd, periodOf, stripe, stripeReady, verifyWebhook } from './stripe.mjs'
 import { legalPage, messagePage, pageText, passwordPage, REVIEW_LANGS, reviewPage, reviewText } from './pages.mjs'
 
 const PORT = Number(process.env.PORT ?? 8080)
@@ -62,8 +63,12 @@ const MAX_RECOGNIZE = 8 * 1024 * 1024
 const AI_MODEL = process.env.AI_MODEL || 'claude-opus-5-5'
 // распознавание и голос — платные запросы: не больше стольких в сутки на компанию
 const AI_PER_DAY = Number(process.env.AI_PER_DAY ?? 500)
+// и в месяц — распознавания и голос стоят денег за каждый вызов
+const AI_PER_MONTH = Number(process.env.AI_PER_MONTH ?? 500)
 // место под фото и видео одной компании
-const ORG_QUOTA = Number(process.env.ORG_QUOTA_GB ?? 20) * 1024 ** 3
+// место под фото и видео компании: Pro и бесплатно
+const ORG_QUOTA = Number(process.env.ORG_QUOTA_GB ?? 50) * 1024 ** 3
+const FREE_QUOTA = Number(process.env.FREE_QUOTA_GB ?? 1) * 1024 ** 3
 // приглашения сотрудникам — письма на чужие адреса: не больше стольких в сутки на компанию
 const INVITES_PER_DAY = Number(process.env.INVITES_PER_DAY ?? 20)
 // ссылка на отзыв действует 90 дней; ссылок в день на компанию
@@ -108,6 +113,9 @@ const ACCOUNTS_SCHEMA = `
     first INTEGER NOT NULL, last INTEGER NOT NULL
   );
   CREATE TABLE IF NOT EXISTS server_meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
+  -- вызовы ИИ компании по месяцам (2026-11)
+  CREATE TABLE IF NOT EXISTS ai_usage (org_id TEXT NOT NULL, month TEXT NOT NULL, n INTEGER NOT NULL, PRIMARY KEY (org_id, month));
+  CREATE TABLE IF NOT EXISTS stripe_events (id TEXT PRIMARY KEY, at INTEGER NOT NULL);
 `
 
 const ORG_SCHEMA = `
@@ -182,6 +190,21 @@ if (!db.prepare('PRAGMA table_info(users)').all().some((c) => c.name === 'new_em
 // адрес, с которого вошли: с него вход не блокируется, даже если аккаунт кто-то подбирает
 if (!db.prepare('PRAGMA table_info(sessions)').all().some((c) => c.name === 'ip')) db.exec('ALTER TABLE sessions ADD COLUMN ip TEXT')
 if (!db.prepare('PRAGMA table_info(orgs)').all().some((c) => c.name === 'pro')) db.exec('ALTER TABLE orgs ADD COLUMN pro INTEGER NOT NULL DEFAULT 0')
+// тарифы: pro — включён вручную навсегда; paid_until — оплачено по подписке; trial_until — пробный период
+if (!db.prepare('PRAGMA table_info(orgs)').all().some((c) => c.name === 'trial_until')) {
+  db.exec(`ALTER TABLE orgs ADD COLUMN trial_until INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE orgs ADD COLUMN paid_until INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE orgs ADD COLUMN stripe_customer TEXT;
+    ALTER TABLE orgs ADD COLUMN stripe_sub TEXT;
+    ALTER TABLE orgs ADD COLUMN sub_status TEXT;
+    ALTER TABLE orgs ADD COLUMN sub_period TEXT;
+    ALTER TABLE orgs ADD COLUMN trial_mailed INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE orgs ADD COLUMN idle_warned INTEGER NOT NULL DEFAULT 0;
+    ALTER TABLE orgs ADD COLUMN last_seen INTEGER NOT NULL DEFAULT 0;`)
+  db.prepare('UPDATE orgs SET last_seen = ?').run(Date.now())
+  // компании, которые уже были до тарифов: условия обещали предупредить об оплате за 30 дней — 30 дней Pro
+  db.prepare('UPDATE orgs SET trial_until = ? WHERE pro = 0').run(Date.now() + 30 * 86400_000)
+}
 // в базе — только хеш токена сессии: утечка базы или копии не даёт войти. Старые токены хешируем на месте
 const sha = (s) => createHash('sha256').update(s).digest('hex')
 {
@@ -235,8 +258,8 @@ const dirBytes = (dir) => {
 }
 const fileBytes = (path) => (existsSync(path) ? statSync(path).size : 0)
 // не хватит места компании — 507, приложение покажет понятный текст
-const checkQuota = (o, add) => {
-  if (o.bytes + add > ORG_QUOTA) throw new HttpError(507, 'Закончилось место для фото и видео компании', 'quota')
+const checkQuota = (u, add) => {
+  if (u.org.bytes + add > quotaOf(u)) throw new HttpError(507, 'Закончилось место для фото и видео компании', u.pro ? 'quota' : 'quota_free')
 }
 
 // --- данные компании: своя база и папки, открываются при первом обращении ---
@@ -385,7 +408,55 @@ const cleanup = () => {
   db.prepare('DELETE FROM sessions WHERE last_seen < ?').run(now() - SESSION_IDLE_DAYS * 86400_000)
   for (const o of ORGS.values()) emptyTrash(o.db)
   db.prepare('DELETE FROM client_errors WHERE last < ?').run(now() - ERRORS_DAYS * 86400_000)
+  db.prepare('DELETE FROM stripe_events WHERE at < ?').run(now() - 30 * 86400_000)
   void mailErrors()
+  void planChores().catch((e) => log('тарифы: обслуживание не удалось', e.message))
+}
+
+// письмо владельцу компании (без ссылки-токена): kind — trial | idle
+const APP_URL = PUBLIC_URL || 'https://app.dmerlinauto.vip'
+async function mailOwner(org, kind, v) {
+  const owner = db.prepare('SELECT name, email, lang FROM users WHERE id = ?').get(org.owner_id)
+  if (!owner?.email) return false
+  await sendMail({ to: owner.email, ...mailFor(kind, owner.lang, { link: `${APP_URL}/#/plan`, company: org.name, name: owner.name, ...v }) }, log)
+  return true
+}
+
+const IDLE_WARN_DAYS = 150
+const IDLE_DELETE_DAYS = 180
+let choresRunning = false
+async function planChores() {
+  if (choresRunning) return
+  choresRunning = true
+  try {
+    const t = now()
+    // за 3 дня до конца пробного периода — одно письмо (если не оплатили)
+    for (const org of db.prepare('SELECT * FROM orgs WHERE pro = 0 AND trial_mailed = 0 AND paid_until < ? AND trial_until > ? AND trial_until < ?').all(t, t, t + 3 * 86400_000)) {
+      db.prepare('UPDATE orgs SET trial_mailed = 1 WHERE id = ?').run(org.id)
+      await mailOwner(org, 'trial', { days: Math.max(1, Math.ceil((org.trial_until - t) / 86400_000)) }).catch((e) => log('письмо о пробном периоде:', e.message))
+    }
+    // бесплатные компании без входа полгода: предупреждение, через месяц — фото удаляются (заказы остаются)
+    for (const org of db.prepare('SELECT * FROM orgs WHERE pro = 0 AND paid_until < ? AND trial_until < ?').all(t, t)) {
+      const seen = Math.max(org.last_seen, org.created)
+      const idle = t - seen
+      if (org.idle_warned && seen > org.idle_warned) db.prepare('UPDATE orgs SET idle_warned = 0 WHERE id = ?').run(org.id)
+      else if (!org.idle_warned && idle > IDLE_WARN_DAYS * 86400_000) {
+        const photos = join(DATA, 'orgs', org.id, 'photos')
+        if (!existsSync(photos) || !readdirSync(photos).length) continue
+        db.prepare('UPDATE orgs SET idle_warned = ? WHERE id = ?').run(t, org.id)
+        await mailOwner(org, 'idle', { months: Math.floor(idle / (30 * 86400_000)), days: IDLE_DELETE_DAYS - IDLE_WARN_DAYS }).catch((e) => log('письмо о неактивности:', e.message))
+      } else if (org.idle_warned && idle > IDLE_DELETE_DAYS * 86400_000 && t - org.idle_warned > 25 * 86400_000) {
+        const photos = join(DATA, 'orgs', org.id, 'photos')
+        const o = orgStore(org.id)
+        for (const f of existsSync(photos) ? readdirSync(photos) : []) rmSync(join(photos, f), { force: true })
+        o.bytes = dirBytes(join(o.dir, 'photos')) + dirBytes(join(o.dir, 'videos'))
+        db.prepare('UPDATE orgs SET idle_warned = 0 WHERE id = ?').run(org.id)
+        log(`неактивная бесплатная компания «${org.name}»: фото на сервере удалены`)
+      }
+    }
+  } finally {
+    choresRunning = false
+  }
 }
 cleanup()
 setInterval(cleanup, 3600_000).unref()
@@ -522,7 +593,7 @@ const auth = (req, url) => {
   if (!token) throw new HttpError(401, 'Нужен вход')
   const row = db
     .prepare(
-      `SELECT u.*, s.created AS session_created, s.last_seen AS session_seen, o.blocked, o.pro, o.name AS org_name, o.owner_id
+      `SELECT u.*, s.created AS session_created, s.last_seen AS session_seen, ${ORG_COLS}
        FROM sessions s JOIN users u ON u.id = s.user_id JOIN orgs o ON o.id = u.org_id WHERE s.token = ?`,
     )
     .get(sha(token))
@@ -530,6 +601,8 @@ const auth = (req, url) => {
     throw new HttpError(401, 'Сессия недействительна')
   if (row.blocked && !row.platform) throw new HttpError(403, 'Компания заблокирована', 'blocked')
   db.prepare('UPDATE sessions SET last_seen = ? WHERE token = ?').run(now(), sha(token))
+  // последний вход в компанию — сессии через месяц простоя удаляются, а это нужно дольше
+  db.prepare('UPDATE orgs SET last_seen = ? WHERE id = ? AND last_seen < ?').run(now(), row.org_id, now() - 3600_000)
   return { ...userInfo(row), token: sha(token), org: orgStore(row.org_id) }
 }
 
@@ -757,6 +830,22 @@ async function recognize(kind, image) {
 // --- пользователи ---
 const EMAIL_RE = /^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/
 const normEmail = (v) => String(v ?? '').trim().toLowerCase().slice(0, 254)
+// --- тарифы ---
+const TRIAL_DAYS = 14
+const FREE_USERS = 2
+const FREE_HISTORY_DAYS = 90
+const ORG_COLS = 'o.blocked, o.pro, o.trial_until, o.paid_until, o.sub_status, o.sub_period, o.name AS org_name, o.owner_id'
+/** pro (вручную) | paid (подписка) | trial | free — по строке orgs (или JOIN с ORG_COLS) */
+const planOf = (o) => (o.pro ? 'pro' : o.paid_until > now() ? 'paid' : o.trial_until > now() ? 'trial' : 'free')
+const quotaOf = (u) => (u.pro ? ORG_QUOTA : FREE_QUOTA)
+const aiMonth = () => new Date().toISOString().slice(0, 7)
+const aiUsed = (orgId) => db.prepare('SELECT n FROM ai_usage WHERE org_id = ? AND month = ?').get(orgId, aiMonth())?.n ?? 0
+const activeUsers = (orgId) => db.prepare('SELECT COUNT(*) AS n FROM users WHERE org_id = ? AND disabled = 0').get(orgId).n
+// бесплатно — не больше FREE_USERS активных сотрудников (уже добавленные остаются, новых не добавить)
+const userLimit = (u) => {
+  if (!u.pro && activeUsers(u.orgId) >= FREE_USERS) throw new HttpError(402, `Бесплатно — до ${FREE_USERS} сотрудников`, 'plan_users')
+}
+
 const LOGIN_RE = /^[a-z0-9._-]{3,32}$/
 
 const publicUser = (u) => ({
@@ -764,10 +853,11 @@ const publicUser = (u) => ({
   email: u.email ?? '', invited: !u.pass,
 })
 const userRow = (where, ...args) =>
-  db.prepare(`SELECT u.*, o.blocked, o.pro, o.name AS org_name, o.owner_id FROM users u JOIN orgs o ON o.id = u.org_id WHERE ${where}`).get(...args)
+  db.prepare(`SELECT u.*, ${ORG_COLS} FROM users u JOIN orgs o ON o.id = u.org_id WHERE ${where}`).get(...args)
 // пользователь вместе с его компанией — для входа и /api/me
 const userInfo = (row) => ({
-  ...publicUser(row), newEmail: row.new_email ?? '', orgId: row.org_id, orgName: row.org_name, owner: row.owner_id === row.id, platform: !!row.platform, pro: !!row.pro, lang: row.lang,
+  ...publicUser(row), newEmail: row.new_email ?? '', orgId: row.org_id, orgName: row.org_name, owner: row.owner_id === row.id, platform: !!row.platform,
+  plan: planOf(row), pro: planOf(row) !== 'free', trialUntil: row.trial_until, paidUntil: row.paid_until, lang: row.lang,
 })
 
 // язык страниц из писем: ?lang=, язык пользователя, язык браузера
@@ -806,7 +896,7 @@ const orgSummary = (org) => {
     /* папки компании нет */
   }
   return {
-    id: org.id, name: org.name, created: org.created, blocked: !!org.blocked, pro: !!org.pro,
+    id: org.id, name: org.name, created: org.created, blocked: !!org.blocked, pro: !!org.pro, plan: planOf(org), trialUntil: org.trial_until, paidUntil: org.paid_until,
     owner: owner ? { name: owner.name, login: owner.login, email: owner.email ?? '' } : null,
     users: db.prepare('SELECT COUNT(*) AS n FROM users WHERE org_id = ?').get(org.id).n,
     orders, lastSeen: users.seen ?? 0,
@@ -820,13 +910,53 @@ const goodName = (s) => !LINKISH.test(s)
 
 const aiLimit = (u) => {
   if (limited('ai:' + u.orgId, AI_PER_DAY, 86400_000)) throw new HttpError(429, 'Распознавание: дневной лимит компании исчерпан', 'ai_limit')
+  if (aiUsed(u.orgId) >= AI_PER_MONTH) throw new HttpError(429, `ИИ: ${AI_PER_MONTH} вызовов в месяц исчерпаны`, 'ai_month')
   bump('ai:' + u.orgId, 86400_000)
+  db.prepare('INSERT INTO ai_usage (org_id, month, n) VALUES (?, ?, 1) ON CONFLICT(org_id, month) DO UPDATE SET n = n + 1').run(u.orgId, aiMonth())
 }
 const inviteLimit = (u) => rateLimit('invite:' + u.orgId, INVITES_PER_DAY, 86400_000)
 // письма по запросу без входа: ответ одинаковый, даже если лимит на адрес исчерпан
 // и не ждём отправки: по времени ответа тоже не узнать, есть ли такой адрес
 function mailBackground(req, user, kind, text = kind) {
   mailUser(req, user, kind, user.email, text).catch((e) => log(`письмо не отправлено (${e.code ?? e.message}): ${text} → ${user.email}`))
+}
+
+// --- подписки Stripe → тариф компании ---
+// после конца оплаченного периода — ещё 3 дня: Stripe повторяет неудачные списания
+const PAY_GRACE_MS = 3 * 86400_000
+function applySubscription(orgId, sub) {
+  const org = orgId && db.prepare('SELECT * FROM orgs WHERE id = ?').get(orgId)
+  if (!org) return log('Stripe: подписка без компании', sub.id)
+  const live = ['active', 'trialing', 'past_due'].includes(sub.status)
+  // past_due — срок не продлеваем, пусть Stripe попробует списать снова
+  const until = sub.status === 'past_due' ? org.paid_until : live ? periodEnd(sub) + PAY_GRACE_MS : Math.min(org.paid_until, now())
+  const status = live && sub.cancel_at_period_end ? 'canceling' : sub.status
+  db.prepare('UPDATE orgs SET stripe_customer = ?, stripe_sub = ?, sub_status = ?, sub_period = ?, paid_until = ? WHERE id = ?')
+    .run(typeof sub.customer === 'string' ? sub.customer : (sub.customer?.id ?? org.stripe_customer), sub.id, status, periodOf(sub), until, org.id)
+  log(`Stripe: «${org.name}» — ${status}, оплачено до ${new Date(until).toISOString().slice(0, 10)}`)
+}
+
+const orgOfStripe = (obj) =>
+  obj.metadata?.org_id ?? db.prepare('SELECT id FROM orgs WHERE stripe_customer = ?').get(typeof obj.customer === 'string' ? obj.customer : '')?.id
+
+async function handleStripeEvent(ev) {
+  const o = ev.data?.object ?? {}
+  switch (ev.type) {
+    case 'checkout.session.completed':
+      if (o.mode !== 'subscription' || !o.subscription) return
+      if (o.client_reference_id) db.prepare('UPDATE orgs SET stripe_customer = ? WHERE id = ?').run(o.customer, o.client_reference_id)
+      return applySubscription(o.client_reference_id ?? orgOfStripe(o), await stripe('GET', `/subscriptions/${o.subscription}`))
+    case 'customer.subscription.created':
+    case 'customer.subscription.updated':
+    case 'customer.subscription.deleted':
+      return applySubscription(orgOfStripe(o), o)
+    case 'invoice.paid': {
+      const subId = o.subscription ?? o.parent?.subscription_details?.subscription
+      if (!subId) return
+      const sub = await stripe('GET', `/subscriptions/${subId}`)
+      return applySubscription(orgOfStripe(sub), sub)
+    }
+  }
 }
 
 const routes = {
@@ -893,7 +1023,7 @@ const routes = {
     const userId = newId()
     db.exec('BEGIN')
     try {
-      db.prepare('INSERT INTO orgs (id, name, created, owner_id) VALUES (?, ?, ?, ?)').run(orgId, company, now(), userId)
+      db.prepare('INSERT INTO orgs (id, name, created, owner_id, trial_until) VALUES (?, ?, ?, ?, ?)').run(orgId, company, now(), userId, now() + TRIAL_DAYS * 86400_000)
       db.prepare(
         'INSERT INTO users (id, org_id, login, email, name, pass, role, lang, created) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
       ).run(userId, orgId, email, email, name, hashPass(password), 'admin', lang, now())
@@ -1000,6 +1130,14 @@ const routes = {
     return sendHtml(res, 200, messagePage(lang, pageText(lang).verified))
   },
 
+  // сюда Stripe возвращает после оплаты, отмены или портала
+  'GET /auth/paid': (req, url, res) => {
+    const lang = langOf(req, url)
+    const t = pageText(lang)
+    const cancel = url.searchParams.has('cancel')
+    return sendHtml(res, 200, messagePage(lang, cancel ? t.payCancel : url.searchParams.has('portal') ? t.portal : t.paid, !cancel))
+  },
+
   // ссылка из письма «новый пароль» или приглашения сотрудника
   'GET /auth/reset': (req, url, res) => {
     const t = url.searchParams.get('t')
@@ -1048,6 +1186,81 @@ const routes = {
     for (const r of u.org.listeners) if (r.userId === u.id && r.token !== u.token) r.end()
     log(`выход на других устройствах: ${u.login}, сессий: ${n}`)
     return { ok: true, closed: n }
+  },
+
+  // тариф компании: что входит, сколько использовано, можно ли оплатить
+  'GET /api/plan': (req, url) => {
+    const u = auth(req, url)
+    const org = db.prepare('SELECT * FROM orgs WHERE id = ?').get(u.orgId)
+    return {
+      plan: u.plan, trialUntil: org.trial_until, paidUntil: org.paid_until, status: org.sub_status ?? '', period: org.sub_period ?? '',
+      customer: Boolean(org.stripe_customer), canPay: stripeReady() && Boolean(process.env.STRIPE_PRICE_MONTH),
+      prices: { month: Number(process.env.PRICE_MONTH_PLN ?? 79), year: Number(process.env.PRICE_YEAR_PLN ?? 790) },
+      usage: { bytes: u.org.bytes, quota: quotaOf(u), users: activeUsers(u.orgId), maxUsers: u.pro ? 0 : FREE_USERS, ai: aiUsed(u.orgId), maxAi: u.pro ? AI_PER_MONTH : 0 },
+      trialDays: TRIAL_DAYS, historyDays: u.pro ? 0 : FREE_HISTORY_DAYS,
+    }
+  },
+
+  // оплата: страница Stripe Checkout (карта, BLIK); остаток пробного периода сохраняется
+  'POST /api/billing/checkout': async (req, url) => {
+    const u = auth(req, url)
+    adminOnly(u)
+    if (!stripeReady()) throw new HttpError(503, 'Оплата ещё не настроена', 'no_billing')
+    // from: web — вернуть прямо в приложение на сайте; иначе (APK) — страница «вернитесь в приложение»
+    const { period, from } = await readJson(req, MAX_FORM)
+    const price = period === 'year' ? process.env.STRIPE_PRICE_YEAR : process.env.STRIPE_PRICE_MONTH
+    if (!price) throw new HttpError(400, 'Нет такого тарифа', 'bad_period')
+    rateLimit('checkout:' + u.orgId, 20, 3600_000)
+    const org = db.prepare('SELECT * FROM orgs WHERE id = ?').get(u.orgId)
+    if (org.paid_until > now() && ['active', 'trialing', 'past_due'].includes(org.sub_status)) throw new HttpError(409, 'Подписка уже оформлена', 'already_paid')
+    const base = baseUrl(req)
+    const trialLeft = org.trial_until - now()
+    const session = await stripe('POST', '/checkout/sessions', {
+      mode: 'subscription',
+      line_items: [{ price, quantity: 1 }],
+      client_reference_id: org.id,
+      metadata: { org_id: org.id },
+      subscription_data: {
+        metadata: { org_id: org.id },
+        // пробный период ещё идёт — первое списание в его конце, а не сейчас
+        trial_end: trialLeft > 2 * 86400_000 ? Math.floor(org.trial_until / 1000) : undefined,
+        default_tax_rates: process.env.STRIPE_TAX_RATE ? [process.env.STRIPE_TAX_RATE] : undefined,
+      },
+      ...(org.stripe_customer ? { customer: org.stripe_customer, customer_update: { name: 'auto', address: 'auto' } } : { customer_email: u.email || undefined }),
+      billing_address_collection: 'required',
+      tax_id_collection: { enabled: true },
+      automatic_tax: process.env.STRIPE_AUTOMATIC_TAX === '1' ? { enabled: true } : undefined,
+      allow_promotion_codes: true,
+      locale: u.lang === 'pl' ? 'pl' : u.lang === 'ru' ? 'ru' : 'auto',
+      success_url: from === 'web' ? `${base}/#/plan` : `${base}/auth/paid?lang=${u.lang}`,
+      cancel_url: from === 'web' ? `${base}/#/plan` : `${base}/auth/paid?lang=${u.lang}&cancel=1`,
+    })
+    return { url: session.url }
+  },
+
+  // управление подпиской (смена карты, отмена, фактуры) — портал Stripe
+  'POST /api/billing/portal': async (req, url) => {
+    const u = auth(req, url)
+    adminOnly(u)
+    if (!stripeReady()) throw new HttpError(503, 'Оплата ещё не настроена', 'no_billing')
+    const org = db.prepare('SELECT stripe_customer FROM orgs WHERE id = ?').get(u.orgId)
+    if (!org.stripe_customer) throw new HttpError(404, 'Подписки ещё нет', 'no_customer')
+    const { from } = await readJson(req, MAX_FORM)
+    const back = from === 'web' ? `${baseUrl(req)}/#/plan` : `${baseUrl(req)}/auth/paid?lang=${u.lang}&portal=1`
+    const session = await stripe('POST', '/billing_portal/sessions', { customer: org.stripe_customer, return_url: back })
+    return { url: session.url }
+  },
+
+  // уведомления Stripe об оплатах — без входа, по подписи
+  'POST /api/billing/webhook': async (req) => {
+    const raw = (await readBody(req, 1024 * 1024)).toString('utf8')
+    const ev = verifyWebhook(raw, req.headers['stripe-signature'])
+    if (!ev) throw new HttpError(400, 'Неверная подпись')
+    // Stripe может прислать одно событие несколько раз
+    if (db.prepare('SELECT 1 FROM stripe_events WHERE id = ?').get(ev.id)) return { ok: true, duplicate: true }
+    await handleStripeEvent(ev)
+    db.prepare('INSERT INTO stripe_events (id, at) VALUES (?, ?)').run(ev.id, now())
+    return { ok: true }
   },
 
   'GET /api/me': (req, url) => {
@@ -1136,6 +1349,7 @@ const routes = {
   // ссылка «оцените ремонт» для клиента; прежняя ссылка по этому заказу перестаёт работать
   'POST /api/reviews/link': async (req, url) => {
     const u = auth(req, url)
+    proOnly(u)
     const { orderId, lang } = await readJson(req, MAX_FORM)
     const row = typeof orderId === 'string' && u.org.db.prepare('SELECT deleted FROM orders WHERE id = ?').get(orderId)
     // заказ должен уже быть на сервере — иначе клиенту нечего показать
@@ -1395,6 +1609,7 @@ const routes = {
     if (!invite && String(password ?? '').length < PASS_MIN) throw new HttpError(400, `Пароль — минимум ${PASS_MIN} символов`, 'weak_password')
     if (db.prepare('SELECT 1 FROM users WHERE login = ? OR email = ?').get(l, l)) throw new HttpError(409, 'Такой логин уже есть', 'login_taken')
     if (e && db.prepare('SELECT 1 FROM users WHERE email = ? OR login = ?').get(e, e)) throw new HttpError(409, 'Этот email уже зарегистрирован', 'email_taken')
+    userLimit(me)
     if (e) inviteLimit(me)
     const id = newId()
     db.prepare(
@@ -1515,6 +1730,7 @@ async function dynamicRoute(req, res, url) {
         db.prepare('DELETE FROM sessions WHERE user_id = ?').run(target.id)
       }
       if (disabled !== undefined) {
+        if (!disabled && target.disabled) userLimit(me)
         db.prepare('UPDATE users SET disabled = ? WHERE id = ?').run(disabled ? 1 : 0, target.id)
         if (disabled) db.prepare('DELETE FROM sessions WHERE user_id = ?').run(target.id)
       }
@@ -1544,7 +1760,12 @@ async function dynamicRoute(req, res, url) {
     if (!org) throw new HttpError(404, 'Нет такой компании')
     if (org.id === me.orgId) throw new HttpError(400, 'Это ваша компания')
     if (req.method === 'PATCH') {
-      const { blocked, pro } = await readJson(req, MAX_FORM)
+      const { blocked, pro, trialDays } = await readJson(req, MAX_FORM)
+      if (trialDays !== undefined) {
+        const d = Math.max(0, Math.min(365, Number(trialDays) || 0))
+        db.prepare('UPDATE orgs SET trial_until = ?, trial_mailed = 0 WHERE id = ?').run(d ? now() + d * 86400_000 : 0, org.id)
+        log(`пробный период «${org.name}»: ${d} дн.`)
+      }
       if (pro !== undefined) {
         db.prepare('UPDATE orgs SET pro = ? WHERE id = ?').run(pro ? 1 : 0, org.id)
         log(`Pro ${pro ? 'включён' : 'выключен'}: «${org.name}»`)
@@ -1589,11 +1810,14 @@ async function dynamicRoute(req, res, url) {
   if (m && req.method === 'GET') {
     const u = auth(req, url)
     const names = new Map(db.prepare('SELECT id, name, login FROM users WHERE org_id = ?').all(u.orgId).map((r) => [r.id, r.name || r.login]))
+    // бесплатно — история за FREE_HISTORY_DAYS дней (записи хранятся, видны после оплаты)
+    const since = u.pro ? 0 : now() - FREE_HISTORY_DAYS * 86400_000
     const history = u.org.db
-      .prepare('SELECT at, action, changes, user_id FROM history WHERE order_id = ? ORDER BY id DESC LIMIT 200')
-      .all(safeDecode(m[1]))
+      .prepare('SELECT at, action, changes, user_id FROM history WHERE order_id = ? AND at >= ? ORDER BY id DESC LIMIT 200')
+      .all(safeDecode(m[1]), since)
       .map((r) => ({ at: r.at, user: names.get(r.user_id) ?? '—', action: r.action, changes: JSON.parse(r.changes) }))
-    return send(res, 200, { history })
+    const hidden = since ? u.org.db.prepare('SELECT COUNT(*) AS n FROM history WHERE order_id = ? AND at < ?').get(safeDecode(m[1]), since).n : 0
+    return send(res, 200, { history, hidden })
   }
 
   m = url.pathname.match(/^\/api\/photos\/([^/]+)$/)
@@ -1601,11 +1825,10 @@ async function dynamicRoute(req, res, url) {
     const u = auth(req, url)
     const p = photoPath(u.org, m[1])
     if (req.method === 'PUT') {
-      // без Pro фото остаются на телефоне; уже загруженные можно скачивать
-      proOnly(u)
+      // бесплатно — до FREE_QUOTA (1 ГБ), дальше фото остаются на телефоне
       const buf = await readBody(req, MAX_PHOTO)
       const old = fileBytes(p)
-      checkQuota(u.org, buf.length - old)
+      checkQuota(u, buf.length - old)
       // запись через временный файл — не оставляем обрезанные фото
       writeFileSync(p + '.tmp', buf)
       renameSync(p + '.tmp', p)
@@ -1626,9 +1849,9 @@ async function dynamicRoute(req, res, url) {
     if (req.method === 'PUT') {
       proOnly(u)
       const old = fileBytes(path)
-      checkQuota(u.org, Number(req.headers['content-length'] ?? 0) - old)
+      checkQuota(u, Number(req.headers['content-length'] ?? 0) - old)
       // без Content-Length — не дальше остатка квоты
-      const limit = Math.min(MAX_VIDEO, ORG_QUOTA - u.org.bytes + old)
+      const limit = Math.min(MAX_VIDEO, quotaOf(u) - u.org.bytes + old)
       // место занимаем сразу — несколько загрузок одновременно не превысят квоту
       u.org.bytes += limit - old
       let size = old

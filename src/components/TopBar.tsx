@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { useSettings } from '../settingsHooks'
 import { disconnect, syncNow, useSyncStatus } from '../sync'
 
-export type Section = 'orders' | 'clients' | 'calendar' | 'stats' | 'calc' | 'import' | 'sync' | 'settings' | 'help'
+export type Section = 'orders' | 'clients' | 'calendar' | 'stats' | 'calc' | 'import' | 'sync' | 'plan' | 'settings' | 'help'
 
 const PATHS: Record<Section, string> = {
   orders: '/',
@@ -12,6 +12,7 @@ const PATHS: Record<Section, string> = {
   calc: '/calc',
   import: '/import',
   sync: '/sync',
+  plan: '/plan',
   settings: '/settings',
   help: '/help',
 }
@@ -48,6 +49,16 @@ export default function TopBar({ current }: { current: Section }) {
             ? t('sync.pending', { n: sync.pending })
             : t('sync.ok')
 
+  // под пунктом «Тариф»: Pro / пробный N дн. / бесплатно
+  const plan = sync.user?.plan
+  const planHint = !sync.connected
+    ? undefined
+    : plan === 'trial'
+      ? t('plan.trial', { n: Math.max(1, Math.ceil(((sync.user?.trialUntil ?? 0) - Date.now()) / 86400_000)) })
+      : plan === 'free'
+        ? t('plan.free')
+        : 'Pro'
+
   const nav = (s: Section) => {
     setOpen(false)
     if (s !== current) go(PATHS[s])
@@ -68,6 +79,7 @@ export default function TopBar({ current }: { current: Section }) {
     { id: 'stats', icon: '📊', label: t('stats.title') },
     { id: 'calc', icon: '🧮', label: t('menu.calc') },
     { id: 'sync', icon: '☁', label: t('menu.sync'), hint: syncState },
+    { id: 'plan', icon: '⭐', label: t('plan.menu'), hint: planHint },
     { id: 'settings', icon: '⚙', label: t('app.settings') },
     { id: 'help', icon: '❓', label: t('menu.help') },
   ]

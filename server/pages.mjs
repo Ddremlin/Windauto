@@ -24,6 +24,9 @@ const T = {
   ru: {
     verified: ['Email подтверждён', 'Вернитесь в приложение Windauto и войдите с этим email и паролем.'],
     badLink: ['Ссылка недействительна', 'Ссылка устарела или уже использована. Запросите новую в приложении.'],
+    paid: ['Спасибо за оплату', 'Pro включится в течение минуты. Вернитесь в приложение Windauto.'],
+    payCancel: ['Оплата отменена', 'Деньги не списаны. Оплатить можно в приложении: Настройки → Тариф.'],
+    portal: ['Готово', 'Вернитесь в приложение Windauto.'],
     setPass: 'Задайте пароль',
     newPass: 'Новый пароль',
     resetTitle: 'Новый пароль',
@@ -38,6 +41,9 @@ const T = {
   pl: {
     verified: ['E-mail potwierdzony', 'Wróć do aplikacji Windauto i zaloguj się tym adresem e-mail i hasłem.'],
     badLink: ['Link jest nieważny', 'Link wygasł lub został już użyty. Poproś o nowy w aplikacji.'],
+    paid: ['Dziękujemy za płatność', 'Pro włączy się w ciągu minuty. Wróć do aplikacji Windauto.'],
+    payCancel: ['Płatność anulowana', 'Nic nie zostało pobrane. Zapłacić możesz w aplikacji: Ustawienia → Plan.'],
+    portal: ['Gotowe', 'Wróć do aplikacji Windauto.'],
     setPass: 'Ustaw hasło',
     newPass: 'Nowe hasło',
     resetTitle: 'Nowe hasło',
@@ -93,6 +99,7 @@ const LEGAL = {
 <p>Dane konta przetwarzamy, aby świadczyć usługę (art. 6 ust. 1 lit. b RODO): logowanie, wysyłka wiadomości o potwierdzeniu adresu i zmianie hasła, bezpieczeństwo.</p>
 <h2>Przechowywanie</h2>
 <p>Dane są przechowywane na serwerze w Unii Europejskiej (Hetzner, Niemcy/Finlandia). Rozpoznawanie numerów i dokumentów ze zdjęć oraz mowy odbywa się z użyciem usługi Anthropic (USA) — zdjęcie lub tekst są przekazywane tylko w momencie użycia tej funkcji. E-maile wysyłamy przez Brevo (UE).</p>
+<p>Płatności za plan Pro obsługuje Stripe (Stripe Payments Europe, Irlandia): dane karty lub BLIK podajesz bezpośrednio na stronie Stripe, my ich nie widzimy. Przechowujemy tylko identyfikator klienta i subskrypcji w Stripe oraz okres opłacenia (art. 6 ust. 1 lit. b i c RODO — umowa i obowiązki księgowe).</p>
 <p>Gdy w aplikacji wystąpi błąd, wysyła ona raport techniczny (treść błędu, wersja aplikacji, model urządzenia, login) — bez danych klientów i pojazdów. Raporty służą naprawie błędów (art. 6 ust. 1 lit. f RODO) i są usuwane po 30 dniach.</p>
 <p>Dane przechowujemy do czasu usunięcia konta firmy. Usunięcie firmy w aplikacji kasuje wszystkie jej dane z serwera; kopie zapasowe są nadpisywane w ciągu 30 dni.</p>
 <h2>Twoje prawa</h2>
@@ -105,6 +112,7 @@ const LEGAL = {
 <p>Данные аккаунта обрабатываются для оказания услуги (ст. 6 п. 1 б GDPR): вход, письма о подтверждении адреса и смене пароля, безопасность.</p>
 <h2>Хранение</h2>
 <p>Данные хранятся на сервере в ЕС (Hetzner, Германия/Финляндия). Распознавание номеров, документов и речи выполняется сервисом Anthropic (США) — фото или текст передаются только в момент использования функции. Письма отправляются через Brevo (ЕС).</p>
+<p>Оплату тарифа Pro обрабатывает Stripe (Stripe Payments Europe, Ирландия): данные карты или BLIK вы вводите на странице Stripe, мы их не видим. У нас хранятся только идентификаторы клиента и подписки в Stripe и срок оплаты (ст. 6 п. 1 b и c GDPR — договор и бухгалтерские обязанности).</p>
 <p>При ошибке приложение отправляет технический отчёт (текст ошибки, версия приложения, модель устройства, логин) — без данных клиентов и автомобилей. Отчёты нужны для исправления ошибок (ст. 6 п. 1 f GDPR) и удаляются через 30 дней.</p>
 <p>Данные хранятся до удаления компании. Удаление компании в приложении стирает все её данные с сервера; резервные копии перезаписываются в течение 30 дней.</p>
 <h2>Ваши права</h2>
@@ -114,7 +122,11 @@ const LEGAL = {
     pl: (o) => ['Regulamin', `
 <p>Usługę Windauto świadczy ${esc(o.name)}, ${esc(o.address)}, NIP ${esc(o.nip)}, kontakt: ${esc(o.email)}.</p>
 <h2>Usługa</h2>
-<p>Windauto to aplikacja do przyjmowania samochodów do naprawy: protokoły przyjęcia, zdjęcia, podpisy, wspólna baza zleceń dla pracowników firmy. Obecnie usługa jest bezpłatna. O wprowadzeniu opłat poinformujemy z co najmniej 30-dniowym wyprzedzeniem.</p>
+<p>Windauto to aplikacja do przyjmowania samochodów do naprawy: protokoły przyjęcia, zdjęcia, podpisy, wspólna baza zleceń dla pracowników firmy.</p>
+<h2>Plany i płatności</h2>
+<p>Plan bezpłatny obejmuje zlecenia, dokumenty, do 2 pracowników i 1 GB na zdjęcia na serwerze. Plan Pro dodaje m.in. rozpoznawanie AI (do 500 wywołań miesięcznie), wideo, 50 GB miejsca, nieograniczoną liczbę pracowników, logo w dokumentach i eksport. Aktualny zakres i ceny są podane w aplikacji (Menu → Plan).</p>
+<p>Nowa firma otrzymuje 14 dni Pro za darmo, bez podawania karty; potem przechodzi na plan bezpłatny, chyba że wykupi Pro. Pro jest subskrypcją miesięczną lub roczną, płatną z góry kartą lub BLIK przez Stripe, odnawianą automatycznie. Subskrypcję można anulować w każdej chwili (Menu → Plan → Zarządzaj subskrypcją) — Pro działa do końca opłaconego okresu, opłata za rozpoczęty okres nie jest zwracana. Faktury VAT wystawiamy na dane i NIP podane przy płatności. O zmianie cen poinformujemy z co najmniej 30-dniowym wyprzedzeniem; nowa cena obowiązuje od kolejnego okresu.</p>
+<p>W planie bezpłatnym zdjęcia firmy, do której nikt nie logował się przez 6 miesięcy, mogą zostać usunięte z serwera po wcześniejszym powiadomieniu e-mailem; zlecenia pozostają.</p>
 <h2>Konto</h2>
 <p>Konto firmy zakłada osoba uprawniona do działania w jej imieniu. Właściciel konta odpowiada za dodanych pracowników i za dane wprowadzone do aplikacji, w tym za podstawę prawną przetwarzania danych swoich klientów.</p>
 <p>Zabronione jest wykorzystywanie usługi niezgodnie z prawem. W razie naruszeń możemy zablokować konto.</p>
@@ -125,7 +137,11 @@ const LEGAL = {
     ru: (o) => ['Условия использования', `
 <p>Сервис Windauto предоставляет ${esc(o.name)}, ${esc(o.address)}, NIP ${esc(o.nip)}, связь: ${esc(o.email)}.</p>
 <h2>Сервис</h2>
-<p>Windauto — приложение для приёмки автомобилей в ремонт: листы приёмки, фото, подписи, общая база заказов для сотрудников компании. Сейчас сервис бесплатный. О введении оплаты сообщим минимум за 30 дней.</p>
+<p>Windauto — приложение для приёмки автомобилей в ремонт: листы приёмки, фото, подписи, общая база заказов для сотрудников компании.</p>
+<h2>Тарифы и оплата</h2>
+<p>Бесплатный тариф: заказы, документы, до 2 сотрудников и 1 ГБ для фото на сервере. Pro добавляет, в частности, распознавание ИИ (до 500 вызовов в месяц), видео, 50 ГБ места, сотрудников без ограничения, логотип в документах и выгрузку. Актуальный состав и цены — в приложении (Меню → Тариф).</p>
+<p>Новая компания получает 14 дней Pro бесплатно, без карты; затем переходит на бесплатный тариф, если не оформит Pro. Pro — подписка на месяц или год с оплатой вперёд картой или BLIK через Stripe, продлевается автоматически. Отменить можно в любой момент (Меню → Тариф → Управлять подпиской): Pro действует до конца оплаченного периода, плата за начатый период не возвращается. Фактуры VAT выставляются на данные и NIP, указанные при оплате. Об изменении цен сообщаем минимум за 30 дней; новая цена действует со следующего периода.</p>
+<p>На бесплатном тарифе фото компании, в которую никто не заходил 6 месяцев, могут быть удалены с сервера после предупреждения по email; заказы остаются.</p>
 <h2>Аккаунт</h2>
 <p>Аккаунт компании создаёт человек, уполномоченный действовать от её имени. Владелец аккаунта отвечает за добавленных сотрудников и за внесённые данные, в том числе за законность обработки данных своих клиентов.</p>
 <p>Запрещено использовать сервис с нарушением закона. При нарушениях аккаунт может быть заблокирован.</p>

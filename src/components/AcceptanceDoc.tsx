@@ -5,6 +5,7 @@ import { langOfLocale } from '../i18n'
 import { orderNo } from '../docNumber'
 import { rodoClause } from '../rodo'
 import { useSettings } from '../settingsHooks'
+import { isPro } from '../sync'
 import type { Order, Signature } from '../types'
 import { formatDuration } from '../videos'
 import { formatPlate } from '../validate'
@@ -22,6 +23,8 @@ const css = `
 .doc-head { display: flex; justify-content: space-between; align-items: flex-start; padding: 0 0 12px; border-bottom: 2px solid #111; }
 .doc-shop { font-size: 12px; color: #444; }
 .doc-shop b { font-size: 15px; color: #111; display: block; }
+.doc-logo { display: block; max-width: 180px; max-height: 64px; object-fit: contain; margin-bottom: 6px; }
+.doc-brand { margin-top: 16px; text-align: center; font-size: 10px; color: #999; }
 .doc-title { text-align: right; }
 .doc-title h1 { margin: 0; font-size: 20px; }
 .doc-title div { color: #444; }
@@ -75,6 +78,8 @@ interface Props {
 
 export default function AcceptanceDoc({ order, photoUrls, kind = 'acceptance' }: Props) {
   const { t, locale, settings } = useSettings()
+  // Pro — свой логотип и без надписи Windauto внизу
+  const pro = isPro()
   const handover = kind === 'handover'
   const layout = getLayout(order.bodyType)
   const marked = layout.elements.filter((e) => order.elements[e.id])
@@ -134,6 +139,7 @@ export default function AcceptanceDoc({ order, photoUrls, kind = 'acceptance' }:
       <style>{css}</style>
       <div data-block className="doc-head" style={{ paddingTop: 0 }}>
         <div className="doc-shop">
+          {pro && settings.shopLogo && <img className="doc-logo" src={settings.shopLogo} alt="" />}
           {settings.shopName && <b>{settings.shopName}</b>}
           {settings.shopAddress && <div>{settings.shopAddress}</div>}
           {settings.shopPhone && <div>tel. {settings.shopPhone}</div>}
@@ -383,6 +389,11 @@ export default function AcceptanceDoc({ order, photoUrls, kind = 'acceptance' }:
           {sign(handover ? undefined : order.signatures.acceptMaster, t('doc.signMaster'))}
         </div>
       </div>
+      {!pro && (
+        <div data-block className="doc-brand">
+          Windauto · app.dmerlinauto.vip
+        </div>
+      )}
     </div>
   )
 }

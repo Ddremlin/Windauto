@@ -7,6 +7,10 @@ import { useReviews } from '../reviews'
 import { useSettings } from '../settingsHooks'
 import type { Order, WorkId } from '../types'
 import { formatPlate } from '../validate'
+import { ordersCsv } from '../exportCsv'
+import { downloadBlob } from '../share'
+import { useSyncStatus } from '../sync'
+import type { Settings } from '../settingsStore'
 import { ACTIVE_STATUSES, STATUSES, WORKS, WORK_BY_ID, formatMoney, orderTotals } from '../works'
 
 interface Props {
@@ -28,9 +32,17 @@ function range(p: Period, now = new Date()): [number, number] {
 
 // Простая статистика по заказам на этом телефоне (в общей базе — по всем сотрудникам).
 // Суммы — по заказам, принятым в выбранный период, брутто.
+// выгрузка — на языке документов: её открывает бухгалтер
+function downloadCsv(orders: Order[], settings: Settings) {
+  const name = `windauto-${new Date().toISOString().slice(0, 10)}.csv`
+  void downloadBlob(new Blob([ordersCsv(orders, settings, settings.docLang)], { type: 'text/csv;charset=utf-8' }), name)
+}
+
 export default function Stats({ orders, onOpen }: Props) {
   const { t, locale, settings } = useSettings()
   const [period, setPeriod] = useState<Period>('month')
+  const pro = Boolean(useSyncStatus().user?.pro)
+  const exportCsv = () => downloadCsv(data.inPeriod, settings)
 
   const data = useMemo(() => {
     const [from, to] = range(period)
@@ -75,6 +87,7 @@ export default function Stats({ orders, onOpen }: Props) {
     for (const o of active) byAssignee.set(o.assignee || '—', (byAssignee.get(o.assignee || '—') ?? 0) + 1)
 
     return {
+      inPeriod,
       count: inPeriod.length,
       sum,
       avg: priced.length ? sum / priced.length : 0,
@@ -293,6 +306,21 @@ export default function Stats({ orders, onOpen }: Props) {
             </ul>
           </section>
         )}
+
+        <section className="panel">
+          <h2>📤 {t('csv.export')}</h2>
+          <p className="hint">{t('csv.exportHint')}</p>
+          {pro ? (
+            <button className="btn" disabled={!data.inPeriod.length} onClick={exportCsv}>
+              📤 {t('csv.export')} ({data.inPeriod.length})
+            </button>
+          ) : (
+            <p className="hint">
+              ⭐ {t('plan.proOnly')}{' '}
+              <button className="link-btn" onClick={() => (location.hash = '/plan')}>{t('plan.more')}</button>
+            </p>
+          )}
+        </section>
 
         {data.overdue.length > 0 && (
           <section className="panel">

@@ -76,13 +76,18 @@ export default function SyncSection() {
             </div>
             {st.user?.orgName && <div>{st.user.orgName}</div>}
             {st.user?.pro ? (
-              <div className="plan pro">⭐ {t('pro.planPro')}</div>
+              <div className="plan pro">
+                ⭐ {st.user.plan === 'trial' ? t('plan.trial', { n: Math.max(1, Math.ceil(((st.user.trialUntil ?? 0) - Date.now()) / 86400_000)) }) : t('pro.planPro')}
+              </div>
             ) : (
               <div className="plan">
                 {t('pro.planFree')}
                 <small className="hint">{t('pro.freeHint')}</small>
               </div>
             )}
+            <button className="link-btn" onClick={() => (location.hash = '/plan')}>
+              {t('plan.title')} →
+            </button>
             <div className="hint">{st.server}</div>
           </div>
           <div className={'sync-state' + (st.error || !st.online ? ' warn' : '')}>{state}</div>

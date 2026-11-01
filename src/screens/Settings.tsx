@@ -97,6 +97,7 @@ export default function Settings({ orders, onImport }: Props) {
               {text('shopPhone', t('set.shopPhone'), { type: 'tel', inputMode: 'tel' })}
               {text('shopNip', t('set.shopNip'), { inputMode: 'numeric' })}
             </div>
+            <ShopLogo locked={locked} />
             <label className="field">
               <span className="field-label">{t('set.rodo')}</span>
               <textarea
@@ -171,4 +172,67 @@ export default function Settings({ orders, onImport }: Props) {
       </main>
     </div>
   )
+}
+
+// логотип сервиса в документах (Pro): уменьшаем до 600×200 — в общих настройках он едет на все телефоны
+function ShopLogo({ locked }: { locked: boolean }) {
+  const { t, settings, update } = useSettings()
+  const pro = Boolean(useSyncStatus().user?.pro)
+  const ref = useRef<HTMLInputElement>(null)
+
+  const pick = async (file: File | undefined) => {
+    if (!file) return
+    try {
+      update({ shopLogo: await shrinkLogo(file) })
+    } catch {
+      alert(t('set.logoBad'))
+    }
+  }
+
+  return (
+    <div className="field">
+      <span className="field-label">{t('set.logo')}</span>
+      {!pro ? (
+        <p className="hint">
+          ⭐ {t('plan.proOnly')}{' '}
+          <button className="link-btn" onClick={() => (location.hash = '/plan')}>{t('plan.more')}</button>
+        </p>
+      ) : (
+        <>
+          {settings.shopLogo && <img className="logo-preview" src={settings.shopLogo} alt="" />}
+          <div className="row">
+            <button className="btn small" disabled={locked} onClick={() => ref.current?.click()}>
+              🖼 {t('set.logoAdd')}
+            </button>
+            {settings.shopLogo && (
+              <button className="btn small ghost" disabled={locked} onClick={() => update({ shopLogo: '' })}>
+                {t('set.logoRemove')}
+              </button>
+            )}
+          </div>
+          <input ref={ref} type="file" accept="image/png,image/jpeg,image/webp" hidden onChange={(e) => void pick(e.target.files?.[0])} />
+          <span className="field-hint muted">{t('set.logoHint')}</span>
+        </>
+      )}
+    </div>
+  )
+}
+
+async function shrinkLogo(file: File): Promise<string> {
+  const img = await createImageBitmap(file)
+  const k = Math.min(1, 600 / img.width, 200 / img.height)
+  const canvas = document.createElement('canvas')
+  canvas.width = Math.max(1, Math.round(img.width * k))
+  canvas.height = Math.max(1, Math.round(img.height * k))
+  canvas.getContext('2d')!.drawImage(img, 0, 0, canvas.width, canvas.height)
+  // PNG сохраняет прозрачность; если вышел большим — JPEG на белом
+  let url = canvas.toDataURL('image/png')
+  if (url.length > 150_000) {
+    const ctx = canvas.getContext('2d')!
+    ctx.globalCompositeOperation = 'destination-over'
+    ctx.fillStyle = '#fff'
+    ctx.fillRect(0, 0, canvas.width, canvas.height)
+    url = canvas.toDataURL('image/jpeg', 0.85)
+  }
+  return url
 }

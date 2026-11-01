@@ -6,7 +6,7 @@ import { deletePhotos, getLocalPhoto, markRemoteSource, orderPhotoIds } from './
 import { deleteVideos, getLocalVideo, markRemoteVideoSource, orderVideoIds, videoType } from './videos'
 import { applyRemoteShared, getSettings, hasShared, onSharedChange, pickShared, resetShared, setSharedStamp, type SharedSettings } from './settingsStore'
 import { makeT } from './i18n'
-import { UPDATE_SERVER } from './native'
+import { UPDATE_SERVER, isNative, openExternal } from './native'
 import { mergeOrders } from './merge'
 import { getOrders, migrate, onLocalChange, removeOrder, replaceAllOrders, setServerNumbering, upsertOrder } from './storage'
 import type { Order } from './types'
@@ -27,8 +27,11 @@ export interface SyncUser {
   orgName?: string
   owner?: boolean
   platform?: boolean
-  // Pro: ИИ и фото/видео на сервере
+  // Pro: ИИ, видео, место, логотип в документах… pro — итог: оплачено, пробный период или включено вручную
   pro?: boolean
+  plan?: 'pro' | 'paid' | 'trial' | 'free'
+  trialUntil?: number
+  paidUntil?: number
 }
 
 interface State {
@@ -53,6 +56,8 @@ export interface SyncStatus {
   pending: number
   error: string | null
   authError: boolean
+  // бесплатное место на сервере кончилось — новые фото остаются на телефоне
+  mediaFull: boolean
 }
 
 const KEY = 'windauto.sync.v1'
@@ -76,10 +81,11 @@ const persist = () => {
 }
 
 // --- статус для интерфейса ---
-let status: SyncStatus = makeStatus({ syncing: false, error: null, authError: false })
+let status: SyncStatus = makeStatus({ syncing: false, error: null, authError: false, mediaFull: false })
 const statusListeners = new Set<() => void>()
 
-function makeStatus(p: Pick<SyncStatus, 'syncing' | 'error' | 'authError'>): SyncStatus {
+type StatusPart = Pick<SyncStatus, 'syncing' | 'error' | 'authError' | 'mediaFull'>
+function makeStatus(p: StatusPart): SyncStatus {
   return {
     ...p,
     connected: Boolean(state.token),
@@ -90,8 +96,8 @@ function makeStatus(p: Pick<SyncStatus, 'syncing' | 'error' | 'authError'>): Syn
     pending: Object.keys(state.dirty).length + Object.keys(state.deleted).length + (state.sharedDirty ? 1 : 0),
   }
 }
-function setStatus(p: Partial<Pick<SyncStatus, 'syncing' | 'error' | 'authError'>> = {}) {
-  status = makeStatus({ syncing: status.syncing, error: status.error, authError: status.authError, ...p })
+function setStatus(p: Partial<StatusPart> = {}) {
+  status = makeStatus({ syncing: status.syncing, error: status.error, authError: status.authError, mediaFull: status.mediaFull, ...p })
   statusListeners.forEach((l) => l())
 }
 
@@ -222,18 +228,26 @@ export async function syncNow(): Promise<void> {
     // тариф и права могут смениться на сервере — освежаем раз в 10 минут
     if (Date.now() - meAt > 600_000) await refreshMe()
     // 1. новые фото — раньше заказов, чтобы на других телефонах они уже были.
-    // Без Pro фото и видео остаются на телефоне; после включения Pro загрузятся сами
-    const media = isPro()
-    for (const id of media ? getOrders().flatMap(orderPhotoIds) : []) {
+    // Бесплатно — пока хватает места (1 ГБ): дальше фото остаются на телефоне, а заказы синхронизируются.
+    // Видео — только в Pro; после оплаты всё загрузится само
+    let full = false
+    for (const id of getOrders().flatMap(orderPhotoIds)) {
       if (state.uploaded[id]) continue
       const blob = await getLocalPhoto(id)
       if (!blob) continue
-      await api(`/api/photos/${encodeURIComponent(id)}`, { method: 'PUT', body: blob, headers: { 'Content-Type': 'image/jpeg' } })
+      try {
+        await api(`/api/photos/${encodeURIComponent(id)}`, { method: 'PUT', body: blob, headers: { 'Content-Type': 'image/jpeg' } })
+      } catch (e) {
+        if (!(e instanceof ApiError && e.status === 507)) throw e
+        full = true
+        break
+      }
       state.uploaded[id] = true
       persist()
     }
+    setStatus({ mediaFull: full })
     // круговые видео — после фото: они большие и грузятся дольше
-    for (const id of media ? getOrders().flatMap(orderVideoIds) : []) {
+    for (const id of isPro() && !full ? getOrders().flatMap(orderVideoIds) : []) {
       if (state.uploaded[id]) continue
       const blob = await getLocalVideo(id)
       if (!blob) continue
@@ -543,8 +557,7 @@ export interface HistoryEntry {
   action: 'create' | 'update' | 'delete' | 'merge'
   changes: { key: string; from?: string; to?: string }[]
 }
-export const getHistory = (id: string) =>
-  api<{ history: HistoryEntry[] }>(`/api/orders/${encodeURIComponent(id)}/history`).then((r) => r.history)
+export const getHistory = (id: string) => api<{ history: HistoryEntry[]; hidden?: number }>(`/api/orders/${encodeURIComponent(id)}/history`)
 
 // --- запуск ---
 export function initSync() {
@@ -621,6 +634,33 @@ export interface RecognizedDoc {
 export const isConnected = () => Boolean(state.token)
 /** Компания с Pro: ИИ и фото/видео на сервере */
 export const isPro = () => Boolean(state.token && state.user?.pro)
+
+// --- тариф и оплата ---
+export interface PlanInfo {
+  plan: 'pro' | 'paid' | 'trial' | 'free'
+  trialUntil: number
+  paidUntil: number
+  // active | trialing | past_due | canceling | canceled — по подписке Stripe
+  status: string
+  period: 'month' | 'year' | ''
+  customer: boolean
+  canPay: boolean
+  prices: { month: number; year: number }
+  usage: { bytes: number; quota: number; users: number; maxUsers: number; ai: number; maxAi: number }
+  trialDays: number
+  historyDays: number
+}
+export const getPlan = () => api<PlanInfo>('/api/plan')
+
+// страница Stripe: в приложении — в браузере телефона, на сайте — в этой же вкладке
+async function openBilling(path: string, body: Record<string, string>) {
+  const from = isNative ? 'app' : 'web'
+  const { url } = await api<{ url: string }>(path, { method: 'POST', body: JSON.stringify({ ...body, from }) })
+  if (isNative) openExternal(url)
+  else location.href = url
+}
+export const checkout = (period: 'month' | 'year') => openBilling('/api/billing/checkout', { period })
+export const billingPortal = () => openBilling('/api/billing/portal', {})
 /** ИИ на сервере — только в Pro */
 export const canRecognize = isPro
 

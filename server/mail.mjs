@@ -52,6 +52,18 @@ const TEXTS = {
       button: 'Подтвердить email',
       foot: 'Ссылка действует 1 день. Если это были не вы — просто удалите это письмо.',
     },
+    trial: {
+      subject: 'Пробный период Pro заканчивается — Windauto',
+      body: (v) => `Здравствуйте${v.name ? ', ' + v.name : ''}!\n\nЧерез ${v.days} дн. у компании «${v.company}» закончится пробный период Pro. Потом Windauto продолжит работать бесплатно: заказы, документы и до 2 сотрудников. Распознавание ИИ, голосовой ввод, видео, логотип в документах и выгрузка станут недоступны.\n\nОформить Pro — 79 zł netto в месяц или 790 zł в год (карта или BLIK):`,
+      button: 'Оформить Pro',
+      foot: 'Оплатить можно и в приложении: Настройки → Тариф.',
+    },
+    idle: {
+      subject: 'Фото на сервере будут удалены — Windauto',
+      body: (v) => `Здравствуйте${v.name ? ', ' + v.name : ''}!\n\nВ компанию «${v.company}» в Windauto никто не заходил ${v.months} мес. На бесплатном тарифе фото неактивных компаний хранятся 6 месяцев: через ${v.days} дн. они будут удалены с сервера (заказы останутся). Чтобы сохранить фото, просто откройте приложение:`,
+      button: 'Открыть Windauto',
+      foot: 'На тарифе Pro фото хранятся без этого ограничения.',
+    },
     exists: {
       subject: 'Вы уже зарегистрированы — Windauto',
       body: (v) => `Здравствуйте${v.name ? ', ' + v.name : ''}!\n\nКто-то пытался зарегистрировать в Windauto новую компанию на этот адрес, но аккаунт с ним уже есть (компания «${v.company}»). Если это были вы и вы не помните пароль — задайте новый:`,
@@ -83,6 +95,18 @@ const TEXTS = {
       body: (v) => `Dzień dobry${v.name ? ', ' + v.name : ''}!\n\nTen adres został podany dla Twojego konta w firmie „${v.company}” w Windauto. Potwierdź go — potem możesz się nim logować i odzyskiwać hasło:`,
       button: 'Potwierdź e-mail',
       foot: 'Link jest ważny 1 dzień. Jeśli to nie Ty — po prostu usuń tę wiadomość.',
+    },
+    trial: {
+      subject: 'Okres próbny Pro się kończy — Windauto',
+      body: (v) => `Dzień dobry${v.name ? ', ' + v.name : ''}!\n\nZa ${v.days} dni firmie „${v.company}” skończy się okres próbny Pro. Potem Windauto będzie działać bezpłatnie: zlecenia, dokumenty i do 2 pracowników. Rozpoznawanie AI, wprowadzanie głosowe, wideo, logo w dokumentach i eksport będą niedostępne.\n\nWykup Pro — 79 zł netto miesięcznie lub 790 zł rocznie (karta lub BLIK):`,
+      button: 'Wykup Pro',
+      foot: 'Zapłacić możesz też w aplikacji: Ustawienia → Plan.',
+    },
+    idle: {
+      subject: 'Zdjęcia na serwerze zostaną usunięte — Windauto',
+      body: (v) => `Dzień dobry${v.name ? ', ' + v.name : ''}!\n\nNikt nie logował się do firmy „${v.company}” w Windauto od ${v.months} mies. W planie bezpłatnym zdjęcia nieaktywnych firm przechowujemy 6 miesięcy: za ${v.days} dni zostaną usunięte z serwera (zlecenia zostaną). Aby je zachować, po prostu otwórz aplikację:`,
+      button: 'Otwórz Windauto',
+      foot: 'W planie Pro zdjęcia przechowujemy bez tego ograniczenia.',
     },
     exists: {
       subject: 'Masz już konto — Windauto',

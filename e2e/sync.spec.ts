@@ -53,3 +53,15 @@ test('неверный пароль: вход не проходит, понят�
   await connect(page, 'admin', 'wrong-password')
   await expect(page.getByText(/Неверный логин или пароль|неверн/i).first()).toBeVisible()
 })
+
+test('тариф: экран показывает Pro, использование и что входит; без входа — подсказка', async ({ browser, page }) => {
+  await page.goto('/#/plan')
+  await expect(page.getByText(/Подключитесь к серверу/)).toBeVisible()
+  const a = await phone(browser)
+  await a.goto('/#/plan')
+  await expect(a.getByText('Pro включён владельцем сервиса')).toBeVisible()
+  await expect(a.getByText(/Фото и видео на сервере: .* из 50/)).toBeVisible()
+  await expect(a.getByText('Круговое видео при приёмке')).toBeVisible()
+  // оплата на тестовом сервере не настроена
+  await expect(a.getByText(/Онлайн-оплата скоро появится/)).toBeVisible()
+})

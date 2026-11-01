@@ -36,6 +36,20 @@ services:
       SUPPORT_EMAIL: ${SUPPORT_EMAIL:-}
       TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
       TELEGRAM_CHAT_ID: ${TELEGRAM_CHAT_ID:-}
+      # оплата Pro через Stripe (карта, BLIK); пусто — кнопок оплаты нет. См. README → «Оплата»
+      STRIPE_SECRET_KEY: ${STRIPE_SECRET_KEY:-}
+      STRIPE_WEBHOOK_SECRET: ${STRIPE_WEBHOOK_SECRET:-}
+      STRIPE_PRICE_MONTH: ${STRIPE_PRICE_MONTH:-}
+      STRIPE_PRICE_YEAR: ${STRIPE_PRICE_YEAR:-}
+      STRIPE_TAX_RATE: ${STRIPE_TAX_RATE:-}
+      STRIPE_AUTOMATIC_TAX: ${STRIPE_AUTOMATIC_TAX:-}
+      # цены на экране «Тариф» (zł netto) — должны совпадать с ценами в Stripe
+      PRICE_MONTH_PLN: ${PRICE_MONTH_PLN:-79}
+      PRICE_YEAR_PLN: ${PRICE_YEAR_PLN:-790}
+      # лимиты: место Pro / бесплатно (ГБ), вызовов ИИ в месяц
+      ORG_QUOTA_GB: ${ORG_QUOTA_GB:-50}
+      FREE_QUOTA_GB: ${FREE_QUOTA_GB:-1}
+      AI_PER_MONTH: ${AI_PER_MONTH:-500}
     volumes:
       - ./data:/data
 

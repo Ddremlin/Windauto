@@ -19,6 +19,7 @@ import { hasNativeRecorder, recordVideoNative } from '../native'
 import { useSettings, useT } from '../settingsHooks'
 import type { Order, VideoRef } from '../types'
 import { addVideo, deleteVideos, formatDuration, useVideoUrl } from '../videos'
+import { useSyncStatus } from '../sync'
 
 const MAX_SEC = 180
 const MAX_BYTES = 300 * 1024 * 1024
@@ -460,6 +461,8 @@ export function WalkaroundPanel({ order, onChange }: { order: Order; onChange: (
   const [rec, setRec] = useState(false)
   const v = order.walkaround
   const { url, loading } = useVideoUrl(v?.id)
+  // запись — в Pro; уже записанное видео видно всем
+  const pro = Boolean(useSyncStatus().user?.pro)
   const signed = Boolean(order.signatures.acceptClient || order.signatures.acceptMaster)
 
   const record = () => {
@@ -488,15 +491,24 @@ export function WalkaroundPanel({ order, onChange }: { order: Order; onChange: (
               {t('video.recorded', { date: new Date(v.at).toLocaleString(locale, { dateStyle: 'short', timeStyle: 'short' }), dur: formatDuration(v.duration) })}
             </small>
             <span className="row">
-              <button className="btn small ghost" onClick={record}>{t('video.redo')}</button>
+              {pro && <button className="btn small ghost" onClick={record}>{t('video.redo')}</button>}
               <button className="btn small ghost danger" onClick={remove}>{t('video.remove')}</button>
             </span>
           </div>
         </>
       ) : (
         <>
-          <p className="muted">{t('video.hint')}</p>
-          <button className="btn primary wide-btn" onClick={record}>🎥 {t('video.record')}</button>
+          {pro ? (
+            <>
+              <p className="muted">{t('video.hint')}</p>
+              <button className="btn primary wide-btn" onClick={record}>🎥 {t('video.record')}</button>
+            </>
+          ) : (
+            <>
+              <p className="muted">{t('pro.video')}</p>
+              <button className="btn small" onClick={() => (location.hash = '/plan')}>⭐ {t('plan.more')}</button>
+            </>
+          )}
         </>
       )}
       {rec && (

@@ -154,8 +154,9 @@ export function SignaturesPanel({ order, master, onChange }: { order: Order; mas
   // лист изменили после подписи клиента (работы, цены, данные авто) — предупреждаем
   const accept = order.signatures.acceptClient
   const changedAfter = Boolean(accept?.hash && accept.hash !== signedDigest(order))
-  // подписи приёмки — только после кругового видео
-  const needVideo = (k: SignatureKind) => k !== 'issueClient' && !order.walkaround
+  // подписи приёмки — только после кругового видео (если оно доступно: запись — в Pro)
+  const pro = Boolean(useSyncStatus().user?.pro)
+  const needVideo = (k: SignatureKind) => k !== 'issueClient' && !order.walkaround && pro
   return (
     <section className="panel">
       <h2>{t('sig.title')}</h2>
@@ -272,13 +273,15 @@ export function HistoryPanel({ orderId }: { orderId: string }) {
   const sync = useSyncStatus()
   const [open, setOpen] = useState(false)
   const [items, setItems] = useState<HistoryEntry[] | null>(null)
+  // бесплатно история видна за 90 дней: сколько записей старше
+  const [hidden, setHidden] = useState(0)
   const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     if (!open) return
     let alive = true
     getHistory(orderId)
-      .then((h) => alive && (setItems(h), setError(null)))
+      .then((h) => alive && (setItems(h.history), setHidden(h.hidden ?? 0), setError(null)))
       .catch((e: Error) => alive && setError(e.message))
     return () => {
       alive = false
@@ -312,7 +315,7 @@ export function HistoryPanel({ orderId }: { orderId: string }) {
         <>
           {error && <p className="error-text">{error}</p>}
           {!items && !error && <p className="muted">{t('hist.loading')}</p>}
-          {items?.length === 0 && <p className="muted">{t('hist.empty')}</p>}
+          {items?.length === 0 && !hidden && <p className="muted">{t('hist.empty')}</p>}
           <ul className="history">
             {items?.map((h, i) => (
               <li key={i}>
@@ -338,6 +341,12 @@ export function HistoryPanel({ orderId }: { orderId: string }) {
               </li>
             ))}
           </ul>
+          {hidden > 0 && (
+            <p className="hint">
+              {t('plan.historyHidden', { n: hidden, days: 90 })}{' '}
+              <button className="link-btn" onClick={() => (location.hash = '/plan')}>{t('plan.more')}</button>
+            </p>
+          )}
         </>
       )}
     </section>

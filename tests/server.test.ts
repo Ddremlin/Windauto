@@ -2,18 +2,39 @@
 import assert from 'node:assert/strict'
 import { spawn, type ChildProcess } from 'node:child_process'
 import { existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs'
+import { createServer } from 'node:http'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { after, before, test } from 'node:test'
 
 const PORT = 18000 + Math.floor(Math.random() * 1000)
+// поддельный Stripe: запоминает запросы, подписки отдаёт из fakeSubs
+const STRIPE_PORT = PORT + 1000
+const WHSEC = 'whsec_test'
+const stripeCalls: { method: string; path: string; body: URLSearchParams }[] = []
+const fakeSubs: Record<string, unknown> = {}
+const fakeStripe = createServer((req, res) => {
+  let raw = ''
+  req.on('data', (c) => (raw += c))
+  req.on('end', () => {
+    const path = (req.url ?? '').split('?')[0]
+    stripeCalls.push({ method: req.method ?? '', path, body: new URLSearchParams(raw) })
+    const sub = path.match(/^\/v1\/subscriptions\/(.+)$/)
+    const out = path === '/v1/checkout/sessions' ? { id: 'cs_1', url: 'https://checkout.stripe.test/cs_1' }
+      : path === '/v1/billing_portal/sessions' ? { url: 'https://billing.stripe.test/p_1' }
+      : sub ? fakeSubs[sub[1]] : null
+    res.writeHead(out ? 200 : 404, { 'Content-Type': 'application/json' })
+    res.end(JSON.stringify(out ?? { error: { message: 'no such object' } }))
+  })
+})
 const URL_ = `http://127.0.0.1:${PORT}`
 const dir = mkdtempSync(join(tmpdir(), 'windauto-'))
 let proc: ChildProcess
 
 async function start() {
   proc = spawn(process.execPath, ['server/server.mjs'], {
-    env: { ...process.env, PORT: String(PORT), DATA_DIR: dir, ADMIN_PASSWORD: 'secret1', ORG_QUOTA_GB: '0.001', ANTHROPIC_API_KEY: '', MAIL_OUTBOX: join(dir, 'mail.jsonl'), SUPPORT_EMAIL: 'help@windauto.test', TELEGRAM_OUTBOX: join(dir, 'tg.jsonl'), REGISTER_PER_HOUR: '100', NODE_NO_WARNINGS: '1' },
+    env: { ...process.env, PORT: String(PORT), DATA_DIR: dir, ADMIN_PASSWORD: 'secret1', ORG_QUOTA_GB: '0.001', FREE_QUOTA_GB: '0.0002', ANTHROPIC_API_KEY: '', MAIL_OUTBOX: join(dir, 'mail.jsonl'), SUPPORT_EMAIL: 'help@windauto.test', TELEGRAM_OUTBOX: join(dir, 'tg.jsonl'), REGISTER_PER_HOUR: '100', NODE_NO_WARNINGS: '1',
+      STRIPE_API: `http://127.0.0.1:${STRIPE_PORT}`, STRIPE_SECRET_KEY: 'sk_test_x', STRIPE_WEBHOOK_SECRET: WHSEC, STRIPE_PRICE_MONTH: 'price_month', STRIPE_PRICE_YEAR: 'price_year' },
     stdio: 'ignore',
   })
   for (let i = 0; i < 50; i++) {
@@ -46,12 +67,14 @@ const order = (patch: Record<string, unknown> = {}) => ({
 let admin = ''
 let staff = ''
 before(async () => {
+  await new Promise<void>((r) => fakeStripe.listen(STRIPE_PORT, '127.0.0.1', r))
   await start()
   admin = await login('admin', 'secret1')
   await api('/api/users', admin, { login: 'jan', name: 'Jan', password: 'secret22', role: 'staff' })
   staff = await login('jan', 'secret22')
 })
 after(async () => {
+  fakeStripe.close()
   await stop()
   rmSync(dir, { recursive: true, force: true })
 })
@@ -168,8 +191,15 @@ async function newCompany(email: string, company?: string) {
   assert.equal((await register(email, company)).status, 200)
   const link = mailLink(email)
   assert.equal((await fetch(URL_ + link.pathname + link.search)).status, 200)
-  return login(email, 'haslo1234')
+  // каждый со своего адреса — лимит входов с 127.0.0.1 общий на все тесты
+  const res = await fetch(URL_ + '/api/login', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'X-Forwarded-For': `10.50.${++companies}.1` },
+    body: JSON.stringify({ login: email, password: 'haslo1234' }),
+  })
+  return (await res.json()).token as string
 }
+let companies = 0
 
 test('регистрация: проверки, письмо, вход только после подтверждения email', async () => {
   assert.equal((await api('/api/register', '', { company: 'A', name: '', email: 'x@y.pl', password: 'haslo1234', accept: true })).body.code, 'company')
@@ -221,16 +251,19 @@ test('компании не видят данные друг друга: зак�
 
   const photo = new Uint8Array([0xff, 0xd8, 1, 2, 3])
   const putA = () => fetch(`${URL_}/api/photos/photo-of-a1`, { method: 'PUT', headers: { Authorization: `Bearer ${a}` }, body: photo })
-  // без Pro фото на сервер не принимаются, ИИ — тоже
+  // новая компания — пробный Pro; без него ИИ недоступен, фото — в пределах бесплатного места
   const meA = (await api('/api/me', a)).body.user
-  assert.equal(meA.pro, false)
-  assert.equal((await putA()).status, 402)
+  assert.equal(meA.plan, 'trial')
+  assert.equal(meA.pro, true)
+  assert.equal((await api(`/api/platform/orgs/${meA.orgId}`, admin, { trialDays: 0 }, 'PATCH')).status, 200)
+  assert.equal((await api('/api/me', a)).body.user.plan, 'free')
   assert.equal((await api('/api/voice', a, { text: 'x' })).body.code, 'pro_required')
   // Pro включает только владелец платформы
   assert.equal((await api(`/api/platform/orgs/${meA.orgId}`, a, { pro: true }, 'PATCH')).status, 403)
   const on = await api(`/api/platform/orgs/${meA.orgId}`, admin, { pro: true }, 'PATCH')
   assert.equal(on.body.org.pro, true)
   assert.equal((await api('/api/me', a)).body.user.pro, true)
+  assert.equal((await api('/api/me', a)).body.user.plan, 'pro')
   assert.equal((await putA()).status, 200)
   assert.equal((await fetch(`${URL_}/api/photos/photo-of-a1`, { headers: { Authorization: `Bearer ${a}` } })).status, 200)
   assert.equal((await fetch(`${URL_}/api/photos/photo-of-a1`, { headers: { Authorization: `Bearer ${b}` } })).status, 404)
@@ -587,4 +620,122 @@ test('отчёты об ошибках: склеиваются, сводка р�
   await start()
   await new Promise((r) => setTimeout(r, 300))
   assert.equal(mails().length, before_ + 1)
+})
+
+test('тарифы: бесплатно — 2 сотрудника, история 90 дней, без ИИ и отзывов; лимит места', async () => {
+  const t = await newCompany('free@serwis.pl', 'Serwis Free')
+  const me = (await api('/api/me', t)).body.user
+  await api(`/api/platform/orgs/${me.orgId}`, admin, { trialDays: 0 }, 'PATCH')
+  const plan = (await api('/api/plan', t)).body
+  assert.equal(plan.plan, 'free')
+  assert.equal(plan.usage.maxUsers, 2)
+  assert.equal(plan.usage.maxAi, 0)
+  assert.equal(plan.historyDays, 90)
+  assert.equal(plan.canPay, true)
+  // второй сотрудник — можно, третий — нет
+  assert.equal((await api('/api/users', t, { login: 'free2', name: 'F2', password: 'secret22' })).status, 200)
+  const third = await api('/api/users', t, { login: 'free3', name: 'F3', password: 'secret22' })
+  assert.equal(third.status, 402)
+  assert.equal(third.body.code, 'plan_users')
+  // отзывы — Pro
+  await api('/api/sync', t, { orders: [{ id: 'free-o1', updatedAt: 100, deleted: false, data: order({ id: 'free-o1' }) }] })
+  assert.equal((await api('/api/reviews/link', t, { orderId: 'free-o1', lang: 'pl' })).body.code, 'pro_required')
+  // фото — в пределах бесплатного места (в тестах 0,0002 ГБ ≈ 210 КБ)
+  const put = (id: string, n: number) => fetch(`${URL_}/api/photos/${id}`, { method: 'PUT', headers: { Authorization: `Bearer ${t}` }, body: new Uint8Array(n) })
+  assert.equal((await put('free-photo-1', 150_000)).status, 200)
+  const full = await put('free-photo-2', 150_000)
+  assert.equal(full.status, 507)
+  assert.equal((await full.json()).code, 'quota_free')
+  // пробный период снова — и ИИ/отзывы доступны (ИИ без ключа — 503, но не 402)
+  await api(`/api/platform/orgs/${me.orgId}`, admin, { trialDays: 14 }, 'PATCH')
+  assert.equal((await api('/api/plan', t)).body.plan, 'trial')
+  assert.notEqual((await api('/api/voice', t, { text: 'x' })).status, 402)
+})
+
+test('оплата: Checkout, вебхуки Stripe включают и выключают Pro, подпись проверяется', async () => {
+  const { signWebhook } = await import('../server/stripe.mjs')
+  const t = await newCompany('pay@serwis.pl', 'Serwis Pay')
+  const me = (await api('/api/me', t)).body.user
+  await api(`/api/platform/orgs/${me.orgId}`, admin, { trialDays: 0 }, 'PATCH')
+  await api('/api/users', t, { login: 'paystaff', name: 'S', password: 'secret22' })
+  const staffT = (await (await loginFrom('10.51.0.1', 'paystaff', 'secret22')).json()).token
+  assert.equal((await api('/api/billing/checkout', staffT, { period: 'month' })).status, 403)
+
+  const co = await api('/api/billing/checkout', t, { period: 'year' })
+  assert.equal(co.status, 200)
+  assert.equal(co.body.url, 'https://checkout.stripe.test/cs_1')
+  const call = stripeCalls.filter((c) => c.path === '/v1/checkout/sessions').pop()!
+  assert.equal(call.body.get('mode'), 'subscription')
+  assert.equal(call.body.get('line_items[0][price]'), 'price_year')
+  assert.equal(call.body.get('client_reference_id'), me.orgId)
+  assert.equal(call.body.get('subscription_data[metadata][org_id]'), me.orgId)
+  assert.equal(call.body.get('customer_email'), 'pay@serwis.pl')
+  assert.equal(call.body.get('tax_id_collection[enabled]'), 'true')
+  // пробный период кончился — списание сразу
+  assert.equal(call.body.get('subscription_data[trial_end]'), null)
+
+  const hook = (ev: unknown, sig?: string) => {
+    const raw = JSON.stringify(ev)
+    return fetch(URL_ + '/api/billing/webhook', { method: 'POST', headers: { 'Stripe-Signature': sig ?? signWebhook(raw, WHSEC) }, body: raw })
+  }
+  const end = Math.floor(Date.now() / 1000) + 365 * 86400
+  fakeSubs.sub_1 = { id: 'sub_1', customer: 'cus_1', status: 'active', metadata: { org_id: me.orgId }, items: { data: [{ current_period_end: end, price: { recurring: { interval: 'year' } } }] } }
+  const done = { id: 'evt_1', type: 'checkout.session.completed', data: { object: { mode: 'subscription', subscription: 'sub_1', customer: 'cus_1', client_reference_id: me.orgId } } }
+  // чужая подпись — отказ, Pro не включается
+  assert.equal((await hook(done, 't=1,v1=bad')).status, 400)
+  assert.equal((await api('/api/me', t)).body.user.plan, 'free')
+  assert.equal((await hook(done)).status, 200)
+  let plan = (await api('/api/plan', t)).body
+  assert.equal(plan.plan, 'paid')
+  assert.equal(plan.period, 'year')
+  assert.equal(plan.status, 'active')
+  assert.ok(plan.paidUntil > Date.now() + 360 * 86400_000)
+  assert.equal((await api('/api/me', t)).body.user.pro, true)
+  // повтор того же события — без изменений
+  assert.equal((await (await hook(done)).json()).duplicate, true)
+
+  // портал — по сохранённому клиенту
+  const portal = await api('/api/billing/portal', t, {})
+  assert.equal(portal.body.url, 'https://billing.stripe.test/p_1')
+  assert.equal(stripeCalls.filter((c) => c.path === '/v1/billing_portal/sessions').pop()!.body.get('customer'), 'cus_1')
+  // повторная оплата при активной подписке — нет
+  assert.equal((await api('/api/billing/checkout', t, { period: 'month' })).body.code, 'already_paid')
+
+  // отмена в конце периода: Pro остаётся до конца оплаченного
+  const sub = fakeSubs.sub_1 as Record<string, unknown>
+  await hook({ id: 'evt_2', type: 'customer.subscription.updated', data: { object: { ...sub, cancel_at_period_end: true } } })
+  plan = (await api('/api/plan', t)).body
+  assert.equal(plan.status, 'canceling')
+  assert.equal(plan.plan, 'paid')
+  // подписка закончилась — бесплатно
+  await hook({ id: 'evt_3', type: 'customer.subscription.deleted', data: { object: { ...sub, status: 'canceled' } } })
+  plan = (await api('/api/plan', t)).body
+  assert.equal(plan.plan, 'free')
+  assert.equal(plan.status, 'canceled')
+})
+
+test('оплата: пробный период сохраняется — первое списание в его конце', async () => {
+  const t = await newCompany('trialpay@serwis.pl', 'Serwis Trial')
+  assert.equal((await api('/api/billing/checkout', t, { period: 'month' })).status, 200)
+  const call = stripeCalls.filter((c) => c.path === '/v1/checkout/sessions').pop()!
+  const trialEnd = Number(call.body.get('subscription_data[trial_end]'))
+  assert.ok(Math.abs(trialEnd * 1000 - (Date.now() + 14 * 86400_000)) < 60_000)
+  const page = await fetch(URL_ + '/auth/paid?lang=pl')
+  assert.match(await page.text(), /Dziękujemy za płatność/)
+})
+
+test('письмо за 3 дня до конца пробного периода — одно', async () => {
+  const t = await newCompany('trialmail@serwis.pl', 'Serwis Mail')
+  const me = (await api('/api/me', t)).body.user
+  await api(`/api/platform/orgs/${me.orgId}`, admin, { trialDays: 2 }, 'PATCH')
+  const mails = () => readFileSync(join(dir, 'mail.jsonl'), 'utf8').trim().split('\n').map((l) => JSON.parse(l)).filter((m) => m.to === 'trialmail@serwis.pl' && /Pro/.test(m.subject))
+  await stop()
+  await start()
+  await new Promise((r) => setTimeout(r, 300))
+  assert.equal(mails().length, 1)
+  assert.match(mails()[0].text, /\/#\/plan/)
+  await stop()
+  await start()
+  await new Promise((r) => setTimeout(r, 300))
+  assert.equal(mails().length, 1)
 })

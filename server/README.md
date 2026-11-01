@@ -70,6 +70,26 @@ ANTHROPIC_API_KEY=sk-ant-...
 - `PUBLIC_URL` задать обязательно; `ADMIN_PASSWORD` из `.env` после первого запуска удалить;
   для копий — `BACKUP_PASSPHRASE` и `BACKUP_COPY_TO` (см. `backup.sh`).
 
+## Тарифы и оплата (Stripe)
+
+Бесплатно: заказы, документы, до 2 сотрудников, 1 ГБ фото (`FREE_QUOTA_GB`). Pro: ИИ (до `AI_PER_MONTH`=500 в месяц),
+видео, 50 ГБ (`ORG_QUOTA_GB`), сотрудники без ограничения, логотип в PDF, отзывы, выгрузка CSV, вся история.
+Новая компания — 14 дней Pro (`orgs.trial_until`), за 3 дня до конца — письмо владельцу. Владелец платформы может
+включить Pro навсегда или выдать пробные дни (Синхронизация → Компании; `PATCH /api/platform/orgs/:id {pro, trialDays}`).
+
+Оплата — Stripe Checkout (подписка, карта и BLIK), управление — портал Stripe. Настройка:
+
+1. Stripe → Products: продукт «Windauto Pro», две цены в PLN — 79 в месяц и 790 в год (повторяющиеся). ID цен `price_…`.
+2. Settings → Payment methods: включить карты и BLIK; для автопродления BLIK запросить «BLIK recurring payments».
+3. Developers → Webhooks: эндпоинт `https://<домен>/api/billing/webhook`, события `checkout.session.completed`,
+   `customer.subscription.created`, `customer.subscription.updated`, `customer.subscription.deleted`, `invoice.paid`.
+4. Settings → Billing → Customer portal: разрешить отмену подписки, смену способа оплаты и просмотр счетов.
+5. В `.env`: `STRIPE_SECRET_KEY`, `STRIPE_WEBHOOK_SECRET`, `STRIPE_PRICE_MONTH`, `STRIPE_PRICE_YEAR`
+   (VAT: `STRIPE_TAX_RATE=txr_…` — ставка 23 % из Stripe, или `STRIPE_AUTOMATIC_TAX=1` при Stripe Tax).
+
+Сначала — с тестовыми ключами (`sk_test_…`, карта 4242 4242 4242 4242), потом — боевые.
+Подписка → `orgs.paid_until` (конец периода + 3 дня на повторные списания), статус — `orgs.sub_status`.
+
 ## Обслуживание
 
 ```bash
