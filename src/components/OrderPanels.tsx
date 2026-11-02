@@ -7,7 +7,7 @@ import { signedDigest } from '../signed'
 import { currencySymbol } from '../settingsStore'
 import { useSettings } from '../settingsHooks'
 import { openExternal } from '../native'
-import { mailtoUrl, readyText, smsUrl, whatsappUrl } from '../share'
+import { mailtoUrl, orderText, readyText, smsUrl, telUrl, whatsappUrl } from '../share'
 import { getHistory, useSyncStatus, type HistoryEntry } from '../sync'
 import type { Consent, ExtraWork, Intake, IntakeItem, Order, Signature, SignatureKind } from '../types'
 import { INTAKE_ITEMS, formatMoney, fuelLabel, type Totals } from '../works'
@@ -257,6 +257,18 @@ export function SignaturesPanel({ order, master, onChange }: { order: Order; mas
         />
       )}
     </section>
+  )
+}
+
+// --- связь с клиентом: звонок и SMS с расчётом через стандартные приложения телефона ---
+export function ContactActions({ order }: { order: Order }) {
+  const { t, settings } = useSettings()
+  if (order.phone.replace(/\D/g, '').length < 7) return null
+  return (
+    <div className="contact-actions no-print">
+      <a className="btn small" href={telUrl(order.phone)}>📞 {t('contact.call')}</a>
+      <a className="btn small" href={smsUrl(order.phone, orderText(order, settings.docLang, settings))}>✉️ {t('contact.smsCalc')}</a>
+    </div>
   )
 }
 

@@ -67,6 +67,8 @@ export const uk: Record<string, string> = {
   'extra.name': 'Назва роботи',
   'extra.namePh': 'Мийка, діагностика, розвал-сходження…',
   'extra.remove': 'Видалити роботу',
+  'contact.call': 'Подзвонити',
+  'contact.smsCalc': 'SMS з розрахунком',
   'order.notes': 'Примітки',
   'order.notesPh': 'Загальні зауваження, стан, домовленості…',
   'order.delete': 'Видалити замовлення',

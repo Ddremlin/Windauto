@@ -67,6 +67,8 @@ export const be: Record<string, string> = {
   'extra.name': 'Назва работы',
   'extra.namePh': 'Мыйка, дыягностыка, развал-сыход…',
   'extra.remove': 'Выдаліць работу',
+  'contact.call': 'Патэлефанаваць',
+  'contact.smsCalc': 'SMS з разлікам',
   'order.notes': 'Заўвагі',
   'order.notesPh': 'Агульныя заўвагі, стан, дамоўленасці…',
   'order.delete': 'Выдаліць заказ',

@@ -167,6 +167,12 @@ function intlDigits(phone: string): string {
   return d
 }
 
+/** Звонок через стандартную звонилку телефона */
+export function telUrl(phone: string): string {
+  const d = intlDigits(phone)
+  return `tel:${d ? '+' + d : ''}`
+}
+
 export function whatsappUrl(phone: string, text: string): string {
   return `https://wa.me/${intlDigits(phone)}?text=${encodeURIComponent(text)}`
 }

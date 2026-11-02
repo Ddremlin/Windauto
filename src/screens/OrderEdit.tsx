@@ -9,7 +9,7 @@ import { clientKey, clientPath, isRisky, profileOf } from '../clients'
 import Combo from '../components/Combo'
 import ElementSheet from '../components/ElementSheet'
 import Field from '../components/Field'
-import { ConsentBlock, ExtrasPanel, HistoryPanel, IntakePanel, ReadyNotice, SignaturesPanel, TotalsView } from '../components/OrderPanels'
+import { ConsentBlock, ContactActions, ExtrasPanel, HistoryPanel, IntakePanel, ReadyNotice, SignaturesPanel, TotalsView } from '../components/OrderPanels'
 import { PhotoStrip } from '../components/Photos'
 import { PlateInput } from '../components/Plate'
 import { useDocScan, useScan } from '../components/Scan'
@@ -342,6 +342,7 @@ export default function OrderEdit({ initial, onSave, onDelete, onBack }: Props) 
               check={checkEmail(order.email)}
             />
           </div>
+          <ContactActions order={order} />
           <span className="field-label reminders-label">{t('rem.title')}</span>
           <RemindersBlock order={order} onChange={(reminders) => update({ reminders })} />
           <ConsentBlock consent={order.consent} onChange={(consent) => update({ consent })} />

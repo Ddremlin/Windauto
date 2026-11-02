@@ -67,6 +67,8 @@ export const en: Record<string, string> = {
   'extra.name': 'Work name',
   'extra.namePh': 'Washing, diagnostics, wheel alignment…',
   'extra.remove': 'Remove work',
+  'contact.call': 'Call',
+  'contact.smsCalc': 'SMS with estimate',
   'order.notes': 'Notes',
   'order.notesPh': 'General remarks, condition, agreements…',
   'order.delete': 'Delete order',

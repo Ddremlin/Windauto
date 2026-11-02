@@ -410,6 +410,8 @@ input:disabled { opacity: 0.6; }
   background: color-mix(in srgb, var(--ok) 12%, transparent); font-size: 14px;
 }
 .ready-actions { display: flex; gap: 6px; flex-wrap: wrap; }
+.contact-actions { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 10px; }
+.contact-actions .btn { text-decoration: none; color: inherit; }
 
 .check-grid { display: flex; flex-wrap: wrap; gap: 6px; margin: 6px 0 4px; }
 .check-chip {
