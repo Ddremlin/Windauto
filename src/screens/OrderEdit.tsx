@@ -465,6 +465,11 @@ export default function OrderEdit({ initial, onSave, onDelete, onBack }: Props) 
 
         <WalkaroundPanel order={order} onChange={(walkaround) => update({ walkaround })} />
 
+        {/* после работ — когда машина готова к выдаче (или видео уже есть) */}
+        {(order.status === 'done' || order.status === 'issued' || order.walkaroundAfter) && (
+          <WalkaroundPanel order={order} after onChange={(walkaroundAfter) => update({ walkaroundAfter })} />
+        )}
+
         <SignaturesPanel order={order} master={sync.user?.name || sync.user?.login || ''} onChange={setSignature} />
 
         <ReviewPanel order={order} />

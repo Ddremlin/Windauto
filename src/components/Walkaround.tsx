@@ -1,4 +1,4 @@
-// Круговое видео при приёмке: запись камерой в приложении (MediaRecorder),
+// Круговое видео при приёмке и после работ (перед выдачей): запись камерой в приложении (MediaRecorder),
 // а если она недоступна — системной камерой или из галереи.
 import { useEffect, useEffectEvent, useRef, useState } from 'react'
 import {
@@ -456,29 +456,30 @@ function Recorder({ onSave, onClose }: { onSave: (r: VideoRef) => void; onClose:
   )
 }
 
-export function WalkaroundPanel({ order, onChange }: { order: Order; onChange: (v: VideoRef | undefined) => void }) {
+export function WalkaroundPanel({ order, after = false, onChange }: { order: Order; after?: boolean; onChange: (v: VideoRef | undefined) => void }) {
   const { t, locale } = useSettings()
   const [rec, setRec] = useState(false)
-  const v = order.walkaround
+  const v = after ? order.walkaroundAfter : order.walkaround
   const { url, loading } = useVideoUrl(v?.id)
   // запись — в Pro; уже записанное видео видно всем
   const pro = Boolean(useSyncStatus().user?.pro)
-  const signed = Boolean(order.signatures.acceptClient || order.signatures.acceptMaster)
+  const signed = after ? Boolean(order.signatures.issueClient) : Boolean(order.signatures.acceptClient || order.signatures.acceptMaster)
+  const replaceSigned = after ? 'video.replaceSignedAfter' : 'video.replaceSigned'
 
   const record = () => {
-    if (v && signed && !confirm(t('video.replaceSigned'))) return
+    if (v && signed && !confirm(t(replaceSigned))) return
     setRec(true)
   }
 
   const remove = () => {
-    if (!v || !confirm(signed ? t('video.replaceSigned') : t('video.removeConfirm'))) return
+    if (!v || !confirm(signed ? t(replaceSigned) : t('video.removeConfirm'))) return
     deleteVideos([v.id])
     onChange(undefined)
   }
 
   return (
     <section className="panel no-print">
-      <h2>{t('video.title')}</h2>
+      <h2>{t(after ? 'video.titleAfter' : 'video.title')}</h2>
       {v ? (
         <>
           {url ? (
@@ -500,8 +501,8 @@ export function WalkaroundPanel({ order, onChange }: { order: Order; onChange: (
         <>
           {pro ? (
             <>
-              <p className="muted">{t('video.hint')}</p>
-              <button className="btn primary wide-btn" onClick={record}>🎥 {t('video.record')}</button>
+              <p className="muted">{t(after ? 'video.hintAfter' : 'video.hint')}</p>
+              <button className="btn primary wide-btn" onClick={record}>🎥 {t(after ? 'video.recordAfter' : 'video.record')}</button>
             </>
           ) : (
             <>

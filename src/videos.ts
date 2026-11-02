@@ -40,7 +40,7 @@ export async function deleteVideos(ids: string[]) {
   await Promise.all(ids.map((id) => tx('readwrite', (s) => s.delete(id)).catch(() => {})))
 }
 
-export const orderVideoIds = (o: Order): string[] => (o.walkaround ? [o.walkaround.id] : [])
+export const orderVideoIds = (o: Order): string[] => [o.walkaround, o.walkaroundAfter].filter((v): v is VideoRef => Boolean(v)).map((v) => v.id)
 
 /** object URL видео; loading — пока качается с сервера */
 export function useVideoUrl(id: string | undefined): { url?: string; loading: boolean } {

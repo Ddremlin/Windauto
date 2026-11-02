@@ -145,6 +145,8 @@ export interface Order {
   consent: Consent
   signatures: Partial<Record<SignatureKind, Signature>>
   walkaround?: VideoRef
+  // круговое видео после работ, перед выдачей
+  walkaroundAfter?: VideoRef
   clientRating?: ClientRating
   reminders?: Reminder[]
   elements: Record<string, ElementWork>

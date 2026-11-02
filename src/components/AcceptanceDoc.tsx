@@ -180,6 +180,9 @@ export default function AcceptanceDoc({ order, photoUrls, kind = 'acceptance' }:
           {kv(t('order.color'), order.color)}
           {kv(t('order.paintCode'), order.paintCode, true)}
           {!handover && kv(t('order.dueDate'), order.dueDate ? new Date(order.dueDate + 'T12:00').toLocaleDateString(locale) : '')}
+          {handover &&
+            order.walkaroundAfter &&
+            kv(t('video.titleAfter'), t('video.recorded', { date: new Date(order.walkaroundAfter.at).toLocaleString(locale, dateStyle), dur: formatDuration(order.walkaroundAfter.duration) }))}
         </div>
         {!handover && order.paintFormula && <div className="doc-formula">{order.paintFormula}</div>}
         {!handover && order.paintNotes && (

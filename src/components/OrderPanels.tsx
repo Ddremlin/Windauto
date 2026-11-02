@@ -206,7 +206,8 @@ export function SignaturesPanel({ order, master, onChange }: { order: Order; mas
   const changedAfter = Boolean(accept?.hash && accept.hash !== signedDigest(order))
   // подписи приёмки — только после кругового видео (если оно доступно: запись — в Pro)
   const pro = Boolean(useSyncStatus().user?.pro)
-  const needVideo = (k: SignatureKind) => k !== 'issueClient' && !order.walkaround && pro
+  // выдача — после видео «после работ»
+  const needVideo = (k: SignatureKind) => pro && !(k === 'issueClient' ? order.walkaroundAfter : order.walkaround)
   return (
     <section className="panel">
       <h2>{t('sig.title')}</h2>
@@ -234,7 +235,7 @@ export function SignaturesPanel({ order, master, onChange }: { order: Order; mas
               ) : needVideo(k) ? (
                 <>
                   <button className="btn" disabled>✍ {t('sig.sign')}</button>
-                  <small className="warn-text">{t('video.needFirst')}</small>
+                  <small className="warn-text">{t(k === 'issueClient' ? 'video.needFirstAfter' : 'video.needFirst')}</small>
                 </>
               ) : (
                 <button className="btn" onClick={() => setPad(k)}>✍ {t('sig.sign')}</button>
@@ -305,6 +306,7 @@ const FIELD_LABEL: Record<string, string> = {
   number: 'order.number',
   status: 'order.status',
   walkaround: 'video.title',
+  walkaroundAfter: 'video.titleAfter',
   plate: 'order.plate',
   plateCountry: 'order.plateCountry',
   vin: 'order.vin',
