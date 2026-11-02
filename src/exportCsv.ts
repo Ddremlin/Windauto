@@ -26,6 +26,7 @@ export function ordersCsv(orders: Order[], s: PriceSettings, lang: Lang): string
     const works = ids
       .filter((id) => o.elements[id]?.works.length)
       .map((id) => `${t(`el.${getLayout(o.bodyType).elements.find((e) => e.id === id)?.key ?? id}`)}: ${o.elements[id].works.map((w) => t(`work.${w}`)).join(', ')}`)
+      .concat((o.extras ?? []).map((x) => x.name.trim()).filter(Boolean))
       .join(' | ')
     return [
       orderNo(o), new Date(o.createdAt).toISOString().slice(0, 10), t(`status.${o.status}`), formatPlate(o.plate, o.plateCountry), o.vin, o.make, o.model, o.year,

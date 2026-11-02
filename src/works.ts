@@ -1,5 +1,5 @@
 import { currencySymbol } from './settingsStore'
-import type { DamageId, ElementWork, IntakeItem, Order, OrderStatus, WorkId } from './types'
+import type { DamageId, ElementWork, ExtraWork, IntakeItem, Order, OrderStatus, WorkId } from './types'
 
 // Подписи — в i18n.ts по ключу work.<id>
 export interface WorkType {
@@ -69,6 +69,8 @@ export function elementTotal(v: ElementWork | undefined): number {
   return elementLabor(v) + (v?.parts ?? 0)
 }
 
+export const extrasTotal = (extras: ExtraWork[] | undefined) => (extras ?? []).reduce((sum, x) => sum + (x.price ?? 0), 0)
+
 export function orderTotal(elements: Record<string, ElementWork>, ids?: string[]): number {
   return (ids ?? Object.keys(elements)).reduce((sum, id) => sum + elementTotal(elements[id]), 0)
 }
@@ -95,9 +97,9 @@ export interface Totals {
 }
 
 /** Итоги сметы: скидка, нетто, VAT, брутто */
-export function orderTotals(o: Pick<Order, 'elements' | 'discount'>, s: PriceSettings, ids?: string[]): Totals {
+export function orderTotals(o: Pick<Order, 'elements' | 'discount' | 'extras'>, s: PriceSettings, ids?: string[]): Totals {
   const list = ids ?? Object.keys(o.elements)
-  const labor = list.reduce((sum, id) => sum + elementLabor(o.elements[id]), 0)
+  const labor = list.reduce((sum, id) => sum + elementLabor(o.elements[id]), 0) + extrasTotal(o.extras)
   const parts = list.reduce((sum, id) => sum + (o.elements[id]?.parts ?? 0), 0)
   const subtotal = labor + parts
   const discountPct = Math.min(100, Math.max(0, o.discount || 0))

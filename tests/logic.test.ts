@@ -54,12 +54,21 @@ test('смета: нетто-цены и без VAT', () => {
   assert.equal(z.vat, 0)
 })
 
+test('смета: дополнительные работы идут в работы и под скидку', () => {
+  const els = { a: { works: ['repair'], prices: { repair: 1000 } } } as Order['elements']
+  const t = orderTotals({ ...order(els, 10), extras: [{ id: '1', name: 'Мойка', price: 100 }, { id: '2', name: 'Без цены' }] }, { vatRate: 0, pricesGross: true }, [])
+  assert.equal(t.labor, 100) // элементы не выбраны, доп. работы считаются всегда
+  assert.equal(t.gross, 90)
+})
+
 test('отпечаток подписи меняется от работ, но не от фото «после»', () => {
   const o = { plate: 'WA1', elements: { hood: { works: ['polish'], prices: { polish: 100 } } }, intake: { items: [] } } as unknown as Order
   const d = signedDigest(o)
   assert.equal(signedDigest({ ...o, elements: { hood: { ...o.elements.hood, photosAfter: ['x'] } } }), d)
   assert.notEqual(signedDigest({ ...o, elements: { hood: { ...o.elements.hood, prices: { polish: 150 } } } }), d)
   assert.notEqual(signedDigest({ ...o, mileage: '100' }), d)
+  assert.equal(signedDigest({ ...o, extras: [] }), d)
+  assert.notEqual(signedDigest({ ...o, extras: [{ id: '1', name: 'Мойка', price: 50 }] }), d)
 })
 
 test('камеры: составная iPhone, отдельная сверхширокая', async () => {

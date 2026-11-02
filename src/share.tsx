@@ -136,6 +136,7 @@ export function orderText(o: Order, lang: Lang, s: Settings): string {
     const sum = elementTotal(v)
     lines.push(`• ${t(`el.${e.key}`)}: ${works}${sum ? ` — ${formatMoney(sum)}` : ''}`)
   }
+  for (const x of o.extras ?? []) if (x.name.trim()) lines.push(`• ${x.name.trim()}${x.price ? ` — ${formatMoney(x.price)}` : ''}`)
   const tot = orderTotals(o, s, marked.map((e) => e.id))
   if (tot.gross) {
     lines.push('')

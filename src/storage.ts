@@ -19,6 +19,7 @@ export function migrate(o: Partial<Order>): Order {
   m.consent = { ...base.consent, ...(o.consent ?? {}) }
   m.signatures = { ...(o.signatures ?? {}) }
   m.elements = { ...(o.elements ?? {}) }
+  if (o.extras && !Array.isArray(o.extras)) delete m.extras
   if (!STATUSES_ALL.includes(m.status)) m.status = 'new'
   return m
 }

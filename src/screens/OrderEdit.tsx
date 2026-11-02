@@ -9,7 +9,7 @@ import { clientKey, clientPath, isRisky, profileOf } from '../clients'
 import Combo from '../components/Combo'
 import ElementSheet from '../components/ElementSheet'
 import Field from '../components/Field'
-import { ConsentBlock, HistoryPanel, IntakePanel, ReadyNotice, SignaturesPanel, TotalsView } from '../components/OrderPanels'
+import { ConsentBlock, ExtrasPanel, HistoryPanel, IntakePanel, ReadyNotice, SignaturesPanel, TotalsView } from '../components/OrderPanels'
 import { PhotoStrip } from '../components/Photos'
 import { PlateInput } from '../components/Plate'
 import { useDocScan, useScan } from '../components/Scan'
@@ -37,7 +37,7 @@ interface Props {
 
 const hasContent = (o: Order) =>
   Boolean(
-    o.plate || o.vin || o.make || o.model || o.client || o.phone || o.email || o.notes || o.paintNotes || o.assignee || o.dueDate ||
+    o.plate || o.vin || o.make || o.model || o.client || o.phone || o.email || o.notes || o.paintNotes || o.extras?.length || o.assignee || o.dueDate ||
       Object.keys(o.elements).length || Object.keys(o.signatures).length || o.intake.items.length || o.intake.fuel !== undefined,
   )
 
@@ -445,10 +445,17 @@ export default function OrderEdit({ initial, onSave, onDelete, onBack }: Props) 
               })}
             </ul>
           )}
-          {withWorks.length > 0 && (
+          {withWorks.length > 0 && !order.extras?.length && (
             <TotalsView totals={totals} discount={order.discount} onDiscount={(discount) => update({ discount })} />
           )}
         </section>
+
+        {/* итог — под последним блоком с ценами */}
+        <ExtrasPanel extras={order.extras ?? []} onChange={(extras) => update({ extras: extras.length ? extras : undefined })}>
+          {order.extras?.length ? (
+            <TotalsView totals={totals} discount={order.discount} onDiscount={(discount) => update({ discount })} />
+          ) : null}
+        </ExtrasPanel>
 
         <section className="panel">
           <h2>{t('order.notes')}</h2>

@@ -1,16 +1,66 @@
 // Разделы карточки заказа: состояние при приёмке, согласие RODO, итоги сметы,
 // подписи, история изменений, уведомление «машина готова».
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { BODY_TYPES, getLayout } from '../body'
 import { rodoClause } from '../rodo'
 import { signedDigest } from '../signed'
+import { currencySymbol } from '../settingsStore'
 import { useSettings } from '../settingsHooks'
 import { openExternal } from '../native'
 import { mailtoUrl, readyText, smsUrl, whatsappUrl } from '../share'
 import { getHistory, useSyncStatus, type HistoryEntry } from '../sync'
-import type { Consent, Intake, IntakeItem, Order, Signature, SignatureKind } from '../types'
+import type { Consent, ExtraWork, Intake, IntakeItem, Order, Signature, SignatureKind } from '../types'
 import { INTAKE_ITEMS, formatMoney, fuelLabel, type Totals } from '../works'
 import SignaturePad from './SignaturePad'
+
+// --- дополнительные работы: то, что не привязано к элементу кузова ---
+export function ExtrasPanel({ extras, onChange, children }: { extras: ExtraWork[]; onChange: (v: ExtraWork[]) => void; children?: ReactNode }) {
+  const { t } = useSettings()
+  const set = (id: string, patch: Partial<ExtraWork>) => onChange(extras.map((x) => (x.id === id ? { ...x, ...patch } : x)))
+  const add = () => onChange([...extras, { id: crypto.randomUUID?.() ?? String(Date.now()) + Math.random().toString(16).slice(2), name: '' }])
+  return (
+    <section className="panel">
+      <h2>
+        {t('extra.title')} {extras.length ? `(${extras.length})` : ''}
+      </h2>
+      {extras.length > 0 && (
+        <div className="price-list">
+          {extras.map((x) => (
+            <div key={x.id} className="price-row">
+              <input
+                className="price-name"
+                placeholder={t('extra.namePh')}
+                aria-label={t('extra.name')}
+                value={x.name}
+                autoFocus={!x.name && x === extras[extras.length - 1]}
+                onChange={(e) => set(x.id, { name: e.target.value })}
+              />
+              <label className="price">
+                <input
+                  inputMode="decimal"
+                  placeholder="0"
+                  aria-label={t('doc.price')}
+                  defaultValue={x.price != null ? String(x.price).replace('.', ',') : ''}
+                  onChange={(e) => {
+                    const v = e.target.value.trim().replace(',', '.')
+                    const n = Number(v)
+                    set(x.id, { price: v && Number.isFinite(n) && n > 0 ? n : undefined })
+                  }}
+                />
+                <span>{currencySymbol()}</span>
+              </label>
+              <button className="icon-btn no-print" aria-label={t('extra.remove')} onClick={() => onChange(extras.filter((y) => y.id !== x.id))}>
+                ×
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+      <button className="btn ghost no-print" onClick={add}>+ {t('extra.add')}</button>
+      {children}
+    </section>
+  )
+}
 
 // --- состояние автомобиля при приёмке ---
 const FUEL_STEPS = [0, 2, 4, 6, 8]
@@ -259,6 +309,7 @@ const FIELD_LABEL: Record<string, string> = {
   phone: 'order.phone',
   email: 'order.email',
   notes: 'order.notes',
+  extras: 'extra.title',
   assignee: 'order.assignee',
   dueDate: 'order.dueDate',
   discount: 'tot.discount',

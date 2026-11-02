@@ -89,6 +89,7 @@ export default function AcceptanceDoc({ order, photoUrls, kind = 'acceptance' }:
   })
   const withDamage = marked.filter((e) => order.elements[e.id].damage?.length)
   const usedWorks = WORKS.filter((w) => marked.some((e) => order.elements[e.id].works.includes(w.id)))
+  const extras = (order.extras ?? []).filter((x) => x.name.trim() || x.price)
   const totals = orderTotals(order, settings, marked.map((e) => e.id))
   const dateStyle = { dateStyle: 'medium', timeStyle: 'short' } as const
   const kv = (label: string, value: string, mono = false) =>
@@ -314,6 +315,29 @@ export default function AcceptanceDoc({ order, photoUrls, kind = 'acceptance' }:
               })}
             </tbody>
           </table>
+        </>
+      )}
+
+      {extras.length > 0 && (
+        <>
+          <div data-block>
+            <h2>{t('extra.title')}</h2>
+          </div>
+          <table className="doc-table">
+            <tbody>
+              {extras.map((x) => (
+                <tr key={x.id} data-block>
+                  <td>{x.name}</td>
+                  <td className="num" style={{ width: '18%' }}>{x.price ? <b>{formatMoney(x.price)}</b> : '—'}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </>
+      )}
+
+      {(withWorks.length > 0 || extras.length > 0) && (
+        <>
           <div data-block>
             <div className="doc-totals">
               {totals.parts > 0 && (

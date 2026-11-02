@@ -106,6 +106,13 @@ export interface Reminder {
   done?: boolean
 }
 
+// работа вне карты кузова (мойка, диагностика, сход-развал…): название и цена, zł
+export interface ExtraWork {
+  id: string
+  name: string
+  price?: number
+}
+
 export interface Order {
   id: string
   // номер заказа «2026/0142»; пусто — ещё не выдан (выдаёт сервер)
@@ -141,6 +148,7 @@ export interface Order {
   clientRating?: ClientRating
   reminders?: Reminder[]
   elements: Record<string, ElementWork>
+  extras?: ExtraWork[]
   // время последнего изменения каждого поля (для слияния правок с разных телефонов):
   // ключ — имя поля или «el:<id элемента>»
   _ft?: Record<string, number>
