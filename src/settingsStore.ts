@@ -1,6 +1,7 @@
 // Настройки вне React: язык — свой на каждом телефоне; данные сервиса и цены — общие,
 // синхронизируются между сотрудниками (sharedUpdatedAt — для выбора более свежих).
 import type { Lang } from './i18n'
+import type { PaletteId, ThemeMode } from './theme'
 import type { WorkId } from './types'
 
 export interface SharedSettings {
@@ -27,6 +28,9 @@ export interface Settings extends SharedSettings {
   docLang: Lang
   // валюта на этом телефоне; при польском интерфейсе всегда злотый
   currency: Currency
+  // оформление на этом телефоне
+  theme: ThemeMode
+  palette: PaletteId
   sharedUpdatedAt: number
 }
 
@@ -48,6 +52,8 @@ const DEFAULTS: Settings = {
   lang: 'ru',
   docLang: 'pl',
   currency: 'PLN',
+  theme: 'auto',
+  palette: 'coffee',
   shopName: '',
   shopAddress: '',
   shopPhone: '',

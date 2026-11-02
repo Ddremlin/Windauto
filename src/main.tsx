@@ -7,9 +7,13 @@ import { isNative } from './native'
 import { initStorage } from './storage'
 import { initSync, reportTarget } from './sync'
 import { initErrorReports } from './errorReport'
+import { getSettings } from './settingsStore'
+import { applyTheme } from './theme'
 import './index.css'
 
 initErrorReports(reportTarget)
+// цвета — до первого кадра, чтобы не мигала тема по умолчанию
+applyTheme(getSettings().theme, getSettings().palette)
 
 // заказы читаются из IndexedDB асинхронно — показываем приложение, когда они загружены
 initStorage().finally(() => {

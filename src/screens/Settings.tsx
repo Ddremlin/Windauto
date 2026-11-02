@@ -7,6 +7,7 @@ import { CURRENCIES, currencyOf, currencySymbol, type Currency, type Settings as
 import { exportJson, importJson } from '../storage'
 import { useSyncStatus } from '../sync'
 import type { Order, WorkId } from '../types'
+import { PALETTES, THEME_MODES } from '../theme'
 import { WORKS } from '../works'
 
 interface Props {
@@ -85,6 +86,31 @@ export default function Settings({ orders, onImport }: Props) {
               <p className="hint">{t('set.currencyHint')}</p>
             </>
           )}
+        </section>
+
+        <section className="panel">
+          <h2>{t('set.theme')}</h2>
+          <div className="seg-row" role="radiogroup" aria-label={t('set.theme')}>
+            {THEME_MODES.map((m) => (
+              <button key={m} role="radio" aria-checked={settings.theme === m} className={'seg' + (settings.theme === m ? ' active' : '')} onClick={() => update({ theme: m })}>
+                {t(`theme.${m}`)}
+              </button>
+            ))}
+          </div>
+          <h2>{t('set.palette')}</h2>
+          <div className="palette-row" role="radiogroup" aria-label={t('set.palette')}>
+            {PALETTES.map((p) => (
+              <button key={p.id} role="radio" aria-checked={settings.palette === p.id} className={'palette' + (settings.palette === p.id ? ' active' : '')} onClick={() => update({ palette: p.id })}>
+                <span className="palette-dots">
+                  <span style={{ background: p.light.bg }} />
+                  <span style={{ background: p.light.accent }} />
+                  <span style={{ background: p.dark.bg }} />
+                </span>
+                {t(`palette.${p.id}`)}
+              </button>
+            ))}
+          </div>
+          <p className="hint">{t('set.themeHint')}</p>
         </section>
 
         <section className="panel">

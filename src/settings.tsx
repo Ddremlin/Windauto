@@ -2,6 +2,7 @@ import { useEffect, useMemo, useSyncExternalStore, type ReactNode } from 'react'
 import { LOCALE, makeT, type Lang } from './i18n'
 import { SettingsContext, useSettings } from './settingsHooks'
 import { getSettings, subscribeSettings, updateSettings } from './settingsStore'
+import { applyTheme } from './theme'
 
 export function SettingsProvider({ children }: { children: ReactNode }) {
   const s = useSyncExternalStore(subscribeSettings, getSettings)
@@ -9,6 +10,8 @@ export function SettingsProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     document.documentElement.lang = s.lang
   }, [s.lang])
+
+  useEffect(() => applyTheme(s.theme, s.palette), [s.theme, s.palette])
 
   const value = useMemo(() => ({ settings: s, update: updateSettings, t: makeT(s.lang), locale: LOCALE[s.lang] }), [s])
   return <SettingsContext.Provider value={value}>{children}</SettingsContext.Provider>
