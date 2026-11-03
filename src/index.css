@@ -754,6 +754,10 @@ input:disabled { opacity: 0.6; }
 .client-past.risky small { font-weight: 400; }
 .risky-mark { color: var(--danger); }
 .review-got { margin-bottom: 10px; }
+.review-summary {
+  margin-bottom: 12px; padding: 10px 12px; border-radius: 10px;
+  background: color-mix(in srgb, var(--accent) 10%, var(--panel)); border: 1px solid color-mix(in srgb, var(--accent) 30%, var(--line));
+}
 .review-comment { margin: 4px 0 0; white-space: pre-wrap; font-size: 14px; flex-basis: 100%; color: var(--text); }
 .review-text { font-size: 14px; background: var(--bg); border-radius: 8px; padding: 10px; margin: 0 0 10px; overflow-wrap: anywhere; }
 .review-sum { display: flex; align-items: center; gap: 12px; margin-bottom: 10px; }

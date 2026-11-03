@@ -699,6 +699,7 @@ export const en: Record<string, string> = {
   'review.again': 'Send the link again',
   'review.waiting': 'Link sent on {d}, the client has not answered yet.',
   'review.check': 'Check',
+  'review.noComment': 'no comment',
   'review.other': 'Other',
   'review.msg': 'Hello! {shop} thanks you for choosing us to repair your {car}. Please rate our work — it takes a minute: {url}',
   'stats.reviews': 'Client reviews',

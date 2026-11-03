@@ -1691,6 +1691,8 @@ async function reviewRoute(req, res, token) {
     )
     .run(link.order_id, link.created, stars, comment, now())
   log(`отзыв: компания ${link.org_id}, заказ ${link.order_id}, ${stars}★`)
+  // открытые приложения компании сразу подтягивают отзыв
+  for (const l of o.listeners) l.write(`event: review\ndata: ${JSON.stringify(link.order_id)}\n\n`)
   return sendHtml(res, 200, messagePage(lang, stars >= 4 ? txt.thanks : txt.thanksLow))
 }
 

@@ -98,6 +98,23 @@ export function ClientRatingBlock({ order, orders, by, onChange }: BlockProps) {
 }
 
 /** Отзыв клиента о ремонте: отправить ссылку и посмотреть ответ */
+/** Оценка и отзыв клиента — наверху заказа, рядом с его данными */
+export function ReviewSummary({ order }: { order: Order }) {
+  const { t, locale } = useSettings()
+  const review = useReviews().get(order.id)
+  if (!review?.stars) return null
+  return (
+    <div className="review-summary">
+      <div>
+        <span className="muted">{t('review.title')}: </span>
+        <Stars value={review.stars} /> <b>{review.stars}/5</b>
+        {review.at ? <span className="muted"> · {new Date(review.at).toLocaleDateString(locale)}</span> : null}
+      </div>
+      {review.comment ? <p className="review-comment">«{review.comment}»</p> : <small className="muted">{t('review.noComment')}</small>}
+    </div>
+  )
+}
+
 export function ReviewPanel({ order }: { order: Order }) {
   const { t, locale, settings } = useSettings()
   const sync = useSyncStatus()

@@ -3,7 +3,7 @@ import { BODY_TYPES, getLayout } from '../body'
 import { MAKES, canonMake, canonModel, isKnownModel, modelsOf } from '../cars'
 import AcceptanceNo from '../components/AcceptanceNo'
 import BodyMap, { DAMAGE_COLOR } from '../components/BodyMap'
-import { ClientRatingBlock, ReviewPanel, Stars } from '../components/ClientRating'
+import { ClientRatingBlock, ReviewPanel, ReviewSummary, Stars } from '../components/ClientRating'
 import { RemindersBlock } from '../components/Reminders'
 import { clientKey, clientPath, isRisky, profileOf } from '../clients'
 import Combo from '../components/Combo'
@@ -328,6 +328,7 @@ export default function OrderEdit({ initial, onSave, onDelete, onBack }: Props) 
 
         <section className="panel">
           <h2>{t('order.client')}</h2>
+          <ReviewSummary order={order} />
           <div className="grid">
             <Field label={t('order.clientName')} {...field('client')} />
             <Field label={t('order.phone')} type="tel" inputMode="tel" placeholder="+48" {...field('phone')} />

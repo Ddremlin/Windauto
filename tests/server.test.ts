@@ -487,7 +487,15 @@ test('отзыв клиента: ссылка, страница, оценка, �
   const post = (body: Record<string, string>) =>
     fetch(URL_ + path, { method: 'POST', headers: { 'Content-Type': 'application/x-www-form-urlencoded' }, body: new URLSearchParams(body) })
   assert.equal((await post({ stars: '7' })).status, 400)
+  // открытое приложение компании сразу узнаёт о новом отзыве
+  const { ticket } = (await api('/api/events/ticket', admin, {})).body
+  const ac = new AbortController()
+  const reader = (await fetch(URL_ + '/api/events?ticket=' + ticket, { signal: ac.signal })).body!.getReader()
   assert.equal((await post({ stars: '5', comment: '<b>Super</b>' })).status, 200)
+  let got = ''
+  while (!got.includes('event: review')) got += new TextDecoder().decode((await reader.read()).value)
+  assert.match(got, /event: review\ndata: "rv1"/)
+  ac.abort()
   assert.equal((await post({ stars: '4', comment: 'Dobrze' })).status, 200)
   const list = (await api('/api/reviews', admin)).body.reviews
   const mine = list.find((x: { orderId: string }) => x.orderId === 'rv1')

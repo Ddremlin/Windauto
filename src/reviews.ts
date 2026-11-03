@@ -1,11 +1,16 @@
 // Отзывы клиентов с сервера: одна загрузка на всех, экраны подписываются через useReviews.
 import { useEffect, useSyncExternalStore } from 'react'
-import { isConnected, listReviews, type Review } from './sync'
+import { isConnected, listReviews, onReviewEvent, type Review } from './sync'
 
 let reviews = new Map<string, Review>()
 let loadedAt = 0
 let loading: Promise<void> | null = null
 const listeners = new Set<() => void>()
+
+// новый отзыв пришёл, пока приложение открыто; вернулись в приложение — тоже проверяем
+onReviewEvent(() => void refreshReviews(true))
+if (typeof document !== 'undefined')
+  document.addEventListener('visibilitychange', () => document.visibilityState === 'visible' && void refreshReviews())
 
 const subscribe = (l: () => void) => {
   listeners.add(l)

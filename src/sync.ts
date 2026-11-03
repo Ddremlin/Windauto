@@ -360,6 +360,7 @@ async function openEvents() {
     events.addEventListener('rev', (e) => {
       if (Number((e as MessageEvent).data) > state.lastRev) scheduleSync(300)
     })
+    events.addEventListener('review', () => reviewListeners.forEach((l) => l()))
     events.onerror = () => {
       events?.close()
       events = null
@@ -677,6 +678,13 @@ export interface Review {
 
 export const reviewLink = (orderId: string, lang: string) =>
   api<{ url: string }>('/api/reviews/link', { method: 'POST', body: JSON.stringify({ orderId, lang }) }).then((r) => r.url)
+// клиент оставил отзыв (событие с сервера) — reviews.ts перечитывает список
+const reviewListeners = new Set<() => void>()
+export function onReviewEvent(fn: () => void) {
+  reviewListeners.add(fn)
+  return () => reviewListeners.delete(fn)
+}
+
 export const listReviews = () => api<{ reviews: Review[] }>('/api/reviews').then((r) => r.reviews)
 
 // для чтения мелких символов хватает 1600 px по большей стороне (техпаспорт — 2000)

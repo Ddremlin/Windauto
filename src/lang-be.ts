@@ -699,6 +699,7 @@ export const be: Record<string, string> = {
   'review.again': 'Адправіць спасылку яшчэ раз',
   'review.waiting': 'Спасылка адпраўлена {d}, кліент яшчэ не адказаў.',
   'review.check': 'Праверыць',
+  'review.noComment': 'без тэксту водгуку',
   'review.other': 'Іншае',
   'review.msg': 'Добры дзень! {shop} дзякуе вам за рамонт {car}. Калі ласка, ацаніце нашу работу — гэта зойме хвіліну: {url}',
   'stats.reviews': 'Водгукі кліентаў',

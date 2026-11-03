@@ -699,6 +699,7 @@ export const uk: Record<string, string> = {
   'review.again': 'Надіслати посилання ще раз',
   'review.waiting': 'Посилання надіслано {d}, клієнт ще не відповів.',
   'review.check': 'Перевірити',
+  'review.noComment': 'без тексту відгуку',
   'review.other': 'Інше',
   'review.msg': 'Добрий день! {shop} дякує вам за ремонт {car}. Будь ласка, оцініть нашу роботу — це займе хвилину: {url}',
   'stats.reviews': 'Відгуки клієнтів',
