@@ -14,6 +14,7 @@ import Plan from './screens/Plan'
 import Settings from './screens/Settings'
 import Stats from './screens/Stats'
 import Sync from './screens/Sync'
+import Welcome from './screens/Welcome'
 import { defaultBookingAt } from './booking'
 import { newOrder, useOrders } from './storage'
 import type { Order } from './types'
@@ -48,8 +49,9 @@ export default function App() {
   const [draft, setDraft] = useState<Order | null>(() => (readRoute() === '/new' ? newOrder() : null))
   const [draftRoute, setDraftRoute] = useState(readRoute)
   const openOrder = useCallback((id: string) => go(`/order/${id}`), [])
-  const locked = useSyncStatus().locked
-  // без входа данные компании не показываем и не напоминаем по ним
+  const sync = useSyncStatus()
+  // без входа заказы не показываем и не напоминаем по ним: первая страница — вход и регистрация
+  const locked = !sync.connected || sync.locked
   useReminderService(locked ? NO_ORDERS : orders, openOrder)
 
   // Черновик создаём только при входе на #/new, а не пока маршрут ещё не сменился после «назад».
@@ -58,8 +60,7 @@ export default function App() {
     if (route === '/new' && !draft) setDraft(newOrder())
   }
 
-  // сессию закрыли или вышли — на этом устройстве только экран входа
-  if (locked) return <Sync />
+  if (locked) return <Welcome />
 
   if (route === '/new') {
     if (!draft) return null

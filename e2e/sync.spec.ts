@@ -55,8 +55,10 @@ test('неверный пароль: вход не проходит, понят�
 })
 
 test('тариф: экран показывает Pro, использование и что входит; без входа — подсказка', async ({ browser, page }) => {
+  // без входа любая страница — вход и регистрация
   await page.goto('/#/plan')
-  await expect(page.getByText(/Подключитесь к серверу/)).toBeVisible()
+  await expect(page.getByRole('button', { name: 'Войти', exact: true })).toBeVisible()
+  await expect(page.getByRole('heading', { name: 'Windauto' })).toBeVisible()
   const a = await phone(browser)
   await a.goto('/#/plan')
   await expect(a.getByText('Pro включён владельцем сервиса')).toBeVisible()

@@ -1,7 +1,13 @@
-// Заказ на телефоне без сервера: создать, отметить работы, найти, пережить перезагрузку, сделать PDF
+// Заказ: создать, отметить работы, найти, пережить перезагрузку, сделать PDF (после входа — без него только вход)
 import { expect, test } from '@playwright/test'
 import { readFileSync } from 'node:fs'
-import { createOrder } from './helpers'
+import { connect, createOrder } from './helpers'
+
+test.beforeEach(async ({ page }) => {
+  page.on('dialog', (d) => void d.accept())
+  await connect(page)
+  await expect(page.getByText('admin', { exact: false }).first()).toBeVisible()
+})
 
 test('новый заказ сохраняется и виден в списке после перезагрузки', async ({ page }) => {
   await createOrder(page, { plate: 'WA 12345', make: 'Škoda', client: 'Jan Kowalski', phone: '600100200' })
@@ -41,6 +47,8 @@ test('поиск по номеру и клиенту', async ({ page }) => {
 
 test('документ приёмки: PDF готовится и скачивается', async ({ page }) => {
   await createOrder(page, { plate: 'WE 55555', make: 'Toyota', client: 'Ewa Zielińska' })
+  // номер выдаёт сервер — PDF делаем уже с ним (заказ с новым номером сбросил бы готовый PDF)
+  await expect(page.locator('.order-no')).toContainText(/\d{4}\/\d{4}/, { timeout: 15_000 })
   await page.getByRole('button', { name: 'Отправить', exact: true }).click()
   const sheet = page.getByRole('dialog')
   // первое нажатие готовит PDF, дальше — отправить или скачать

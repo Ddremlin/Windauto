@@ -421,7 +421,16 @@ function clearLocalData() {
  * Вход. Если на телефоне заказы другой компании, спрашиваем (confirmSwitch) и убираем их,
  * иначе они уехали бы в новую компанию.
  */
-export async function connect(server: string, login: string, password: string, confirmSwitch: (from: string) => boolean = () => true) {
+// заказы на устройстве без аккаунта (из версий, где можно было работать без входа): перенести в компанию или убрать
+export type LocalChoice = 'upload' | 'delete' | 'cancel'
+
+export async function connect(
+  server: string,
+  login: string,
+  password: string,
+  confirmSwitch: (from: string) => boolean = () => true,
+  askLocal: (n: number) => LocalChoice = () => 'upload',
+) {
   const url = normalizeServer(server)
   const res = await api<{ token: string; user: SyncUser }>(
     '/api/login',
@@ -437,6 +446,13 @@ export async function connect(server: string, login: string, password: string, c
       return false
     }
     clearLocalData()
+  } else if (!prev && getOrders().length) {
+    const choice = askLocal(getOrders().length)
+    if (choice === 'cancel') {
+      await api('/api/logout', { method: 'POST' }, url, res.token).catch(() => {})
+      return false
+    }
+    if (choice === 'delete') clearLocalData()
   }
   if (orgId) setDataOrg(orgId)
   // всё, что уже есть на телефоне, отправляем на сервер

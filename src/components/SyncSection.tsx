@@ -167,7 +167,13 @@ function AuthPanel() {
 
   const doLogin = () =>
     run(async () => {
-      const ok = await connect(server, login, password, () => confirm(t('auth.switchOrg')))
+      const ok = await connect(
+        server,
+        login,
+        password,
+        () => confirm(t('auth.switchOrg')),
+        (n) => (confirm(t('auth.localMove', { n })) ? 'upload' : confirm(t('auth.localDelete', { n })) ? 'delete' : 'cancel'),
+      )
       if (ok) setPassword('')
     })
 
@@ -278,7 +284,7 @@ function AuthPanel() {
 
   return (
     <section className="panel">
-      <h2>☁ {t('sync.title')}</h2>
+      <h2>{t('auth.loginTitle')}</h2>
       {st.locked && <p className="notice">🔒 {t('lock.text')}</p>}
       <p className="hint">{st.authError ? t('sync.authError') : t('sync.hint')}</p>
       {sentTo && <p className="notice">{t('auth.checkMail', { email: sentTo })}</p>}
