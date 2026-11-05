@@ -170,3 +170,36 @@ test('внутренняя сторона детали: отдельный эл�
   assert.equal(partName(t, l.parts[i + 1]), 'Дверь передняя левая — изнутри')
   assert.equal(partName(t, l.parts[i]), 'Дверь передняя левая')
 })
+
+test('календарь «Ремонт»: полоска от приёмки до срока, цвет к сроку, ряды в неделе', async () => {
+  const { orderSpan, spanColor, weekSegments, spansOn } = await import('../src/calendarSpans.ts')
+  const base = { id: 'a', status: 'in_work', createdAt: Date.parse('2026-11-02T10:00'), updatedAt: 1, signatures: {}, dueDate: '2026-11-12' } as unknown as Order
+  const a = orderSpan(base, '2026-11-07')
+  assert.deepEqual([a.start, a.end, a.state, a.left], ['2026-11-02', '2026-11-12', 'active', 5])
+  assert.equal(a.ratio, 0.5)
+  // половина пути — жёлтая; за 2 дня до срока — красно-оранжевая, хоть путь только начат
+  assert.equal(spanColor(a), 'hsl(60 70% 42%)')
+  assert.equal(spanColor(orderSpan({ ...base, createdAt: Date.parse('2026-11-27T10:00'), dueDate: '2026-11-30' }, '2026-11-28')), 'hsl(34 70% 42%)')
+  // только приняли, срок через 2 недели — зелёная
+  assert.equal(spanColor(orderSpan({ ...base, dueDate: '2026-11-20' }, '2026-11-02')), 'hsl(120 70% 42%)')
+  // срок прошёл — до сегодня и тёмно-красная
+  const late = orderSpan(base, '2026-11-15')
+  assert.deepEqual([late.end, late.state, late.left], ['2026-11-15', 'overdue', -3])
+  // выдана по подписи
+  const issued = orderSpan({ ...base, status: 'issued', signatures: { issueClient: { img: '', at: Date.parse('2026-11-10T15:00') } } } as Order, '2026-11-20')
+  assert.deepEqual([issued.end, issued.state], ['2026-11-10', 'issued'])
+  // без срока — до сегодня
+  const open = orderSpan({ ...base, dueDate: '' }, '2026-11-05')
+  assert.deepEqual([open.end, open.open], ['2026-11-05', true])
+
+  // неделя с понедельника 2026-11-09: две пересекающиеся — в разных рядах, третья встаёт в свободный
+  const b = orderSpan({ ...base, id: 'b', createdAt: Date.parse('2026-11-10T09:00'), dueDate: '2026-11-11' } as Order, '2026-11-07')
+  const c = orderSpan({ ...base, id: 'c', createdAt: Date.parse('2026-11-13T09:00'), dueDate: '2026-11-20' } as Order, '2026-11-07')
+  const w = weekSegments([c, b, a], '2026-11-09')
+  assert.equal(w.lanes, 2)
+  const by = Object.fromEntries(w.segments.map((g) => [g.span.order.id, g]))
+  assert.deepEqual([by.a.col0, by.a.col1, by.a.lane, by.a.head, by.a.tail], [0, 3, 0, false, true])
+  assert.deepEqual([by.b.col0, by.b.col1, by.b.lane], [1, 2, 1])
+  assert.deepEqual([by.c.col0, by.c.col1, by.c.lane, by.c.tail], [4, 6, 0, false])
+  assert.deepEqual(spansOn([a, b, c], '2026-11-11').map((s) => s.order.id), ['b', 'a'])
+})

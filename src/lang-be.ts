@@ -690,6 +690,12 @@ export const be: Record<string, string> = {
   // каляндар
   'cal.byDue': 'Тэрмін гатоўнасці',
   'cal.byCreated': 'Прыёмка',
+  'cal.bySpan': "Рамонт",
+  'span.left': "засталося {n} дз.",
+  'span.today': "тэрмін сёння",
+  'span.late': "пратэрмінавана на {n} дз.",
+  'span.noDue': "без тэрміну",
+  'cal.spanLegend': "Палоска — ад прыёму да тэрміну; зялёная ў пачатку рамонту, чырванее да тэрміну.",
   'cal.today': 'Сёння',
   'cal.prev': 'Папярэдні месяц',
   'cal.next': 'Наступны месяц',

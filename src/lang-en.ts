@@ -690,6 +690,12 @@ export const en: Record<string, string> = {
   // calendar
   'cal.byDue': 'Due date',
   'cal.byCreated': 'Intake',
+  'cal.bySpan': "Repair",
+  'span.left': "{n} d left",
+  'span.today': "due today",
+  'span.late': "{n} d overdue",
+  'span.noDue': "no due date",
+  'cal.spanLegend': "Bar — from intake to the due date; green at the start, turns red as the due date nears.",
   'cal.today': 'Today',
   'cal.prev': 'Previous month',
   'cal.next': 'Next month',

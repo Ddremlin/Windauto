@@ -1,5 +1,6 @@
 import { useMemo, useState } from 'react'
 import { calendarAt, isLate, isPlanned, timeText } from '../booking'
+import { orderSpan, spanColor, spansOn, weekSegments, type Span } from '../calendarSpans'
 import { orderNo } from '../docNumber'
 import TopBar from '../components/TopBar'
 import { useSettings } from '../settingsHooks'
@@ -14,7 +15,11 @@ interface Props {
   onPlan: (day: string) => void
 }
 
-type Mode = 'due' | 'created'
+// span — полоски «в ремонте» от приёмки до срока
+type Mode = 'span' | 'due' | 'created'
+const MODES: Mode[] = ['span', 'due', 'created']
+// рядов полосок в неделе; остальные — «+n» в дне
+const LANES = 4
 const MODE_KEY = 'windauto.calMode'
 const HIDDEN_KEY = 'windauto.calHidden'
 // точек в клетке дня; остальные — «+n»
@@ -25,9 +30,10 @@ const dayKey = (d: Date) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d
 
 function loadMode(): Mode {
   try {
-    return localStorage.getItem(MODE_KEY) === 'created' ? 'created' : 'due'
+    const m = localStorage.getItem(MODE_KEY) as Mode | null
+    return m && MODES.includes(m) ? m : 'span'
   } catch {
-    return 'due'
+    return 'span'
   }
 }
 
@@ -89,6 +95,8 @@ export default function Calendar({ orders, onOpen, onPlan }: Props) {
     return map
   }, [visible, mode])
 
+  const spans = useMemo(() => (mode === 'span' ? visible.map((o) => orderSpan(o, today)) : []), [visible, mode, today])
+
   const noDue = mode === 'due' ? visible.filter((o) => !o.dueDate && o.status !== 'issued') : []
 
   // сетка месяца с понедельника, 6 недель не нужны — сколько займёт
@@ -116,16 +124,29 @@ export default function Calendar({ orders, onOpen, onPlan }: Props) {
   // без «г.» в русском: «Октябрь 2026»
   const title = `${month.toLocaleDateString(locale, { month: 'long' })} ${month.getFullYear()}`
   const dayList = selected === 'nodue' ? noDue : selected ? (byDay.get(selected) ?? []) : []
+  const daySpans = mode === 'span' && selected && selected !== 'nodue' ? spansOn(spans, selected) : []
+  const leftText = (s: Span) =>
+    s.state === 'issued'
+      ? t('status.issued')
+      : s.state === 'planned'
+        ? t('book.status')
+        : s.left === null
+          ? t('span.noDue')
+          : s.left < 0
+            ? t('span.late', { n: -s.left })
+            : s.left === 0
+              ? t('span.today')
+              : t('span.left', { n: s.left })
   const carOf = (o: Order) => [o.make, o.model].filter(Boolean).join(' ')
 
   return (
     <div className="screen">
       <TopBar current="calendar" />
       <main className="content">
-        <div className="seg-row two">
-          {(['due', 'created'] as Mode[]).map((m) => (
+        <div className="seg-row">
+          {MODES.map((m) => (
             <button key={m} className={'seg' + (mode === m ? ' active' : '')} onClick={() => setMode(m)}>
-              {t(m === 'due' ? 'cal.byDue' : 'cal.byCreated')}
+              {t(m === 'span' ? 'cal.bySpan' : m === 'due' ? 'cal.byDue' : 'cal.byCreated')}
             </button>
           ))}
         </div>
@@ -136,6 +157,9 @@ export default function Calendar({ orders, onOpen, onPlan }: Props) {
             <h2 className="cal-title">{title}</h2>
             <button className="icon-btn" aria-label={t('cal.next')} onClick={() => shiftMonth(1)}>›</button>
           </div>
+          {mode === 'span' ? (
+            <SpanGrid cells={cells} month={month} today={today} selected={selected} onSelect={setSelected} spans={spans} weekdays={weekdays} />
+          ) : (
           <div className="cal-grid" role="grid">
             {weekdays.map((w, i) => (
               <span key={i} className={'cal-wd' + (i >= 5 ? ' weekend' : '')}>{w}</span>
@@ -172,6 +196,7 @@ export default function Calendar({ orders, onOpen, onPlan }: Props) {
               )
             })}
           </div>
+          )}
           <div className="cal-foot">
             <button className="btn small" onClick={goToday}>{t('cal.today')}</button>
             {noDue.length > 0 && (
@@ -194,7 +219,7 @@ export default function Calendar({ orders, onOpen, onPlan }: Props) {
             </button>
           ))}
         </div>
-        <p className="hint">{t('cal.legend')} {t('book.legend')}</p>
+        <p className="hint">{mode === 'span' ? t('cal.spanLegend') : `${t('cal.legend')} ${t('book.legend')}`}</p>
 
         {selected && (
           <section className="panel">
@@ -208,7 +233,34 @@ export default function Calendar({ orders, onOpen, onPlan }: Props) {
                 <button className="btn small primary" onClick={() => onPlan(selected)}>📅 {t('book.add')}</button>
               )}
             </div>
-            {dayList.length === 0 ? (
+            {mode === 'span' ? (
+              daySpans.length === 0 ? (
+                <p className="muted">{t('cal.none')}</p>
+              ) : (
+                <ul className="plain-list cal-orders">
+                  {daySpans.map((sp) => {
+                    const o = sp.order
+                    return (
+                      <li key={o.id}>
+                        <button className={'cal-order' + (sp.state === 'planned' ? ' planned' : '')} onClick={() => onOpen(o.id)}>
+                          <span className="cal-bar" style={{ background: spanColor(sp) }} />
+                          <span className="cal-order-text">
+                            <b>{o.plate ? formatPlate(o.plate, o.plateCountry) : carOf(o) || t('list.noPlate')}</b>
+                            <small className="muted">
+                              {[spanDates(sp, locale), o.plate && carOf(o), o.client, o.assignee && `👷 ${o.assignee}`].filter(Boolean).join(' · ')}
+                            </small>
+                          </span>
+                          <span className="status span-left" style={{ color: spanColor(sp), borderColor: spanColor(sp) }}>
+                            {sp.state === 'overdue' ? '⚠ ' : ''}
+                            {leftText(sp)}
+                          </span>
+                        </button>
+                      </li>
+                    )
+                  })}
+                </ul>
+              )
+            ) : dayList.length === 0 ? (
               <p className="muted">{t('cal.none')}</p>
             ) : (
               <ul className="plain-list cal-orders">
@@ -242,6 +294,84 @@ export default function Calendar({ orders, onOpen, onPlan }: Props) {
           </section>
         )}
       </main>
+    </div>
+  )
+}
+
+const shortDate = (d: string, locale: string) => new Date(d + 'T12:00').toLocaleDateString(locale, { day: 'numeric', month: 'short' })
+const spanDates = (s: Span, locale: string) => `${shortDate(s.start, locale)} – ${s.open ? '…' : shortDate(s.end, locale)}`
+
+interface GridProps {
+  cells: Date[]
+  month: Date
+  today: string
+  selected: string | null
+  onSelect: (day: string) => void
+  spans: Span[]
+  weekdays: string[]
+}
+
+// Месяц по неделям: в каждой неделе — клетки дней и поверх них полоски машин в ремонте
+function SpanGrid({ cells, month, today, selected, onSelect, spans, weekdays }: GridProps) {
+  const { locale } = useSettings()
+  const weeks = Array.from({ length: cells.length / 7 }, (_, i) => cells.slice(i * 7, i * 7 + 7))
+  return (
+    <div className="span-cal" role="grid">
+      <div className="span-wds">
+        {weekdays.map((w, i) => (
+          <span key={i} className={'cal-wd' + (i >= 5 ? ' weekend' : '')}>{w}</span>
+        ))}
+      </div>
+      {weeks.map((week) => {
+        const first = dayKey(week[0])
+        const { segments, lanes } = weekSegments(spans, first)
+        const shown = Math.min(lanes, LANES)
+        return (
+          <div key={first} className="span-week" style={{ '--lanes': shown } as React.CSSProperties}>
+            {week.map((d, col) => {
+              const k = dayKey(d)
+              const count = segments.filter((g) => g.col0 <= col && g.col1 >= col).length
+              const more = segments.filter((g) => g.lane >= LANES && g.col0 <= col && g.col1 >= col).length
+              return (
+                <button
+                  key={k}
+                  role="gridcell"
+                  aria-selected={selected === k}
+                  aria-label={`${d.toLocaleDateString(locale, { day: 'numeric', month: 'long' })}: ${count}`}
+                  className={
+                    'cal-day span-day' +
+                    (d.getMonth() !== month.getMonth() ? ' other' : '') +
+                    (k === today ? ' today' : '') +
+                    (selected === k ? ' selected' : '') +
+                    (col >= 5 ? ' weekend' : '')
+                  }
+                  onClick={() => onSelect(k)}
+                >
+                  <span className="cal-num">{d.getDate()}</span>
+                  {more > 0 && <span className="cal-more span-more">+{more}</span>}
+                </button>
+              )
+            })}
+            {segments
+              .filter((g) => g.lane < LANES)
+              .map((g) => {
+                const o = g.span.order
+                const label = o.plate ? formatPlate(o.plate, o.plateCountry) : [o.make, o.model].filter(Boolean).join(' ') || '—'
+                return (
+                  <span
+                    key={o.id}
+                    className={'span-bar' + (g.head ? ' head' : '') + (g.tail && !g.span.open ? ' tail' : '') + ` st-${g.span.state}`}
+                    style={{ '--c0': g.col0, '--c1': g.col1, '--lane': g.lane, '--color': spanColor(g.span) } as React.CSSProperties}
+                    title={`${label}: ${spanDates(g.span, locale)}`}
+                    aria-hidden
+                  >
+                    {(g.head || g.col0 === 0) && <span className="span-label">{label}</span>}
+                  </span>
+                )
+              })}
+          </div>
+        )
+      })}
     </div>
   )
 }
