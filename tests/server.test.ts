@@ -188,6 +188,30 @@ test('круговое видео: загрузка, Range, неверный id 
   assert.equal((await fetch(`${URL_}/api/videos/${id}`)).status, 401)
 })
 
+test('оборванная телефоном загрузка видео — не ошибка сервера и без мусора', async () => {
+  const { request } = await import('node:http')
+  const id = 'abcdef12-0000.mp4'
+  await new Promise<void>((resolve) => {
+    const req = request(`${URL_}/api/videos/${id}`, {
+      method: 'PUT',
+      headers: { Authorization: `Bearer ${staff}`, 'Content-Type': 'video/mp4', 'Content-Length': '100000' },
+    })
+    req.on('error', () => resolve())
+    req.write(new Uint8Array(1000))
+    setTimeout(() => {
+      req.destroy()
+      resolve()
+    }, 200)
+  })
+  await new Promise((r) => setTimeout(r, 300))
+  const { DatabaseSync } = await import('node:sqlite')
+  const acc = new DatabaseSync(join(dir, 'accounts.db'), { readOnly: true })
+  const n = acc.prepare("SELECT count(*) AS n FROM client_errors WHERE place LIKE 'PUT /api/videos/%'").get() as { n: number }
+  acc.close()
+  assert.equal(n.n, 0)
+  assert.equal((await fetch(`${URL_}/api/videos/${id}`, { headers: { Authorization: `Bearer ${admin}` } })).status, 404)
+})
+
 // --- компании, регистрация, письма ---
 // последняя ссылка из письма на этот адрес (письма пишутся в MAIL_OUTBOX)
 function mailLink(to: string) {

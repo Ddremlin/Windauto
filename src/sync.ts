@@ -251,7 +251,14 @@ export async function syncNow(): Promise<void> {
       if (state.uploaded[id]) continue
       const blob = await getLocalVideo(id)
       if (!blob) continue
-      await api(`/api/videos/${encodeURIComponent(id)}`, { method: 'PUT', body: blob, headers: { 'Content-Type': videoType(id) } })
+      try {
+        await api(`/api/videos/${encodeURIComponent(id)}`, { method: 'PUT', body: blob, headers: { 'Content-Type': videoType(id) } })
+      } catch (e) {
+        // видео не загрузилось (сеть, место) — не мешаем отправить правки заказов, догрузим в следующий раз
+        if (e instanceof ApiError && e.status === 401) throw e
+        if (e instanceof ApiError && e.status === 507) setStatus({ mediaFull: true })
+        continue
+      }
       state.uploaded[id] = true
       persist()
     }

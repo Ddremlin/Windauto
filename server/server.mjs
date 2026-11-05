@@ -1912,6 +1912,12 @@ const server = createServer(async (req, res) => {
     }
     await dynamicRoute(req, res, url)
   } catch (e) {
+    // телефон оборвал загрузку (пропала сеть, приложение свернули) — не ошибка сервера, загрузит заново
+    if (req.aborted || e?.code === 'ECONNRESET' || e?.message === 'aborted') {
+      log('загрузка оборвана телефоном', req.method, url.pathname)
+      if (!res.headersSent && !res.destroyed) res.destroy()
+      return
+    }
     const status = e instanceof HttpError ? e.status : 500
     if (status === 500) {
       log('ошибка', req.method, url.pathname, e)
@@ -1928,6 +1934,8 @@ const server = createServer(async (req, res) => {
   }
 })
 
+// видео до 300 МБ с телефона по мобильной сети грузится дольше стандартных 5 минут
+server.requestTimeout = 30 * 60_000
 server.listen(PORT, () => log(`Windauto server :${PORT}, data=${DATA}, origins=${ORIGINS.join(' ')}`))
 
 for (const sig of ['SIGINT', 'SIGTERM'])
