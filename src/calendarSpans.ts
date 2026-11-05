@@ -67,6 +67,23 @@ export function spanColor(s: Span): string {
   return `hsl(${Math.round(120 * (1 - Math.min(1, urgency)))} 70% 42%)`
 }
 
+/** Цвет линии в конкретный день: от зелёного в день приёмки до красного в день выдачи */
+export function dayColor(s: Span, day: string): string {
+  if (s.state === 'issued') return 'hsl(30 8% 62%)'
+  const due = s.order.dueDate
+  if (!due) return 'hsl(35 25% 55%)'
+  if (day > due) return 'hsl(0 75% 38%)'
+  const f = Math.min(1, Math.max(0, daysBetween(s.start, day) / Math.max(1, daysBetween(s.start, due))))
+  return `hsl(${Math.round(120 * (1 - f))} 70% 45%)`
+}
+
+/** Фон куска линии в неделе: цвет по каждому дню, переходы плавные */
+export function segmentBackground(g: Segment, first: string): string {
+  const n = g.col1 - g.col0 + 1
+  const stops = Array.from({ length: n }, (_, i) => `${dayColor(g.span, addDays(first, g.col0 + i))} ${(((i + 0.5) / n) * 100).toFixed(1)}%`)
+  return n === 1 ? dayColor(g.span, addDays(first, g.col0)) : `linear-gradient(to right, ${stops.join(', ')})`
+}
+
 export interface Segment {
   span: Span
   // столбцы недели 0–6 включительно

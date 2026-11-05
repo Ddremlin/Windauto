@@ -203,3 +203,19 @@ test('календарь «Ремонт»: полоска от приёмки д
   assert.deepEqual([by.c.col0, by.c.col1, by.c.lane, by.c.tail], [4, 6, 0, false])
   assert.deepEqual(spansOn([a, b, c], '2026-11-11').map((s) => s.order.id), ['b', 'a'])
 })
+
+test('календарь «Ремонт»: линия зелёная в день приёмки и красная в день выдачи', async () => {
+  const { orderSpan, dayColor, weekSegments, segmentBackground } = await import('../src/calendarSpans.ts')
+  const o = { id: 'a', status: 'in_work', createdAt: Date.parse('2026-11-02T10:00'), updatedAt: 1, signatures: {}, dueDate: '2026-11-09' } as unknown as Order
+  const s = orderSpan(o, '2026-11-05')
+  assert.equal(dayColor(s, '2026-11-02'), 'hsl(120 70% 45%)')
+  assert.equal(dayColor(s, '2026-11-09'), 'hsl(0 70% 45%)')
+  assert.equal(dayColor(s, '2026-11-10'), 'hsl(0 75% 38%)')
+  // неделя 2–8 ноября: линия с понедельника до воскресенья, 7 точек цвета; продолжение — в следующей неделе
+  const [g] = weekSegments([s], '2026-11-02').segments
+  const bg = segmentBackground(g, '2026-11-02')
+  assert.ok(bg.startsWith('linear-gradient(to right, hsl(120 70% 45%) 7.1%'))
+  assert.equal(bg.split('hsl(').length - 1, 7)
+  const [g2] = weekSegments([s], '2026-11-09').segments
+  assert.equal(segmentBackground(g2, '2026-11-09'), 'hsl(0 70% 45%)')
+})

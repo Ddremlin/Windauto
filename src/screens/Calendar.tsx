@@ -1,6 +1,6 @@
 import { useMemo, useState } from 'react'
 import { calendarAt, isLate, isPlanned, timeText } from '../booking'
-import { orderSpan, spanColor, spansOn, weekSegments, type Span } from '../calendarSpans'
+import { orderSpan, segmentBackground, spanColor, spansOn, weekSegments, type Span } from '../calendarSpans'
 import { orderNo } from '../docNumber'
 import TopBar from '../components/TopBar'
 import { useSettings } from '../settingsHooks'
@@ -18,8 +18,8 @@ interface Props {
 // span — полоски «в ремонте» от приёмки до срока
 type Mode = 'span' | 'due' | 'created'
 const MODES: Mode[] = ['span', 'due', 'created']
-// рядов полосок в неделе; остальные — «+n» в дне
-const LANES = 4
+// линий в неделе; остальные — «+n» в дне
+const LANES = 6
 const MODE_KEY = 'windauto.calMode'
 const HIDDEN_KEY = 'windauto.calHidden'
 // точек в клетке дня; остальные — «+n»
@@ -360,13 +360,11 @@ function SpanGrid({ cells, month, today, selected, onSelect, spans, weekdays }: 
                 return (
                   <span
                     key={o.id}
-                    className={'span-bar' + (g.head ? ' head' : '') + (g.tail && !g.span.open ? ' tail' : '') + ` st-${g.span.state}`}
-                    style={{ '--c0': g.col0, '--c1': g.col1, '--lane': g.lane, '--color': spanColor(g.span) } as React.CSSProperties}
+                    className={'span-bar' + (g.head ? ' head' : '') + (g.tail && !g.span.open ? ' tail' : g.col1 === 6 ? ' edge' : '') + ` st-${g.span.state}`}
+                    style={{ '--c0': g.col0, '--c1': g.col1, '--lane': g.lane, background: segmentBackground(g, first) } as React.CSSProperties}
                     title={`${label}: ${spanDates(g.span, locale)}`}
                     aria-hidden
-                  >
-                    {(g.head || g.col0 === 0) && <span className="span-label">{label}</span>}
-                  </span>
+                  />
                 )
               })}
           </div>

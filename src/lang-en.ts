@@ -695,7 +695,7 @@ export const en: Record<string, string> = {
   'span.today': "due today",
   'span.late': "{n} d overdue",
   'span.noDue': "no due date",
-  'cal.spanLegend': "Bar — from intake to the due date; green at the start, turns red as the due date nears.",
+  'cal.spanLegend': "Line — a car from intake to handover: green on intake day, red by the handover day. Tap a day to list all its cars below.",
   'cal.today': 'Today',
   'cal.prev': 'Previous month',
   'cal.next': 'Next month',

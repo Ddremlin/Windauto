@@ -882,29 +882,27 @@ input:disabled { opacity: 0.6; }
 .welcome-head p { margin: 0 0 6px; }
 .welcome-head .lang-select { max-width: 200px; }
 
-/* календарь «Ремонт»: полоски от приёмки до срока */
+/* календарь «Ремонт»: тонкие линии от приёмки до выдачи, цвет по дням — от зелёного к красному */
 .span-cal { display: flex; flex-direction: column; gap: 3px; }
 .span-wds { display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: 3px; }
 .span-week {
-  --gap: 3px; --top: 30px; --row: 17px;
+  --gap: 3px; --top: 32px; --row: 7px;
   position: relative; display: grid; grid-template-columns: repeat(7, minmax(0, 1fr)); gap: var(--gap);
 }
-.span-day { min-height: calc(var(--top) + var(--lanes, 0) * var(--row) + 6px); justify-content: flex-start; position: relative; }
+.span-day { min-height: calc(var(--top) + var(--lanes, 0) * var(--row) + 8px); justify-content: flex-start; position: relative; }
 .span-day .cal-num { min-height: 24px; }
-.span-more { position: absolute; bottom: 2px; right: 4px; line-height: 1; }
+.span-more { position: absolute; bottom: 1px; right: 4px; line-height: 1; }
+/* линия идёт от середины дня приёмки до середины дня выдачи, через стыки недель — без разрывов */
 .span-bar {
-  position: absolute; pointer-events: none; overflow: hidden; white-space: nowrap;
+  position: absolute; pointer-events: none; height: 4px; border-radius: 0;
   top: calc(var(--top) + var(--lane) * var(--row));
   left: calc(var(--c0) * (100% + var(--gap)) / 7);
-  width: calc((var(--c1) - var(--c0) + 1) * (100% + var(--gap)) / 7 - var(--gap));
-  height: calc(var(--row) - 3px); background: var(--color); color: #fff;
-  font-size: 10px; font-weight: 600; line-height: calc(var(--row) - 3px); padding: 0 4px;
+  width: calc((var(--c1) - var(--c0) + 1) * (100% + var(--gap)) / 7);
 }
-.span-bar.head { border-top-left-radius: 7px; border-bottom-left-radius: 7px; margin-left: 2px; }
-.span-bar.tail { border-top-right-radius: 7px; border-bottom-right-radius: 7px; }
-.span-bar.head.tail { width: calc((var(--c1) - var(--c0) + 1) * (100% + var(--gap)) / 7 - var(--gap) - 4px); }
-.span-bar.head:not(.tail) { width: calc((var(--c1) - var(--c0) + 1) * (100% + var(--gap)) / 7 - var(--gap) - 2px); }
-.span-bar.st-planned { background: transparent; color: var(--color); box-shadow: inset 0 0 0 1.5px var(--color); }
-.span-bar.st-issued { opacity: 0.7; }
-.span-label { overflow: hidden; text-overflow: ellipsis; display: block; }
+.span-bar.head { left: calc(var(--c0) * (100% + var(--gap)) / 7 + 6px); width: calc((var(--c1) - var(--c0) + 1) * (100% + var(--gap)) / 7 - 6px); border-top-left-radius: 2px; border-bottom-left-radius: 2px; }
+.span-bar.tail { width: calc((var(--c1) - var(--c0) + 1) * (100% + var(--gap)) / 7 - var(--gap) - 6px); border-top-right-radius: 2px; border-bottom-right-radius: 2px; }
+.span-bar.head.tail { width: calc((var(--c1) - var(--c0) + 1) * (100% + var(--gap)) / 7 - var(--gap) - 12px); }
+.span-bar.st-planned { opacity: 0.45; }
 .status.span-left { background: transparent; border: 1px solid; white-space: nowrap; }
+.span-bar.edge { width: calc((var(--c1) - var(--c0) + 1) * (100% + var(--gap)) / 7 - var(--gap)); }
+.span-bar.head.edge { width: calc((var(--c1) - var(--c0) + 1) * (100% + var(--gap)) / 7 - var(--gap) - 6px); }

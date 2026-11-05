@@ -17,12 +17,21 @@ test('полоски машин в ремонте и список машин п�
   }
   await page.goto('/#/calendar')
   await page.getByRole('button', { name: 'Ремонт', exact: true }).click()
-  const bars = page.locator('.span-bar', { hasText: /SP 4000/ })
-  await expect(bars.first()).toBeVisible()
-  // ближе к сроку — краснее: у машины со сроком через 2 дня оттенок меньше
-  const hue = async (plate: string) =>
-    Number((await page.locator('.span-bar', { hasText: plate }).first().evaluate((el) => getComputedStyle(el).getPropertyValue('--color'))).match(/hsl\((\d+)/)![1])
-  expect(await hue('SP 40001')).toBeLessThan(await hue('SP 40002'))
+  // у каждой машины — своя линия: в день приёмки зелёная, к дню выдачи красная
+  const colors = async (plate: string) => {
+    const bars = page.locator(`.span-bar[title^="${plate}"]`)
+    await expect(bars.first()).toBeAttached()
+    const all = (await bars.evaluateAll((els) => els.map((el) => getComputedStyle(el).backgroundImage + getComputedStyle(el).backgroundColor)))
+      .join(' ')
+      .match(/rgb\(\d+, \d+, \d+\)/g)!
+      .map((c) => c.match(/\d+/g)!.map(Number))
+    return { first: all.find((c) => c.some((v) => v > 0))!, last: all.findLast((c) => c.some((v) => v > 0))! }
+  }
+  for (const plate of ['SP 40001', 'SP 40002']) {
+    const { first, last } = await colors(plate)
+    expect(first[1]).toBeGreaterThan(first[0]) // зелёный
+    if (plate === 'SP 40001') expect(last[0]).toBeGreaterThan(last[1]) // красный к выдаче
+  }
 
   // сегодня — обе машины в списке
   const list = page.locator('.cal-orders')
