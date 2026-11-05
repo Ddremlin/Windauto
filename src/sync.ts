@@ -58,6 +58,8 @@ export interface SyncStatus {
   authError: boolean
   // бесплатное место на сервере кончилось — новые фото остаются на телефоне
   mediaFull: boolean
+  // на устройстве данные компании, а входа нет (сессию закрыли) — заказы прячем за экраном входа
+  locked: boolean
 }
 
 const KEY = 'windauto.sync.v1'
@@ -94,6 +96,7 @@ function makeStatus(p: StatusPart): SyncStatus {
     online: navigator.onLine,
     lastSyncAt: state.lastSyncAt,
     pending: Object.keys(state.dirty).length + Object.keys(state.deleted).length + (state.sharedDirty ? 1 : 0),
+    locked: Boolean(dataOrg()) && (!state.token || p.authError),
   }
 }
 function setStatus(p: Partial<StatusPart> = {}) {
@@ -388,17 +391,18 @@ function stopLive() {
 
 // --- вход / выход ---
 // какой компании принадлежат заказы на телефоне (запоминаем и после выхода)
-const DATA_ORG_KEY = 'windauto.dataOrg'
-const dataOrg = () => {
+// (функции, а не константы: статус считается при загрузке модуля, раньше этих строк)
+function dataOrg() {
   try {
-    return localStorage.getItem(DATA_ORG_KEY) ?? ''
+    return localStorage.getItem('windauto.dataOrg') ?? ''
   } catch {
     return ''
   }
 }
-const setDataOrg = (id: string) => {
+function setDataOrg(id: string) {
   try {
-    localStorage.setItem(DATA_ORG_KEY, id)
+    if (id) localStorage.setItem('windauto.dataOrg', id)
+    else localStorage.removeItem('windauto.dataOrg')
   } catch {
     /* приватный режим */
   }
@@ -450,14 +454,35 @@ export async function connect(server: string, login: string, password: string, c
   return true
 }
 
-export async function disconnect() {
+/**
+ * Выход: сначала досылаем изменения, потом убираем с устройства заказы, фото и видео компании
+ * (на сервере они остаются) — чтобы после выхода их не видел следующий за этим компьютером.
+ * confirmUnsent — спросить, если что-то так и не ушло (нет связи); false — остаёмся в аккаунте.
+ */
+export async function disconnect(confirmUnsent: (n: number) => boolean = () => true): Promise<boolean> {
+  if (state.token && !status.authError) await syncNow()
+  const unsent = Object.keys(state.dirty).length + Object.keys(state.deleted).length
+  if (unsent && !confirmUnsent(unsent)) return false
   await api('/api/logout', { method: 'POST' }).catch(() => {})
   stopLive()
+  forgetDevice()
+  return true
+}
+
+function forgetDevice() {
+  clearLocalData()
+  setDataOrg('')
   state = { ...EMPTY, server: state.server }
   persist()
   setServerNumbering(false)
   staffCache = []
   setStatus({ error: null, authError: false })
+}
+
+/** С экрана блокировки: войти не получается — стереть данные компании с этого устройства */
+export function wipeDevice() {
+  stopLive()
+  forgetDevice()
 }
 
 /** Выйти на всех остальных устройствах; возвращает, сколько сессий закрыто */
@@ -505,11 +530,7 @@ export const renameOrg = (name: string) => api('/api/org', { method: 'PATCH', bo
 export async function deleteOrg(password: string) {
   await api('/api/org', { method: 'DELETE', body: JSON.stringify({ password }) })
   stopLive()
-  clearLocalData()
-  state = { ...EMPTY, server: state.server }
-  persist()
-  setServerNumbering(false)
-  setStatus({ error: null, authError: false })
+  forgetDevice()
 }
 
 // --- владелец платформы: все компании ---

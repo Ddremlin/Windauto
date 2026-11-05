@@ -31,6 +31,7 @@ import {
   setOrgPro,
   syncNow,
   useSyncStatus,
+  wipeDevice,
   type OrgSummary,
   type SyncUser,
   type TrashItem,
@@ -96,7 +97,10 @@ export default function SyncSection() {
             <button className="btn" disabled={st.syncing} onClick={() => syncNow()}>
               ⟳ {t('sync.now')}
             </button>
-            <button className="btn ghost" onClick={() => confirm(t('sync.logoutConfirm')) && disconnect()}>
+            <button
+              className="btn ghost"
+              onClick={() => confirm(t('sync.logoutConfirm')) && disconnect((n) => confirm(t('sync.logoutUnsent', { n })))}
+            >
               {t('sync.logout')}
             </button>
           </div>
@@ -275,6 +279,7 @@ function AuthPanel() {
   return (
     <section className="panel">
       <h2>☁ {t('sync.title')}</h2>
+      {st.locked && <p className="notice">🔒 {t('lock.text')}</p>}
       <p className="hint">{st.authError ? t('sync.authError') : t('sync.hint')}</p>
       {sentTo && <p className="notice">{t('auth.checkMail', { email: sentTo })}</p>}
       <div className="stack">
@@ -303,6 +308,14 @@ function AuthPanel() {
         {canRegister && (
           <button className="btn" onClick={() => go('register')}>
             ＋ {t('auth.register')}
+          </button>
+        )}
+        {st.locked && (
+          <button
+            className="btn ghost danger"
+            onClick={() => confirm(t(st.pending ? 'lock.wipeUnsent' : 'lock.wipeConfirm', { n: st.pending })) && wipeDevice()}
+          >
+            {t('lock.wipe')}
           </button>
         )}
       </div>

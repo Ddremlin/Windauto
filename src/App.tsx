@@ -17,6 +17,7 @@ import Sync from './screens/Sync'
 import { defaultBookingAt } from './booking'
 import { newOrder, useOrders } from './storage'
 import type { Order } from './types'
+import { useSyncStatus } from './sync'
 
 // Простая навигация через hash: #/ — список, #/order/<id> — заказ, #/new — новый,
 // #/settings, #/stats, #/sync, #/calendar, #/calc, #/import, #/clients, #/client/<ключ>
@@ -39,19 +40,26 @@ function readRoute() {
   return location.hash.replace(/^#/, '') || '/'
 }
 
+const NO_ORDERS: Order[] = []
+
 export default function App() {
   const route = useRoute()
   const { orders, upsert, remove, replaceAll } = useOrders()
   const [draft, setDraft] = useState<Order | null>(() => (readRoute() === '/new' ? newOrder() : null))
   const [draftRoute, setDraftRoute] = useState(readRoute)
   const openOrder = useCallback((id: string) => go(`/order/${id}`), [])
-  useReminderService(orders, openOrder)
+  const locked = useSyncStatus().locked
+  // без входа данные компании не показываем и не напоминаем по ним
+  useReminderService(locked ? NO_ORDERS : orders, openOrder)
 
   // Черновик создаём только при входе на #/new, а не пока маршрут ещё не сменился после «назад».
   if (route !== draftRoute) {
     setDraftRoute(route)
     if (route === '/new' && !draft) setDraft(newOrder())
   }
+
+  // сессию закрыли или вышли — на этом устройстве только экран входа
+  if (locked) return <Sync />
 
   if (route === '/new') {
     if (!draft) return null
