@@ -10,10 +10,15 @@ export interface BodyElement {
   cx: number
   cy: number
   vertical?: boolean
+  // внутренняя сторона детали (id = <id>_in, на схеме не рисуется)
+  inner?: boolean
 }
 
 export interface BodyLayout {
+  // то, что рисуется на схеме
   elements: BodyElement[]
+  // всё, на что можно записать работы: элементы схемы и внутренние стороны (сразу после своей детали)
+  parts: BodyElement[]
   wheels: { cx: number; cy: number }[]
 }
 
@@ -104,9 +109,19 @@ const liftgate = (y: number, h: number, labelY = y + h / 2) => el('liftgate', re
 
 const rearBumper = (y: number) => el('bumper_r', rect(136, y, 128, 36, 16), 200, y + 18)
 
+// Внутренняя сторона — у навесных деталей, которые красят и ремонтируют изнутри отдельно
+const INNER = '_in'
+const HAS_INNER = /^(hood|trunk|liftgate|tailgate|door_|fender_f_|quarter_|bedside_)/
+export const hasInner = (id: string) => !id.endsWith(INNER) && HAS_INNER.test(id)
+export const innerId = (id: string) => id + INNER
+export const isInner = (id: string) => id.endsWith(INNER)
+export const outerId = (id: string) => (isInner(id) ? id.slice(0, -INNER.length) : id)
+
 function build(center: BodyElement[], spec: SideSpec): BodyLayout {
+  const elements = [...front, ...center, ...side('l', spec), ...side('r', spec)]
   return {
-    elements: [...front, ...center, ...side('l', spec), ...side('r', spec)],
+    elements,
+    parts: elements.flatMap((e) => (hasInner(e.id) ? [e, { ...e, id: innerId(e.id), inner: true }] : [e])),
     wheels: [136, spec.rear.archY].flatMap((cy) => [{ cx: 40, cy }, { cx: VIEW_W - 40, cy }]),
   }
 }
@@ -211,3 +226,7 @@ const LAYOUTS: Record<BodyType, BodyLayout> = {
 export function getLayout(type: BodyType | undefined): BodyLayout {
   return LAYOUTS[type ?? 'sedan'] ?? LAYOUTS.sedan
 }
+
+/** Название детали для списков и документов: «Дверь передняя левая — изнутри» */
+export const partName = (t: (k: string) => string, e: Pick<BodyElement, 'key' | 'inner'>) =>
+  t(`el.${e.key}`) + (e.inner ? ` — ${t('el.inner')}` : '')

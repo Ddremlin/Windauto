@@ -49,7 +49,7 @@ export default function Stats({ orders, onOpen }: Props) {
     const [from, to] = range(period)
     const accepted = orders.filter((o) => !isPlanned(o))
     const inPeriod = accepted.filter((o) => intakeAt(o) >= from && intakeAt(o) < to)
-    const totalOf = (o: Order) => orderTotals(o, settings, getLayout(o.bodyType).elements.map((e) => e.id)).gross
+    const totalOf = (o: Order) => orderTotals(o, settings, getLayout(o.bodyType).parts.map((e) => e.id)).gross
     const sum = inPeriod.reduce((s, o) => s + totalOf(o), 0)
     const priced = inPeriod.filter((o) => totalOf(o) > 0)
     const issued = orders.filter((o) => {

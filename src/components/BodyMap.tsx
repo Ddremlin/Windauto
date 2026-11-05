@@ -1,4 +1,4 @@
-import { VIEW_H, VIEW_W, getLayout } from '../body'
+import { VIEW_H, VIEW_W, getLayout, innerId } from '../body'
 import type { BodyType, ElementWork } from '../types'
 import { useT } from '../settingsHooks'
 import { WORK_BY_ID } from '../works'
@@ -97,6 +97,19 @@ export default function BodyMap({ elements, onSelect, selected, bodyType, inline
                 <title>{t('damage.legend')}</title>
               </circle>
             ) : null}
+            {(() => {
+              // работы или повреждения с внутренней стороны — маленький квадрат в углу детали
+              const inner = elements[innerId(e.id)]
+              if (!inner || !(inner.works.length || inner.damage?.length || inner.parts)) return null
+              const color = inner.works.length ? WORK_BY_ID[inner.works[0]].color : inner.damage?.length ? DAMAGE_COLOR : '#888'
+              const x = e.cx + (e.vertical ? -13 : 14)
+              const y = e.cy + (e.vertical ? 12 : -16)
+              return (
+                <rect x={x - 5} y={y - 5} width={10} height={10} rx={2} className="bm-inner" style={{ fill: color, ...(inline ? { stroke: '#fff', strokeWidth: 1.2 } : {}) }}>
+                  <title>{t('el.inner')}</title>
+                </rect>
+              )
+            })()}
             {!inline && elements[e.id]?.note ? <circle cx={e.cx - 5} cy={e.cy + 10} r={2.5} className="bm-note-dot" /> : null}
             {!inline && elements[e.id]?.photos?.length ? (
               <g className="bm-photo" transform={`translate(${e.cx + 1} ${e.cy + 6})`}>

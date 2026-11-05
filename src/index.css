@@ -851,3 +851,9 @@ input:disabled { opacity: 0.6; }
 .booking-strip .late { color: var(--danger); }
 .booking .check-chip { justify-self: start; }
 .booking h3 { margin: 0; font-size: 16px; }
+
+/* внутренняя сторона детали */
+.side-switch { margin: 4px 0 10px; }
+.side-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); margin-left: 6px; vertical-align: middle; }
+.bm-inner { stroke: #fff; stroke-width: 1.2; }
+.swatch.inner-swatch { width: 10px; height: 10px; border-radius: 2px; background: var(--panel); border: 1.5px solid var(--text); }

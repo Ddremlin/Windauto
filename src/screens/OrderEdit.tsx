@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { BODY_TYPES, getLayout } from '../body'
+import { BODY_TYPES, getLayout, hasInner, innerId, isInner, outerId, partName } from '../body'
 import { MAKES, canonMake, canonModel, isKnownModel, modelsOf } from '../cars'
 import AcceptanceNo from '../components/AcceptanceNo'
 import { BookingPanel } from '../components/BookingPanel'
@@ -137,25 +137,25 @@ export default function OrderEdit({ initial, onSave, onDelete, onBack }: Props) 
   if (vinInfo.make && !order.make) vinSuggest.make = vinInfo.make
   if (vinInfo.year && !order.year) vinSuggest.year = String(vinInfo.year)
   const layout = getLayout(order.bodyType)
-  const marked = layout.elements.filter((e) => order.elements[e.id])
+  const marked = layout.parts.filter((e) => order.elements[e.id])
   const withWorks = marked.filter((e) => {
     const v = order.elements[e.id]
     return v.works.length || v.parts || v.note || v.photos?.length || v.photosAfter?.length
   })
   const damaged = marked.filter((e) => order.elements[e.id].damage?.length)
   const totals = orderTotals(order, settings, marked.map((e) => e.id))
-  const sheetEl = sheet ? layout.elements.find((e) => e.id === sheet) : undefined
+  const sheetEl = sheet ? layout.parts.find((e) => e.id === sheet) : undefined
   const usedWorks = WORKS.filter((w) => marked.some((e) => order.elements[e.id].works.includes(w.id)))
   const overdue = order.dueDate && order.status !== 'issued' && order.status !== 'done' && order.dueDate < new Date().toISOString().slice(0, 10)
 
   const changeBody = (b: BodyType) => {
     if (b === order.bodyType) return
-    const ids = new Set(getLayout(b).elements.map((e) => e.id))
+    const ids = new Set(getLayout(b).parts.map((e) => e.id))
     const lost = Object.keys(order.elements).filter((id) => !ids.has(id))
     if (lost.length) {
       const names = lost.map((id) => {
-        const e = layout.elements.find((x) => x.id === id)
-        return e ? t(`el.${e.key}`) : id
+        const e = layout.parts.find((x) => x.id === id)
+        return e ? partName(t, e) : id
       })
       if (!confirm(t('order.bodyLost', { body: t(`body.${b}`), names: names.join(', ') }))) return
     }
@@ -373,7 +373,13 @@ export default function OrderEdit({ initial, onSave, onDelete, onBack }: Props) 
             ))}
           </div>
           <p className="hint no-print">{t('order.bodyHint')}</p>
-          <BodyMap elements={order.elements} onSelect={setSheet} selected={sheet} bodyType={order.bodyType} />
+          <BodyMap
+            elements={order.elements}
+            // снаружи пусто, а изнутри записано — сразу внутреннюю сторону
+            onSelect={(id) => setSheet(!order.elements[id] && order.elements[innerId(id)] ? innerId(id) : id)}
+            selected={sheet && outerId(sheet)}
+            bodyType={order.bodyType}
+          />
           <div className="legend">
             {(usedWorks.length ? usedWorks : WORKS).map((w) => (
               <span key={w.id} className="legend-item">
@@ -385,6 +391,12 @@ export default function OrderEdit({ initial, onSave, onDelete, onBack }: Props) 
               <span className="swatch round" style={{ background: DAMAGE_COLOR }} />
               {t('damage.legend')}
             </span>
+            {marked.some((e) => e.inner) && (
+              <span className="legend-item">
+                <span className="swatch inner-swatch" />
+                {t('map.innerLegend')}
+              </span>
+            )}
           </div>
         </section>
 
@@ -395,7 +407,7 @@ export default function OrderEdit({ initial, onSave, onDelete, onBack }: Props) 
               {damaged.map((e) => (
                 <li key={e.id} onClick={() => setSheet(e.id)}>
                   <div className="ws-title">
-                    <span>{t(`el.${e.key}`)}</span>
+                    <span>{partName(t, e)}</span>
                   </div>
                   <div className="ws-works">
                     {order.elements[e.id].damage!.map((d) => (
@@ -422,7 +434,7 @@ export default function OrderEdit({ initial, onSave, onDelete, onBack }: Props) 
                 return (
                   <li key={e.id} onClick={() => setSheet(e.id)}>
                     <div className="ws-title">
-                      <span>{t(`el.${e.key}`)}</span>
+                      <span>{partName(t, e)}</span>
                       {sum > 0 && <span className="ws-sum">{formatMoney(sum)}</span>}
                     </div>
                     <div className="ws-works">
@@ -511,6 +523,15 @@ export default function OrderEdit({ initial, onSave, onDelete, onBack }: Props) 
         <ElementSheet
           key={sheet}
           label={t(`el.${sheetEl.key}`)}
+          side={
+            hasInner(outerId(sheet))
+              ? {
+                  inner: isInner(sheet),
+                  other: order.elements[isInner(sheet) ? outerId(sheet) : innerId(sheet)],
+                  onSide: (inner) => setSheet(inner ? innerId(outerId(sheet)) : outerId(sheet)),
+                }
+              : undefined
+          }
           value={order.elements[sheet]}
           onChange={(v) => setElement(sheet, v)}
           onClose={() => setSheet(null)}

@@ -2,7 +2,7 @@
 import { flushSync } from 'react-dom'
 import { intakeAt } from './booking'
 import { createRoot } from 'react-dom/client'
-import { getLayout } from './body'
+import { getLayout, partName } from './body'
 import AcceptanceDoc, { DOC_WIDTH, type DocKind } from './components/AcceptanceDoc'
 import { orderNo } from './docNumber'
 import { LOCALE, makeT, type Lang } from './i18n'
@@ -126,7 +126,7 @@ const carName = (o: Order) => [o.make, o.model, o.plate && formatPlate(o.plate, 
 export function orderText(o: Order, lang: Lang, s: Settings): string {
   const t = makeT(lang)
   const layout = getLayout(o.bodyType)
-  const marked = layout.elements.filter((e) => o.elements[e.id]?.works.length || o.elements[e.id]?.parts)
+  const marked = layout.parts.filter((e) => o.elements[e.id]?.works.length || o.elements[e.id]?.parts)
   const lines = [t('doc.textHeader', { car: carName(o) }), t('doc.number', { n: orderNo(o) }), '']
   if (o.vin) lines.push(`VIN: ${o.vin}`)
   for (const e of marked) {
@@ -135,7 +135,7 @@ export function orderText(o: Order, lang: Lang, s: Settings): string {
     const lower = (s: string) => (/^\p{Lu}\p{Ll}/u.test(s) ? s[0].toLowerCase() + s.slice(1) : s)
     const works = [...v.works.map((w) => lower(t(`work.${w}`))), ...(v.parts ? [lower(t('tot.parts'))] : [])].join(', ')
     const sum = elementTotal(v)
-    lines.push(`• ${t(`el.${e.key}`)}: ${works}${sum ? ` — ${formatMoney(sum)}` : ''}`)
+    lines.push(`• ${partName(t, e)}: ${works}${sum ? ` — ${formatMoney(sum)}` : ''}`)
   }
   for (const x of o.extras ?? []) if (x.name.trim()) lines.push(`• ${x.name.trim()}${x.price ? ` — ${formatMoney(x.price)}` : ''}`)
   const tot = orderTotals(o, s, marked.map((e) => e.id))

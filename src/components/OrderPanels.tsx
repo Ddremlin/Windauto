@@ -1,7 +1,7 @@
 // Разделы карточки заказа: состояние при приёмке, согласие RODO, итоги сметы,
 // подписи, история изменений, уведомление «машина готова».
 import { useEffect, useState, type ReactNode } from 'react'
-import { BODY_TYPES, getLayout } from '../body'
+import { BODY_TYPES, getLayout, partName } from '../body'
 import { rodoClause } from '../rodo'
 import { signedDigest } from '../signed'
 import { currencySymbol } from '../settingsStore'
@@ -332,7 +332,7 @@ const FIELD_LABEL: Record<string, string> = {
   consent: 'consent.title',
 }
 
-const ALL_ELEMENTS = new Map(BODY_TYPES.flatMap((b) => getLayout(b).elements.map((e) => [e.id, e.key] as const)))
+const ALL_ELEMENTS = new Map(BODY_TYPES.flatMap((b) => getLayout(b).parts.map((e) => [e.id, e] as const)))
 
 export function HistoryPanel({ orderId }: { orderId: string }) {
   const { t, locale } = useSettings()
@@ -358,8 +358,8 @@ export function HistoryPanel({ orderId }: { orderId: string }) {
 
   const label = (key: string) => {
     if (key.startsWith('el:')) {
-      const k = ALL_ELEMENTS.get(key.slice(3))
-      return k ? t(`el.${k}`) : key.slice(3)
+      const e = ALL_ELEMENTS.get(key.slice(3))
+      return e ? partName(t, e) : key.slice(3)
     }
     if (key.startsWith('sig:')) return t(`sig.${key.slice(4)}`)
     return FIELD_LABEL[key] ? t(FIELD_LABEL[key]) : key

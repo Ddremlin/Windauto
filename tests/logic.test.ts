@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
+import { getLayout, innerId, isInner, outerId, partName } from '../src/body.ts'
 import { calendarAt, defaultBookingAt, intakeAt, isLate, isPlanned } from '../src/booking.ts'
 import { signedDigest } from '../src/signed.ts'
 import type { Order } from '../src/types.ts'
@@ -152,4 +153,20 @@ test('запись на приёмку: время по умолчанию', () 
   assert.equal(defaultBookingAt('2026-03-05', morning), Date.parse('2026-03-05T09:00'))
   const later = Date.parse('2026-03-05T13:20')
   assert.equal(defaultBookingAt('2026-03-05', later), Date.parse('2026-03-05T14:00'))
+})
+
+test('внутренняя сторона детали: отдельный элемент сразу после своей детали, в названии и сумме', () => {
+  const l = getLayout('sedan')
+  const i = l.parts.findIndex((e) => e.id === 'door_f_l')
+  assert.equal(l.parts[i + 1].id, 'door_f_l_in')
+  assert.equal(l.parts[i + 1].inner, true)
+  // на схеме внутренних нет, у стёкол и фар внутренней стороны нет
+  assert.ok(!l.elements.some((e) => e.inner))
+  assert.ok(!l.parts.some((e) => e.id === 'windshield_in' || e.id === 'headlight_l_in'))
+  assert.equal(innerId('hood'), 'hood_in')
+  assert.equal(outerId('hood_in'), 'hood')
+  assert.equal(isInner('hood'), false)
+  const t = (k: string) => ({ 'el.door_f_l': 'Дверь передняя левая', 'el.inner': 'изнутри' })[k] ?? k
+  assert.equal(partName(t, l.parts[i + 1]), 'Дверь передняя левая — изнутри')
+  assert.equal(partName(t, l.parts[i]), 'Дверь передняя левая')
 })

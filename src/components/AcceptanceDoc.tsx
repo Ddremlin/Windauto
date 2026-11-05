@@ -1,6 +1,6 @@
 // Лист приёмки и акт выдачи для клиента — рендерятся вне экрана и снимаются в PDF.
 // Стили простые (без var/color-mix), чтобы html2canvas отрисовал их точно.
-import { getLayout } from '../body'
+import { getLayout, partName } from '../body'
 import { intakeAt } from '../booking'
 import { langOfLocale } from '../i18n'
 import { orderNo } from '../docNumber'
@@ -83,7 +83,7 @@ export default function AcceptanceDoc({ order, photoUrls, kind = 'acceptance' }:
   const pro = isPro()
   const handover = kind === 'handover'
   const layout = getLayout(order.bodyType)
-  const marked = layout.elements.filter((e) => order.elements[e.id])
+  const marked = layout.parts.filter((e) => order.elements[e.id])
   const withWorks = marked.filter((e) => {
     const v = order.elements[e.id]
     return v.works.length || v.parts || (v.note && !v.damage?.length)
@@ -250,6 +250,12 @@ export default function AcceptanceDoc({ order, photoUrls, kind = 'acceptance' }:
                 {t('damage.legend')}
               </div>
             )}
+            {marked.some((e) => e.inner) && (
+              <div>
+                <span className="doc-sw" style={{ background: '#fff', border: '1.5px solid #333', borderRadius: 2, width: 10, height: 10 }} />
+                {t('map.innerLegend')}
+              </div>
+            )}
           </div>
         </div>
       </div>
@@ -262,7 +268,7 @@ export default function AcceptanceDoc({ order, photoUrls, kind = 'acceptance' }:
               {withDamage.map((e) => (
                 <tr key={e.id}>
                   <td style={{ width: '38%' }}>
-                    <b>{t(`el.${e.key}`)}</b>
+                    <b>{partName(t, e)}</b>
                   </td>
                   <td className="doc-damage">{order.elements[e.id].damage!.map((d) => t(`damage.${d}`)).join(', ')}</td>
                 </tr>
@@ -293,7 +299,7 @@ export default function AcceptanceDoc({ order, photoUrls, kind = 'acceptance' }:
                 return (
                   <tr key={e.id} data-block>
                     <td>
-                      <b>{t(`el.${e.key}`)}</b>
+                      <b>{partName(t, e)}</b>
                       {v.note && <div className="doc-note">{v.note}</div>}
                     </td>
                     <td>
@@ -383,7 +389,7 @@ export default function AcceptanceDoc({ order, photoUrls, kind = 'acceptance' }:
       )}
       {photoRows.map((r, i) => (
         <div data-block key={i}>
-          {r.first && <div className="doc-photos-el">{t(`el.${r.el.key}`)}</div>}
+          {r.first && <div className="doc-photos-el">{partName(t, r.el)}</div>}
           {r.label && <div className="doc-photos-label">{r.label}</div>}
           <div className="doc-photos">
             {r.ids.map((id) => (

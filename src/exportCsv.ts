@@ -1,6 +1,6 @@
 // Выгрузка заказов в CSV для Excel и бухгалтерии (Pro): «;» и BOM — так польский/русский Excel
 // открывает файл сразу, без мастера импорта; суммы — с запятой
-import { getLayout } from './body'
+import { getLayout, partName } from './body'
 import { intakeAt } from './booking'
 import { orderNo } from './docNumber'
 import { makeT, type Lang } from './i18n'
@@ -22,11 +22,12 @@ export function ordersCsv(orders: Order[], s: PriceSettings, lang: Lang): string
     t('csv.net'), t('csv.vat'), t('csv.gross'),
   ]
   const rows = orders.map((o) => {
-    const ids = getLayout(o.bodyType).elements.map((e) => e.id)
+    const parts = getLayout(o.bodyType).parts
+    const ids = parts.map((e) => e.id)
     const tot = orderTotals(o, s, ids)
     const works = ids
       .filter((id) => o.elements[id]?.works.length)
-      .map((id) => `${t(`el.${getLayout(o.bodyType).elements.find((e) => e.id === id)?.key ?? id}`)}: ${o.elements[id].works.map((w) => t(`work.${w}`)).join(', ')}`)
+      .map((id) => `${((e) => (e ? partName(t, e) : id))(parts.find((e) => e.id === id))}: ${o.elements[id].works.map((w) => t(`work.${w}`)).join(', ')}`)
       .concat((o.extras ?? []).map((x) => x.name.trim()).filter(Boolean))
       .join(' | ')
     return [

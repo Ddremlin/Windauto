@@ -8,6 +8,8 @@ import { DAMAGES, EXCLUSIVE, WORKS, elementTotal, formatMoney } from '../works'
 
 interface Props {
   label: string
+  // у детали есть внутренняя сторона: какая открыта и что записано на другой
+  side?: { inner: boolean; other: ElementWork | undefined; onSide: (inner: boolean) => void }
   value: ElementWork | undefined
   onChange: (v: ElementWork | undefined) => void
   onClose: () => void
@@ -18,7 +20,7 @@ const parsePrice = (s: string): number | undefined => {
   return s.trim() && Number.isFinite(n) && n >= 0 ? n : undefined
 }
 
-export default function ElementSheet({ label, value, onChange, onClose }: Props) {
+export default function ElementSheet({ label, side, value, onChange, onClose }: Props) {
   const { t, settings } = useSettings()
   const works = value?.works ?? []
   const prices = value?.prices ?? {}
@@ -90,6 +92,20 @@ export default function ElementSheet({ label, value, onChange, onClose }: Props)
       <div className="sheet" onClick={(e) => e.stopPropagation()} role="dialog" aria-label={label}>
         <div className="sheet-handle" />
         <h2>{label}</h2>
+        {side && (
+          <div className="seg-row two side-switch" role="tablist">
+            {[false, true].map((inner) => {
+              // на другой стороне что-то записано — точка на её кнопке
+              const filled = inner !== side.inner && Boolean(side.other)
+              return (
+                <button key={String(inner)} role="tab" aria-selected={side.inner === inner} className={'seg' + (side.inner === inner ? ' active' : '')} onClick={() => side.onSide(inner)}>
+                  {t(inner ? 'sheet.inner' : 'sheet.outer')}
+                  {filled && <span className="side-dot" />}
+                </button>
+              )
+            })}
+          </div>
+        )}
         <div className="work-list">
           {WORKS.map((w) => {
             const on = works.includes(w.id)

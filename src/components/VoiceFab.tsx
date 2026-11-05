@@ -2,7 +2,7 @@
 // Курсор в текстовом поле — диктовка в это поле. Курсора нет — ИИ разбирает сказанное
 // и после подтверждения заполняет заказ: авто, клиента, повреждения и работы по элементам.
 import { useEffect, useRef, useState } from 'react'
-import { getLayout } from '../body'
+import { getLayout, partName } from '../body'
 import { useSettings } from '../settingsHooks'
 import { currencySymbol } from '../settingsStore'
 import { canRecognize, isConnected, parseVoice } from '../sync'
@@ -95,11 +95,11 @@ export default function VoiceFab({ order, onApply }: { order: Order; onApply: (p
     setPhase({ step: 'parse' })
     try {
       const r = await parseVoice(said, {
-        elements: layout.elements.map((e) => ({ id: e.id, name: t(`el.${e.key}`) })),
+        elements: layout.parts.map((e) => ({ id: e.id, name: partName(t, e) })),
         works: WORKS.map((w) => ({ id: w.id, name: t(`work.${w.id}`) })),
         damages: DAMAGES.map((d) => ({ id: d, name: t(`damage.${d}`) })),
       })
-      const { patch, changes } = applyVoice(order, r, new Set(layout.elements.map((e) => e.id)), settings.defaultPrices)
+      const { patch, changes } = applyVoice(order, r, new Set(layout.parts.map((e) => e.id)), settings.defaultPrices)
       if (!changes.length) {
         setError(t('voice.nothing'))
         return setPhase({ step: 'listen', mode: 'ai' })
@@ -134,7 +134,7 @@ export default function VoiceFab({ order, onApply }: { order: Order; onApply: (p
     close()
   }
 
-  const elKey = (id: string) => layout.elements.find((e) => e.id === id)?.key ?? id
+  const elName = (id: string) => ((e) => (e ? partName(t, e) : id))(layout.parts.find((e) => e.id === id))
   const changeRow = (c: VoiceChange, i: number) =>
     c.kind === 'field' ? (
       <li key={i}>
@@ -146,7 +146,7 @@ export default function VoiceFab({ order, onApply }: { order: Order; onApply: (p
       </li>
     ) : (
       <li key={i}>
-        <b>{t(`el.${elKey(c.id)}`)}</b>
+        <b>{elName(c.id)}</b>
         <span>
           {[
             ...c.works.map((w) => t(`work.${w}`)),

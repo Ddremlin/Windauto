@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { getLayout } from '../body'
+import { getLayout, partName } from '../body'
 import { PlateBadge } from '../components/Plate'
 import TopBar from '../components/TopBar'
 import { useSettings } from '../settingsHooks'
@@ -91,11 +91,11 @@ export default function Import({ onCreate }: Props) {
     const base = newOrder()
     const layout = getLayout(base.bodyType)
     const lists = {
-      elements: layout.elements.map((e) => ({ id: e.id, name: t(`el.${e.key}`) })),
+      elements: layout.parts.map((e) => ({ id: e.id, name: partName(t, e) })),
       works: WORKS.map((w) => ({ id: w.id, name: t(`work.${w.id}`) })),
       damages: DAMAGES.map((d) => ({ id: d, name: t(`damage.${d}`) })),
     }
-    const ids = new Set(layout.elements.map((e) => e.id))
+    const ids = new Set(layout.parts.map((e) => e.id))
     let ai = useAi && canRecognize()
     const out: Item[] = []
     for (const b of blocks) {
