@@ -112,16 +112,17 @@ async function renderPdf(mount: (host: HTMLElement) => () => void, breakAt = '[d
 
 export const sharePdf = (blob: Blob, name: string, title: string) => shareFiles([{ blob, name }], title)
 
-/** Файлы через системное меню «Поделиться»; где его нет — скачиваются */
-export async function shareFiles(files: { blob: Blob; name: string }[], title: string): Promise<'shared' | 'downloaded'> {
+/** Файлы (и текст сообщения к ним) через системное меню «Поделиться»; где его нет — файлы скачиваются */
+export async function shareFiles(files: { blob: Blob; name: string }[], title: string, text?: string): Promise<'shared' | 'downloaded'> {
   if (isNative) {
-    await shareFilesNative(files, title)
+    await shareFilesNative(files, title, text)
     return 'shared'
   }
   const list = files.map((f) => new File([f.blob], f.name, { type: f.blob.type || 'application/octet-stream' }))
-  if (navigator.canShare?.({ files: list })) {
+  const data: ShareData = { files: list, title, ...(text ? { text } : {}) }
+  if (navigator.canShare?.(data)) {
     try {
-      await navigator.share({ files: list, title })
+      await navigator.share(data)
       return 'shared'
     } catch (e) {
       if ((e as Error).name === 'AbortError') return 'shared'

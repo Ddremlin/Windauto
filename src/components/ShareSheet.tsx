@@ -6,6 +6,8 @@ import { isNative, openExternal, printNative } from '../native'
 import { getLayout, partName } from '../body'
 import { ESTIMATE_CSS, ESTIMATE_FORMATS, buildEstimate, estimateBody, estimateCsv, estimateFileName, estimateHtml, estimateText, type EstimateFormat } from '../estimate'
 import { getPhoto } from '../photos'
+import { formatDuration, getVideo } from '../videos'
+import { Thumb } from './Photos'
 import { isPro } from '../sync'
 import { normalizePlate } from '../validate'
 import { downloadBlob, mailtoUrl, makeEstimatePdf, makePdf, orderText, pdfFileName, readyText, shareFiles, sharePdf, shareText, smsUrl, whatsappUrl } from '../share'
@@ -85,7 +87,7 @@ export default function ShareSheet({ order, onClose }: Props) {
   // все фото заказа одним разом: «номер_деталь_n.jpg»
   const photoList = getLayout(order.bodyType).parts.flatMap((e) => {
     const v = order.elements[e.id]
-    const slug = partName(t, e).replace(/[\s—/]+/g, '_').replace(/_+/g, '_')
+    const slug = partName(makeT(lang), e).replace(/[\s—/]+/g, '_').replace(/_+/g, '_')
     return [...(v?.photos ?? []), ...(v?.photosAfter ?? [])].map((id, i) => ({ id, name: `${normalizePlate(order.plate) || 'auto'}_${slug}_${i + 1}.jpg` }))
   })
   const [photosBusy, setPhotosBusy] = useState(false)
@@ -106,20 +108,63 @@ export default function ShareSheet({ order, onClose }: Props) {
     }
   }
 
+  // вложения к сообщению: выбранные фото, видео, готовый PDF
+  const [picked, setPicked] = useState<string[]>([])
+  const [withPdf, setWithPdf] = useState(false)
+  const [sending, setSending] = useState(false)
+  const plate = normalizePlate(order.plate) || 'auto'
+  const videos = [
+    order.walkaround && { ref: order.walkaround, label: t('video.title'), name: `video_${plate}` },
+    order.walkaroundAfter && { ref: order.walkaroundAfter, label: t('video.titleAfter'), name: `video_po_${plate}` },
+  ].filter((v) => Boolean(v)) as { ref: NonNullable<Order['walkaround']>; label: string; name: string }[]
+  const togglePick = (id: string) => setPicked((p) => (p.includes(id) ? p.filter((x) => x !== id) : [...p, id]))
+  const attached = picked.length + (withPdf && ready ? 1 : 0)
+
+  const sendWithFiles = async () => {
+    setSending(true)
+    try {
+      const files: { blob: Blob; name: string }[] = []
+      if (withPdf && ready) files.push({ blob: ready, name })
+      for (const p of photoList) {
+        if (!picked.includes(p.id)) continue
+        const blob = await getPhoto(p.id)
+        if (blob) files.push({ blob, name: p.name })
+      }
+      for (const v of videos) {
+        if (!picked.includes(v.ref.id)) continue
+        // видео может быть только на сервере — скачается сейчас
+        const blob = await getVideo(v.ref.id)
+        if (blob) files.push({ blob, name: v.name + v.ref.id.slice(v.ref.id.lastIndexOf('.')) })
+      }
+      if (!files.length) return alert(t('media.missing'))
+      const how = await shareFiles(files, docTitle, text())
+      // меню «Поделиться» нет (компьютер) — файлы скачались, текст кладём в буфер
+      if (how === 'downloaded') await copy()
+    } catch (e) {
+      alert(t('share.error', { e: (e as Error).message }))
+    } finally {
+      setSending(false)
+    }
+  }
+
   const text = () => (kind === 'handover' ? readyText(order, lang, settings) : orderText(order, lang, settings))
 
   const whatsapp = () => {
+    // ссылка wa.me не умеет файлы — с вложениями через меню «Поделиться»
+    if (attached) return sendWithFiles()
     if (!order.phone) alert(t('share.noPhone'))
     openExternal(whatsappUrl(order.phone, text()))
   }
 
   const sms = () => {
-    window.location.href = smsUrl(order.phone, text())
+    if (attached) return sendWithFiles()
+    window.location.assign(smsUrl(order.phone, text()))
   }
 
   const email = () => {
+    if (attached) return sendWithFiles()
     const car = [order.make, order.model, order.plate].filter(Boolean).join(' ')
-    window.location.href = mailtoUrl(order.email, `${docTitle}${car ? ' — ' + car : ''}`, text())
+    window.location.assign(mailtoUrl(order.email, `${docTitle}${car ? ' — ' + car : ''}`, text()))
   }
 
   const copy = async () => {
@@ -132,6 +177,7 @@ export default function ShareSheet({ order, onClose }: Props) {
   }
 
   const message = async () => {
+    if (attached) return sendWithFiles()
     if (!(await shareText(text(), docTitle))) copy()
   }
 
@@ -177,6 +223,57 @@ export default function ShareSheet({ order, onClose }: Props) {
               <span className="share-icon">⬇️</span>
               <span>
                 <b>{t('share.download')}</b>
+              </span>
+            </button>
+          )}
+          {(photoList.length > 0 || videos.length > 0 || ready) && (
+            <div className="attach">
+              <div className="attach-head">
+                <b>{t('attach.title')}{attached ? ` · ${attached}` : ''}</b>
+                {photoList.length > 0 && (
+                  <button
+                    className="link-btn"
+                    onClick={() => {
+                      const all = photoList.every((p) => picked.includes(p.id))
+                      setPicked((cur) => (all ? cur.filter((id) => !photoList.some((p) => p.id === id)) : [...new Set([...cur, ...photoList.map((p) => p.id)])]))
+                    }}
+                  >
+                    {photoList.every((p) => picked.includes(p.id)) ? t('attach.none') : t('attach.allPhotos')}
+                  </button>
+                )}
+              </div>
+              {photoList.length > 0 && (
+                <div className="thumbs attach-thumbs">
+                  {photoList.map((p) => (
+                    <span key={p.id} className={'attach-thumb' + (picked.includes(p.id) ? ' on' : '')}>
+                      <Thumb id={p.id} onClick={() => togglePick(p.id)} />
+                    </span>
+                  ))}
+                </div>
+              )}
+              {(videos.length > 0 || ready) && <div className="check-grid">
+                {videos.map((v) => (
+                  <label key={v.ref.id} className={'check-chip' + (picked.includes(v.ref.id) ? ' on' : '')}>
+                    <input type="checkbox" checked={picked.includes(v.ref.id)} onChange={() => togglePick(v.ref.id)} />
+                    🎥 {v.label}{v.ref.duration ? ` · ${formatDuration(v.ref.duration)}` : ''}
+                  </label>
+                ))}
+                {ready && (
+                  <label className={'check-chip' + (withPdf ? ' on' : '')}>
+                    <input type="checkbox" checked={withPdf} onChange={(e) => setWithPdf(e.target.checked)} />
+                    📄 PDF
+                  </label>
+                )}
+              </div>}
+              <p className="hint">{t(attached ? 'attach.hintOn' : 'attach.hint')}</p>
+            </div>
+          )}
+          {attached > 0 && (
+            <button className="share-item primary" onClick={sendWithFiles} disabled={sending}>
+              <span className="share-icon">{sending ? '⏳' : '📎'}</span>
+              <span>
+                <b>{sending ? t('attach.preparing') : t('attach.send', { n: attached })}</b>
+                <small>{t('attach.sendHint')}</small>
               </span>
             </button>
           )}

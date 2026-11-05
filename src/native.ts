@@ -60,11 +60,11 @@ async function writeChunked(path: string, blob: Blob, directory: Directory): Pro
 }
 
 /** Системное меню «Поделиться» с файлами (WhatsApp, почта, Диск, «Сохранить в файлы»…) */
-export async function shareFilesNative(files: { blob: Blob; name: string }[], title: string): Promise<void> {
+export async function shareFilesNative(files: { blob: Blob; name: string }[], title: string, text?: string): Promise<void> {
   const urls: string[] = []
   for (const f of files) urls.push(await writeChunked(f.name, f.blob, Directory.Cache))
   try {
-    await Share.share({ title, files: urls, dialogTitle: title })
+    await Share.share({ title, files: urls, dialogTitle: title, ...(text ? { text } : {}) })
   } catch (e) {
     // закрыли меню — не ошибка
     if (!/cancel/i.test((e as Error).message)) throw e

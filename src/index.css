@@ -861,3 +861,16 @@ input:disabled { opacity: 0.6; }
 .estimate-export h3 { margin: 4px 0 8px; font-size: 16px; }
 .estimate-export .row { display: flex; gap: 8px; }
 .estimate-export .row .btn { flex: 1; }
+
+/* вложения к сообщению */
+.attach { display: flex; flex-direction: column; gap: 8px; padding: 10px; border: 1px dashed var(--line); border-radius: var(--radius); }
+.attach-head { display: flex; justify-content: space-between; align-items: center; gap: 8px; }
+.attach-thumbs { grid-template-columns: repeat(auto-fill, minmax(60px, 1fr)); }
+.attach-thumb { position: relative; display: block; }
+.attach-thumb .thumb { width: 100%; opacity: 0.55; }
+.attach-thumb.on .thumb { opacity: 1; outline: 3px solid var(--accent); outline-offset: -3px; }
+.attach-thumb.on::after {
+  content: '✓'; position: absolute; top: 3px; right: 3px; width: 20px; height: 20px; border-radius: 50%;
+  background: var(--accent); color: var(--accent-text); font-size: 13px; line-height: 20px; text-align: center; pointer-events: none;
+}
+.attach .hint { margin: 0; }
