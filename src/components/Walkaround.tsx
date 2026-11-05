@@ -18,7 +18,9 @@ import {
 import { hasNativeRecorder, recordVideoNative } from '../native'
 import { useSettings, useT } from '../settingsHooks'
 import type { Order, VideoRef } from '../types'
-import { addVideo, deleteVideos, formatDuration, useVideoUrl } from '../videos'
+import { addVideo, deleteVideos, formatDuration, getVideo, useVideoUrl } from '../videos'
+import MediaActions from './MediaActions'
+import { normalizePlate } from '../validate'
 import { useSyncStatus } from '../sync'
 
 const MAX_SEC = 180
@@ -492,6 +494,12 @@ export function WalkaroundPanel({ order, after = false, onChange }: { order: Ord
               {t('video.recorded', { date: new Date(v.at).toLocaleString(locale, { dateStyle: 'short', timeStyle: 'short' }), dur: formatDuration(v.duration) })}
             </small>
             <span className="row">
+              <MediaActions
+                className="btn small ghost"
+                get={() => getVideo(v.id)}
+                name={`video${after ? '_po' : ''}_${normalizePlate(order.plate) || 'auto'}_${new Date(v.at).toISOString().slice(0, 10)}${v.id.slice(v.id.lastIndexOf('.'))}`}
+                title={t(after ? 'video.titleAfter' : 'video.title')}
+              />
               {pro && <button className="btn small ghost" onClick={record}>{t('video.redo')}</button>}
               <button className="btn small ghost danger" onClick={remove}>{t('video.remove')}</button>
             </span>

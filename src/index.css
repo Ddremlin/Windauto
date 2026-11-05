@@ -857,3 +857,7 @@ input:disabled { opacity: 0.6; }
 .side-dot { display: inline-block; width: 7px; height: 7px; border-radius: 50%; background: var(--accent); margin-left: 6px; vertical-align: middle; }
 .bm-inner { stroke: #fff; stroke-width: 1.2; }
 .swatch.inner-swatch { width: 10px; height: 10px; border-radius: 2px; background: var(--panel); border: 1.5px solid var(--text); }
+.viewer-actions { display: flex; gap: 4px; }
+.estimate-export h3 { margin: 4px 0 8px; font-size: 16px; }
+.estimate-export .row { display: flex; gap: 8px; }
+.estimate-export .row .btn { flex: 1; }

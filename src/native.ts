@@ -46,22 +46,32 @@ const toBase64 = (blob: Blob) =>
     r.readAsDataURL(blob)
   })
 
-/** Кладёт файл во временную папку приложения и возвращает его адрес для системного меню */
-async function cacheFile(blob: Blob, name: string): Promise<string> {
-  const { uri } = await Filesystem.writeFile({ path: name, data: await toBase64(blob), directory: Directory.Cache })
+// Плагин файлов принимает только base64-строку: большой файл (видео до 300 МБ) пишем кусками,
+// иначе строка целиком не влезет в память. Кусок кратен 3 байтам — base64 склеивается без дыр.
+const CHUNK = 3 * 1024 * 1024
+async function writeChunked(path: string, blob: Blob, directory: Directory): Promise<string> {
+  let uri = ''
+  for (let at = 0; at < blob.size || at === 0; at += CHUNK) {
+    const data = await toBase64(blob.slice(at, at + CHUNK))
+    if (at === 0) uri = (await Filesystem.writeFile({ path, data, directory, recursive: true })).uri
+    else await Filesystem.appendFile({ path, data, directory })
+  }
   return uri
 }
 
-/** Системное меню «Поделиться» с файлом (WhatsApp, почта, Диск, «Сохранить в файлы»…) */
-export async function shareFileNative(blob: Blob, name: string, title: string): Promise<void> {
-  const url = await cacheFile(blob, name)
+/** Системное меню «Поделиться» с файлами (WhatsApp, почта, Диск, «Сохранить в файлы»…) */
+export async function shareFilesNative(files: { blob: Blob; name: string }[], title: string): Promise<void> {
+  const urls: string[] = []
+  for (const f of files) urls.push(await writeChunked(f.name, f.blob, Directory.Cache))
   try {
-    await Share.share({ title, files: [url], dialogTitle: title })
+    await Share.share({ title, files: urls, dialogTitle: title })
   } catch (e) {
     // закрыли меню — не ошибка
     if (!/cancel/i.test((e as Error).message)) throw e
   }
 }
+
+export const shareFileNative = (blob: Blob, name: string, title: string) => shareFilesNative([{ blob, name }], title)
 
 export async function shareTextNative(text: string, title: string): Promise<void> {
   try {
@@ -73,7 +83,7 @@ export async function shareTextNative(text: string, title: string): Promise<void
 
 /** Сохраняет файл в «Документы» телефона; возвращает путь для сообщения пользователю */
 export async function saveFileNative(blob: Blob, name: string): Promise<string> {
-  await Filesystem.writeFile({ path: `Windauto/${name}`, data: await toBase64(blob), directory: Directory.Documents, recursive: true })
+  await writeChunked(`Windauto/${name}`, blob, Directory.Documents)
   return `Documents/Windauto/${name}`
 }
 

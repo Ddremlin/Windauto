@@ -3,7 +3,12 @@ import { makeT, type Lang } from '../i18n'
 import LangSelect from './LangSelect'
 import { useSettings } from '../settingsHooks'
 import { isNative, openExternal, printNative } from '../native'
-import { downloadBlob, mailtoUrl, makePdf, orderText, pdfFileName, readyText, sharePdf, shareText, smsUrl, whatsappUrl } from '../share'
+import { getLayout, partName } from '../body'
+import { ESTIMATE_CSS, ESTIMATE_FORMATS, buildEstimate, estimateBody, estimateCsv, estimateFileName, estimateHtml, estimateText, type EstimateFormat } from '../estimate'
+import { getPhoto } from '../photos'
+import { isPro } from '../sync'
+import { normalizePlate } from '../validate'
+import { downloadBlob, mailtoUrl, makeEstimatePdf, makePdf, orderText, pdfFileName, readyText, shareFiles, sharePdf, shareText, smsUrl, whatsappUrl } from '../share'
 import type { Order } from '../types'
 import type { DocKind } from './AcceptanceDoc'
 
@@ -40,6 +45,64 @@ export default function ShareSheet({ order, onClose }: Props) {
       alert(t('share.error', { e: (e as Error).message }))
     } finally {
       setBusy(false)
+    }
+  }
+
+  // смета списком в выбранном формате
+  const [fmt, setFmt] = useState<EstimateFormat>('pdf')
+  const [estBusy, setEstBusy] = useState(false)
+  const estimateFile = async (): Promise<{ blob: Blob; name: string }> => {
+    const e = buildEstimate(order, lang, settings)
+    const logo = isPro() ? settings.shopLogo : undefined
+    const name = estimateFileName(order, fmt)
+    if (fmt === 'pdf') return { blob: await makeEstimatePdf(estimateBody(e, lang, logo), ESTIMATE_CSS), name }
+    if (fmt === 'csv') return { blob: new Blob([estimateCsv(e, lang)], { type: 'text/csv;charset=utf-8' }), name }
+    if (fmt === 'html') return { blob: new Blob([estimateHtml(e, lang, logo)], { type: 'text/html;charset=utf-8' }), name }
+    return { blob: new Blob([estimateText(e, lang)], { type: 'text/plain;charset=utf-8' }), name }
+  }
+  const estimate = async (action: 'share' | 'save') => {
+    setEstBusy(true)
+    try {
+      // текст удобнее отправить сообщением, а не файлом
+      if (action === 'share' && fmt === 'txt') {
+        const txt = estimateText(buildEstimate(order, lang, settings), lang)
+        if (!(await shareText(txt, docTitle))) await downloadBlob(new Blob([txt], { type: 'text/plain;charset=utf-8' }), estimateFileName(order, 'txt'))
+        return
+      }
+      const f = await estimateFile()
+      if (action === 'share') await shareFiles([f], makeT(lang)('est.title'))
+      else {
+        const path = await downloadBlob(f.blob, f.name)
+        if (path) alert(t('share.saved', { path }))
+      }
+    } catch (e) {
+      alert(t('share.error', { e: (e as Error).message }))
+    } finally {
+      setEstBusy(false)
+    }
+  }
+
+  // все фото заказа одним разом: «номер_деталь_n.jpg»
+  const photoList = getLayout(order.bodyType).parts.flatMap((e) => {
+    const v = order.elements[e.id]
+    const slug = partName(t, e).replace(/[\s—/]+/g, '_').replace(/_+/g, '_')
+    return [...(v?.photos ?? []), ...(v?.photosAfter ?? [])].map((id, i) => ({ id, name: `${normalizePlate(order.plate) || 'auto'}_${slug}_${i + 1}.jpg` }))
+  })
+  const [photosBusy, setPhotosBusy] = useState(false)
+  const sharePhotos = async () => {
+    setPhotosBusy(true)
+    try {
+      const files: { blob: Blob; name: string }[] = []
+      for (const p of photoList) {
+        const blob = await getPhoto(p.id)
+        if (blob) files.push({ blob, name: p.name })
+      }
+      if (files.length) await shareFiles(files, t('media.allPhotos', { n: files.length }))
+      else alert(t('media.missing'))
+    } catch (e) {
+      alert(t('share.error', { e: (e as Error).message }))
+    } finally {
+      setPhotosBusy(false)
     }
   }
 
@@ -151,6 +214,15 @@ export default function ShareSheet({ order, onClose }: Props) {
               <b>{t('share.copy')}</b>
             </span>
           </button>
+          {photoList.length > 0 && (
+            <button className="share-item" onClick={sharePhotos} disabled={photosBusy}>
+              <span className="share-icon">{photosBusy ? '⏳' : '📷'}</span>
+              <span>
+                <b>{t('media.allPhotos', { n: photoList.length })}</b>
+                <small>{t('media.allPhotosHint')}</small>
+              </span>
+            </button>
+          )}
           <button
             className="share-item"
             onClick={() => {
@@ -163,6 +235,26 @@ export default function ShareSheet({ order, onClose }: Props) {
               <b>{t('share.print')}</b>
             </span>
           </button>
+        </div>
+
+        <div className="sheet-section estimate-export">
+          <h3>{t('est.export')}</h3>
+          <div className="seg-row four" role="radiogroup" aria-label={t('est.format')}>
+            {ESTIMATE_FORMATS.map((f) => (
+              <button key={f} role="radio" aria-checked={fmt === f} className={'seg' + (fmt === f ? ' active' : '')} onClick={() => setFmt(f)}>
+                {t(`est.fmt.${f}`)}
+              </button>
+            ))}
+          </div>
+          <p className="hint">{t(`est.hint.${fmt}`)}</p>
+          <div className="row">
+            <button className="btn primary" onClick={() => estimate('share')} disabled={estBusy}>
+              {estBusy ? '⏳' : '📤'} {t('media.share')}
+            </button>
+            <button className="btn" onClick={() => estimate('save')} disabled={estBusy}>
+              ⬇️ {t('media.download')}
+            </button>
+          </div>
         </div>
 
         <div className="sheet-actions">

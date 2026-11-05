@@ -6,7 +6,7 @@ import { getLayout, partName } from './body'
 import AcceptanceDoc, { DOC_WIDTH, type DocKind } from './components/AcceptanceDoc'
 import { orderNo } from './docNumber'
 import { LOCALE, makeT, type Lang } from './i18n'
-import { isNative, saveFileNative, shareFileNative, shareTextNative } from './native'
+import { isNative, saveFileNative, shareFilesNative, shareTextNative } from './native'
 import { getPhoto, orderPhotoIds } from './photos'
 import { LangOverride, SettingsProvider } from './settings'
 import type { Settings } from './settingsStore'
@@ -24,29 +24,47 @@ export function pdfFileName(o: Order, kind: DocKind = 'acceptance'): string {
 }
 
 export async function makePdf(order: Order, lang: Lang, kind: DocKind = 'acceptance'): Promise<Blob> {
-  const [{ jsPDF }, { default: html2canvas }] = await Promise.all([import('jspdf'), import('html2canvas-pro')])
-
   // фото — в object URL на время рендера
   const urls: Record<string, string> = {}
   for (const id of orderPhotoIds(order)) {
     const b = await getPhoto(id)
     if (b) urls[id] = URL.createObjectURL(b)
   }
+  try {
+    return await renderPdf((host) => {
+      const r = createRoot(host)
+      flushSync(() =>
+        r.render(
+          <SettingsProvider>
+            <LangOverride lang={lang}>
+              <AcceptanceDoc order={order} photoUrls={urls} kind={kind} />
+            </LangOverride>
+          </SettingsProvider>,
+        ),
+      )
+      return () => r.unmount()
+    })
+  } finally {
+    Object.values(urls).forEach((u) => URL.revokeObjectURL(u))
+  }
+}
 
+/** PDF сметы списком — из того же HTML, что и файл .html */
+export async function makeEstimatePdf(html: string, css: string): Promise<Blob> {
+  return renderPdf((host) => {
+    host.innerHTML = `<div><style>${css}</style>${html}</div>`
+    return () => {}
+  }, 'tr')
+}
+
+// Рисует документ вне экрана и режет на страницы A4 только по границам блоков (breakAt)
+async function renderPdf(mount: (host: HTMLElement) => () => void, breakAt = '[data-block]'): Promise<Blob> {
+  const [{ jsPDF }, { default: html2canvas }] = await Promise.all([import('jspdf'), import('html2canvas-pro')])
   const host = document.createElement('div')
   host.style.cssText = `position:fixed;left:-${DOC_WIDTH * 2}px;top:0;width:${DOC_WIDTH}px;z-index:-1`
   document.body.appendChild(host)
-  const root = createRoot(host)
+  const unmount = mount(host)
   try {
-    flushSync(() =>
-      root.render(
-        <SettingsProvider>
-          <LangOverride lang={lang}>
-            <AcceptanceDoc order={order} photoUrls={urls} kind={kind} />
-          </LangOverride>
-        </SettingsProvider>,
-      ),
-    )
     const node = host.firstElementChild as HTMLElement
     await Promise.all([...node.querySelectorAll('img')].map((img) => img.decode().catch(() => {})))
     await document.fonts?.ready
@@ -56,7 +74,7 @@ export async function makePdf(order: Order, lang: Lang, kind: DocKind = 'accepta
 
     // границы блоков — разрываем страницы только по ним
     const top = node.getBoundingClientRect().top
-    const breaks = [...node.querySelectorAll('[data-block]')]
+    const breaks = [...node.querySelectorAll(breakAt)]
       .map((el) => el.getBoundingClientRect().top - top)
       .filter((y) => y > 0)
       .sort((a, b) => a - b)
@@ -87,27 +105,29 @@ export async function makePdf(order: Order, lang: Lang, kind: DocKind = 'accepta
     }
     return pdf.output('blob')
   } finally {
-    root.unmount()
+    unmount()
     host.remove()
-    Object.values(urls).forEach((u) => URL.revokeObjectURL(u))
   }
 }
 
-export async function sharePdf(blob: Blob, name: string, title: string): Promise<'shared' | 'downloaded'> {
+export const sharePdf = (blob: Blob, name: string, title: string) => shareFiles([{ blob, name }], title)
+
+/** Файлы через системное меню «Поделиться»; где его нет — скачиваются */
+export async function shareFiles(files: { blob: Blob; name: string }[], title: string): Promise<'shared' | 'downloaded'> {
   if (isNative) {
-    await shareFileNative(blob, name, title)
+    await shareFilesNative(files, title)
     return 'shared'
   }
-  const file = new File([blob], name, { type: 'application/pdf' })
-  if (navigator.canShare?.({ files: [file] })) {
+  const list = files.map((f) => new File([f.blob], f.name, { type: f.blob.type || 'application/octet-stream' }))
+  if (navigator.canShare?.({ files: list })) {
     try {
-      await navigator.share({ files: [file], title })
+      await navigator.share({ files: list, title })
       return 'shared'
     } catch (e) {
       if ((e as Error).name === 'AbortError') return 'shared'
     }
   }
-  downloadBlob(blob, name)
+  for (const f of files) await downloadBlob(f.blob, f.name)
   return 'downloaded'
 }
 

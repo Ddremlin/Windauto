@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react'
-import { addPhoto, usePhotoUrl } from '../photos'
+import { addPhoto, getPhoto, usePhotoUrl } from '../photos'
+import MediaActions from './MediaActions'
 import { useT } from '../settingsHooks'
 
 export function Thumb({ id, onClick }: { id: string; onClick?: () => void }) {
@@ -231,13 +232,14 @@ function PhotoViewer({ ids, index, onIndex, onClose, onDelete }: ViewerProps) {
         <span>
           {index + 1} / {ids.length}
         </span>
-        {onDelete ? (
-          <button className="icon-btn" aria-label={t('photo.delete')} onClick={() => confirm(t('photo.deleteConfirm')) && onDelete(id)}>
-            🗑
-          </button>
-        ) : (
-          <span />
-        )}
+        <span className="viewer-actions">
+          <MediaActions get={() => getPhoto(id)} name={`foto_${id.slice(0, 8)}.jpg`} title={t('photo.title')} />
+          {onDelete && (
+            <button className="icon-btn" aria-label={t('photo.delete')} onClick={() => confirm(t('photo.deleteConfirm')) && onDelete(id)}>
+              🗑
+            </button>
+          )}
+        </span>
       </div>
       <div
         ref={box}

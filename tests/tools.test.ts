@@ -236,3 +236,34 @@ test('валюта: польский интерфейс — всегда зло�
   assert.equal(currencyOf({ lang: 'ru', currency: 'XXX' as never }), 'PLN')
   assert.equal(formatMoney(12000).replace(/\s/g, ' '), '12 000,00 zł')
 })
+
+test('смета списком: строки по деталям, итоги, CSV для Excel, HTML экранирован', async () => {
+  const { buildEstimate, estimateCsv, estimateHtml, estimateText, estimateFileName } = await import('../src/estimate.ts')
+  const { getSettings } = await import('../src/settingsStore.ts')
+  const s = { ...getSettings(), vatRate: 23, pricesGross: true, shopName: 'Serwis <b>' }
+  const o = {
+    ...JSON.parse('{"id":"o","createdAt":1762300000000,"updatedAt":1,"status":"new","plateCountry":"PL","vin":"","model":"","year":"","client":"","bodyType":"sedan","discount":0}'),
+    number: '2026/0007',
+    plate: 'WA12345',
+    make: 'Škoda',
+    elements: {
+      hood: { works: ['paint_full' as const], prices: { paint_full: 900 } },
+      hood_in: { works: ['paint_full' as const], prices: { paint_full: 300 }, parts: 50 },
+    },
+    extras: [{ id: 'x', name: 'Mycie "premium"; <script>', price: 50 }],
+  }
+  const e = buildEstimate(o, 'pl', s)
+  assert.deepEqual(
+    e.lines.map((l) => [l.part, l.price]),
+    [['Maska', 900], ['Maska — od wewnątrz', 300], ['Maska — od wewnątrz', 50], ['Prace dodatkowe', 50]],
+  )
+  assert.equal(e.total[1], 1300)
+  const csv = estimateCsv(e, 'pl')
+  assert.ok(csv.startsWith('﻿'))
+  assert.match(csv, /\r\n2;Maska — od wewnątrz;[^;]+;300,00\r\n/)
+  assert.match(csv, /"Mycie ""premium""; <script>";50,00/)
+  const html = estimateHtml(e, 'pl')
+  assert.ok(!html.includes('<script>') && html.includes('&lt;script&gt;') && html.includes('Serwis &lt;b&gt;'))
+  assert.match(estimateText(e, 'pl'), /Razem brutto: 1300,00/)
+  assert.equal(estimateFileName(o, 'csv').endsWith('.csv'), true)
+})
