@@ -1,4 +1,5 @@
 import { useMemo, useState, type ReactNode } from 'react'
+import { bookingText, isLate, isPlanned, localDay, timeText } from '../booking'
 import { orderNo } from '../docNumber'
 import { Stars } from '../components/ClientRating'
 import { PlateBadge } from '../components/Plate'
@@ -63,12 +64,33 @@ export default function OrderList({ orders, onOpen, onCreate, banner }: Props) {
   const profiles = useMemo(() => clientProfiles(orders), [orders])
   const reviews = useReviews()
 
+  // записи на приёмку на сегодня и опоздавшие — полоской над списком
+  const expected = useMemo(() => {
+    const day = localDay()
+    return orders
+      .filter((o) => isPlanned(o) && (localDay(o.booking!.at) <= day))
+      .sort((a, b) => a.booking!.at - b.booking!.at)
+  }, [orders])
+
   const counts = useMemo(() => Object.fromEntries(FILTERS.map((f) => [f, orders.filter((o) => matches(o, f)).length])), [orders])
 
   return (
     <div className="screen">
       <TopBar current="orders" />
       {banner}
+      {expected.length > 0 && (
+        <nav className="booking-strip" aria-label={t('book.today')}>
+          {expected.map((o) => (
+            <button key={o.id} onClick={() => onOpen(o.id)}>
+              <b className={isLate(o) ? 'late' : undefined}>
+                {isLate(o) ? '⚠ ' : '📅 '}
+                {localDay(o.booking!.at) === localDay() ? timeText(o.booking!.at, locale) : bookingText(o.booking!.at, locale)}
+              </b>
+              <span>{[o.plate && formatPlate(o.plate, o.plateCountry), [o.make, o.model].filter(Boolean).join(' '), o.client].filter(Boolean).join(' · ') || t('list.noPlate')}</span>
+            </button>
+          ))}
+        </nav>
+      )}
 
       <div className="search">
         <input type="search" placeholder={t('list.search')} value={q} onChange={(e) => setQ(e.target.value)} />
@@ -119,11 +141,18 @@ export default function OrderList({ orders, onOpen, onCreate, banner }: Props) {
                 ) : (
                   <span className="plate">{t('list.noPlate')}</span>
                 )}
-                <span className={`status st-${o.status}`}>{t(`status.${o.status}`)}</span>
+                {isPlanned(o) ? (
+                  <span className={'status st-planned' + (isLate(o) ? ' late' : '')}>
+                    {isLate(o) ? '⚠ ' : o.booking?.confirmed ? '✓ ' : '📅 '}
+                    {bookingText(o.booking!.at, locale)}
+                  </span>
+                ) : (
+                  <span className={`status st-${o.status}`}>{t(`status.${o.status}`)}</span>
+                )}
               </div>
               <div className="card-row muted">
                 <span>{[o.make, o.model, o.year].filter(Boolean).join(' ') || t('list.noMake')}</span>
-                <span>{o.number ? `№ ${orderNo(o)}` : new Date(o.createdAt).toLocaleDateString(locale)}</span>
+                <span>{o.number ? `№ ${orderNo(o)}` : isPlanned(o) ? t('book.status') : new Date(o.createdAt).toLocaleDateString(locale)}</span>
               </div>
               {(o.assignee || o.dueDate || o.client) && (
                 <div className="card-row muted small">

@@ -834,3 +834,20 @@ input:disabled { opacity: 0.6; }
 .plan-features { margin: 0; padding-left: 0; list-style: none; display: flex; flex-direction: column; gap: 8px; }
 .plan-prices { margin: 14px 0 0; }
 .logo-preview { display: block; max-width: 220px; max-height: 80px; object-fit: contain; margin: 4px 0 8px; background: #fff; padding: 4px; border-radius: 6px; border: 1px solid var(--line); }
+
+/* запись на приёмку */
+.cal-dot.planned { background: transparent !important; box-shadow: inset 0 0 0 2px currentColor; color: var(--accent); }
+.cal-time { font-size: 13px; font-weight: 600; font-variant-numeric: tabular-nums; min-width: 42px; }
+.cal-order.planned .cal-order-text b { font-style: italic; }
+.st-planned { background: color-mix(in srgb, var(--muted) 16%, transparent); color: var(--text); }
+.st-planned.late, .booking.late { color: var(--danger); }
+.st-planned.late { background: color-mix(in srgb, var(--danger) 14%, transparent); }
+.booking { display: grid; gap: 10px; }
+.booking .row { display: flex; gap: 8px; flex-wrap: wrap; align-items: center; }
+.booking .row .btn { flex: 1 1 auto; }
+.booking-strip { margin: 12px 16px 0; display: flex; flex-direction: column; gap: 4px; }
+.booking-strip button { display: flex; gap: 8px; align-items: center; width: 100%; text-align: left; border: 1px solid var(--line); border-radius: 10px; background: var(--panel); padding: 8px 10px; color: inherit; font: inherit; }
+.booking-strip b { font-variant-numeric: tabular-nums; }
+.booking-strip .late { color: var(--danger); }
+.booking .check-chip { justify-self: start; }
+.booking h3 { margin: 0; font-size: 16px; }

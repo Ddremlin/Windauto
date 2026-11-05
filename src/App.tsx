@@ -14,6 +14,7 @@ import Plan from './screens/Plan'
 import Settings from './screens/Settings'
 import Stats from './screens/Stats'
 import Sync from './screens/Sync'
+import { defaultBookingAt } from './booking'
 import { newOrder, useOrders } from './storage'
 import type { Order } from './types'
 
@@ -105,7 +106,17 @@ export default function App() {
     )
   }
 
-  if (route === '/calendar') return <Calendar orders={orders} onOpen={(id) => go(`/order/${id}`)} />
+  if (route === '/calendar')
+    return (
+      <Calendar
+        orders={orders}
+        onOpen={(id) => go(`/order/${id}`)}
+        onPlan={(day) => {
+          setDraft({ ...newOrder(), booking: { at: defaultBookingAt(day) } })
+          go('/new')
+        }}
+      />
+    )
 
   if (route === '/import')
     return (

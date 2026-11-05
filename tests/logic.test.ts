@@ -1,5 +1,6 @@
 import assert from 'node:assert/strict'
 import { test } from 'node:test'
+import { calendarAt, defaultBookingAt, intakeAt, isLate, isPlanned } from '../src/booking.ts'
 import { signedDigest } from '../src/signed.ts'
 import type { Order } from '../src/types.ts'
 import { checkPlate, checkVin, formatPlate } from '../src/validate.ts'
@@ -128,4 +129,27 @@ test('голос: поля, элементы, цены и примечания',
   assert.equal(patch.elements!.bumper_front.note, 'трещина снизу, 900 zł')
   assert.equal(patch.elements!.no_such, undefined)
   assert.equal(changes.filter((c) => c.kind === 'element').length, 2)
+})
+
+test('запись на приёмку: ожидается, опаздывает, приехала', () => {
+  const at = Date.parse('2026-03-05T10:00')
+  const planned = { createdAt: 1, booking: { at } }
+  assert.equal(isPlanned(planned), true)
+  assert.equal(calendarAt(planned), at)
+  assert.equal(intakeAt(planned), 1)
+  assert.equal(isLate(planned, at + 30 * 60_000), false)
+  assert.equal(isLate(planned, at + 2 * 3600_000), true)
+  const came = { createdAt: 1, booking: { at, arrived: at + 5 } }
+  assert.equal(isPlanned(came), false)
+  assert.equal(isLate(came, at + 9e9), false)
+  assert.equal(intakeAt(came), at + 5)
+  assert.equal(calendarAt(came), at + 5)
+  assert.equal(isPlanned({}), false)
+})
+
+test('запись на приёмку: время по умолчанию', () => {
+  const morning = Date.parse('2026-03-05T07:00')
+  assert.equal(defaultBookingAt('2026-03-05', morning), Date.parse('2026-03-05T09:00'))
+  const later = Date.parse('2026-03-05T13:20')
+  assert.equal(defaultBookingAt('2026-03-05', later), Date.parse('2026-03-05T14:00'))
 })

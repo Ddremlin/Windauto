@@ -1,6 +1,7 @@
 // Лист приёмки и акт выдачи для клиента — рендерятся вне экрана и снимаются в PDF.
 // Стили простые (без var/color-mix), чтобы html2canvas отрисовал их точно.
 import { getLayout } from '../body'
+import { intakeAt } from '../booking'
 import { langOfLocale } from '../i18n'
 import { orderNo } from '../docNumber'
 import { rodoClause } from '../rodo'
@@ -151,7 +152,7 @@ export default function AcceptanceDoc({ order, photoUrls, kind = 'acceptance' }:
           <div>{t('doc.number', { n: orderNo(order) })}</div>
           <div>
             {handover && t('doc.accepted') + ' '}
-            {new Date(order.createdAt).toLocaleString(locale, dateStyle)}
+            {new Date(intakeAt(order)).toLocaleString(locale, dateStyle)}
           </div>
           {handover && (
             <div>

@@ -106,6 +106,16 @@ export interface Reminder {
   done?: boolean
 }
 
+// запись на приёмку: клиент договорился привезти машину
+export interface Booking {
+  // ориентировочные дата и время приёмки, мс
+  at: number
+  // когда машина фактически приехала, мс; пусто — ещё ожидается
+  arrived?: number
+  // клиент подтвердил, что приедет
+  confirmed?: boolean
+}
+
 // работа вне карты кузова (мойка, диагностика, сход-развал…): название и цена, zł
 export interface ExtraWork {
   id: string
@@ -139,6 +149,8 @@ export interface Order {
   // ответственный сотрудник (имя) и срок готовности YYYY-MM-DD
   assignee: string
   dueDate: string
+  // запись на приёмку (заказ создан заранее, до приезда машины)
+  booking?: Booking
   // скидка на всё, %
   discount: number
   intake: Intake

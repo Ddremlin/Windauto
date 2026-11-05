@@ -2,6 +2,7 @@
 // Экраны подписываются через useOrders, синхронизация — через onLocalChange.
 // До версии 1.3 заказы лежали в localStorage — при первом запуске переносим их.
 import { useSyncExternalStore } from 'react'
+import { intakeAt, isPlanned } from './booking'
 import { stampChanges } from './merge'
 import { tx, writeMany } from './idb'
 import { isNative, shareFileNative } from './native'
@@ -155,7 +156,9 @@ export function upsertOrder(o: Order, { remote = false } = {}) {
     // экран мог держать копию без номера и отметок — не теряем их
     if (prev?.number && !next.number) next.number = prev.number
     if (prev?._ft || next._ft) next._ft = { ...prev?._ft, ...next._ft }
-    if (!prev && !next.number && !serverNumbering) next.number = nextLocalNumber(new Date(next.createdAt).getFullYear())
+    // записанной заранее машине номер дают, только когда она приехала (неявка не съедает номер)
+    if ((!prev || isPlanned(prev)) && !next.number && !serverNumbering && !isPlanned(next))
+      next.number = nextLocalNumber(new Date(intakeAt(next)).getFullYear())
     next = stampChanges(prev, next)
   }
   const list = orders.slice()

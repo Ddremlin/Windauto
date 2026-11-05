@@ -93,6 +93,17 @@ test('номер с телефона без сервера учитываетс�
   assert.equal(r.body.merged[0].data.number, '2026/0041')
 })
 
+test('запись на приёмку получает номер, только когда машина приехала', async () => {
+  const at = Date.parse('2026-03-05T10:00')
+  const r = await api('/api/sync', admin, { orders: [{ id: 'b1', updatedAt: 100, deleted: false, data: order({ id: 'b1', booking: { at } }) }] })
+  assert.equal(r.status, 200)
+  assert.deepEqual(r.body.accepted, ['b1'])
+  const r2 = await api('/api/sync', admin, {
+    orders: [{ id: 'b1', updatedAt: 200, deleted: false, data: order({ id: 'b1', updatedAt: 200, booking: { at, arrived: at + 600_000 }, _ft: { booking: 200 } }) }],
+  })
+  assert.equal(r2.body.merged[0].data.number, '2026/0042')
+})
+
 test('одновременные правки разных полей сливаются', async () => {
   const cur = (await api('/api/sync?since=0', admin)).body.orders.find((o: { id: string }) => o.id === 'o1')
   const v = cur.updatedAt

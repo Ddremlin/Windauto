@@ -1,6 +1,7 @@
 // Выгрузка заказов в CSV для Excel и бухгалтерии (Pro): «;» и BOM — так польский/русский Excel
 // открывает файл сразу, без мастера импорта; суммы — с запятой
 import { getLayout } from './body'
+import { intakeAt } from './booking'
 import { orderNo } from './docNumber'
 import { makeT, type Lang } from './i18n'
 import type { PriceSettings } from './works'
@@ -29,7 +30,7 @@ export function ordersCsv(orders: Order[], s: PriceSettings, lang: Lang): string
       .concat((o.extras ?? []).map((x) => x.name.trim()).filter(Boolean))
       .join(' | ')
     return [
-      orderNo(o), new Date(o.createdAt).toISOString().slice(0, 10), t(`status.${o.status}`), formatPlate(o.plate, o.plateCountry), o.vin, o.make, o.model, o.year,
+      orderNo(o), new Date(intakeAt(o)).toISOString().slice(0, 10), t(`status.${o.status}`), formatPlate(o.plate, o.plateCountry), o.vin, o.make, o.model, o.year,
       o.client, o.phone, o.email, o.assignee, o.dueDate, works, tot.net, tot.vat, tot.gross,
     ]
   })

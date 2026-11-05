@@ -326,6 +326,7 @@ const FIELD_LABEL: Record<string, string> = {
   extras: 'extra.title',
   assignee: 'order.assignee',
   dueDate: 'order.dueDate',
+  booking: 'book.title',
   discount: 'tot.discount',
   intake: 'intake.title',
   consent: 'consent.title',

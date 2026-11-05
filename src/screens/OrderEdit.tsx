@@ -2,6 +2,8 @@ import { useEffect, useRef, useState } from 'react'
 import { BODY_TYPES, getLayout } from '../body'
 import { MAKES, canonMake, canonModel, isKnownModel, modelsOf } from '../cars'
 import AcceptanceNo from '../components/AcceptanceNo'
+import { BookingPanel } from '../components/BookingPanel'
+import { defaultBookingAt, intakeAt, isPlanned, localDay } from '../booking'
 import BodyMap, { DAMAGE_COLOR } from '../components/BodyMap'
 import { ClientRatingBlock, ReviewPanel, ReviewSummary, Stars } from '../components/ClientRating'
 import { RemindersBlock } from '../components/Reminders'
@@ -37,7 +39,7 @@ interface Props {
 
 const hasContent = (o: Order) =>
   Boolean(
-    o.plate || o.vin || o.make || o.model || o.client || o.phone || o.email || o.notes || o.paintNotes || o.extras?.length || o.assignee || o.dueDate ||
+    o.plate || o.vin || o.make || o.model || o.client || o.phone || o.email || o.notes || o.paintNotes || o.extras?.length || o.assignee || o.dueDate || o.booking ||
       Object.keys(o.elements).length || Object.keys(o.signatures).length || o.intake.items.length || o.intake.fuel !== undefined,
   )
 
@@ -187,15 +189,23 @@ export default function OrderEdit({ initial, onSave, onDelete, onBack }: Props) 
       <main className="content">
         <div className="print-only print-head">
           <strong>Windauto — {t('share.title')}</strong>
-          <span>{new Date(order.createdAt).toLocaleString(locale)}</span>
+          <span>{new Date(intakeAt(order)).toLocaleString(locale)}</span>
         </div>
 
         <section className="panel">
-          <div className="order-meta">
-            <AcceptanceNo order={order} pendingServer={sync.connected} />
-            <span className="muted">{new Date(order.createdAt).toLocaleString(locale, { dateStyle: 'medium', timeStyle: 'short' })}</span>
-          </div>
-          <div className="status-bar" role="radiogroup" aria-label={t('order.status')}>
+          {!isPlanned(order) && (
+            <div className="order-meta">
+              <AcceptanceNo order={order} pendingServer={sync.connected} />
+              <span className="muted">{new Date(intakeAt(order)).toLocaleString(locale, { dateStyle: 'medium', timeStyle: 'short' })}</span>
+            </div>
+          )}
+          <BookingPanel order={order} onChange={(booking) => update({ booking })} />
+          {!order.booking && !hasContent(order) && (
+            <button className="btn small no-print" onClick={() => update({ booking: { at: defaultBookingAt(localDay(Date.now() + 86400_000)) } })}>
+              📅 {t('book.make')}
+            </button>
+          )}
+          {!isPlanned(order) && <div className="status-bar" role="radiogroup" aria-label={t('order.status')}>
             {STATUSES.map((s) => (
               <button
                 key={s}
@@ -207,7 +217,7 @@ export default function OrderEdit({ initial, onSave, onDelete, onBack }: Props) 
                 {t(`status.${s}`)}
               </button>
             ))}
-          </div>
+          </div>}
           {cprof && (
             <button className={'order-client' + (isRisky(cprof) ? ' risky' : '')} onClick={() => (location.hash = clientPath(ckey))}>
               <span>

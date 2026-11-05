@@ -28,6 +28,12 @@ const telHref = (phone: string) => `tel:${phone.replace(/[^\d+]/g, '')}`
 
 // время по умолчанию: срок готовности в 10:00, иначе завтра в 10:00
 function defaultAt(o: Order): number {
+  // записан на приёмку — напомнить подтвердить запись накануне
+  if (o.booking && !o.booking.arrived) {
+    const d = new Date(o.booking.at - 86400_000)
+    d.setHours(10, 0, 0, 0)
+    if (d.getTime() > Date.now()) return d.getTime()
+  }
   const d = o.dueDate ? new Date(o.dueDate + 'T10:00') : new Date(Date.now() + 86400_000)
   if (!o.dueDate) d.setHours(10, 0, 0, 0)
   // прошло — через час, округлив до получаса

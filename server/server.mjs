@@ -1467,8 +1467,10 @@ const routes = {
         const incoming = { ...x.data, id: x.id, updatedAt: x.updatedAt }
         let data = curData ? mergeOrders(curData, incoming) : incoming
         let byServer = !sameOrder(data, incoming)
-        if (!data.number) {
-          data.number = nextNumber(o, new Date(data.createdAt || now()).getFullYear())
+        // запись на приёмку без приехавшей машины — номер выдадим, когда приедет
+        const planned = data.booking && typeof data.booking === 'object' && !data.booking.arrived
+        if (!data.number && !planned) {
+          data.number = nextNumber(o, new Date(data.booking?.arrived || data.createdAt || now()).getFullYear())
           data._ft = { ...data._ft, number: now() }
           byServer = true
         } else noteNumber(o, data.number)

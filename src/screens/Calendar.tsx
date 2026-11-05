@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { calendarAt, isLate, isPlanned, timeText } from '../booking'
 import { orderNo } from '../docNumber'
 import TopBar from '../components/TopBar'
 import { useSettings } from '../settingsHooks'
@@ -9,6 +10,8 @@ import { ACTIVE_STATUSES, STATUSES } from '../works'
 interface Props {
   orders: Order[]
   onOpen: (id: string) => void
+  // новая запись на приёмку на день YYYY-MM-DD
+  onPlan: (day: string) => void
 }
 
 type Mode = 'due' | 'created'
@@ -48,7 +51,7 @@ const remember = (key: string, v: string) => {
 const isOverdue = (o: Order, today: string) => Boolean(o.dueDate) && ACTIVE_STATUSES.includes(o.status) && o.status !== 'done' && o.dueDate < today
 
 // Календарь заказов: по сроку готовности или по дню приёмки, цвет — статус
-export default function Calendar({ orders, onOpen }: Props) {
+export default function Calendar({ orders, onOpen, onPlan }: Props) {
   const { t, locale } = useSettings()
   const today = dayKey(new Date())
   const [month, setMonth] = useState(() => {
@@ -74,14 +77,15 @@ export default function Calendar({ orders, onOpen }: Props) {
   const byDay = useMemo(() => {
     const map = new Map<string, Order[]>()
     for (const o of visible) {
-      const k = mode === 'due' ? o.dueDate : dayKey(new Date(o.createdAt))
+      const k = mode === 'due' ? o.dueDate : dayKey(new Date(calendarAt(o)))
       if (!k) continue
       const list = map.get(k) ?? []
       list.push(o)
       map.set(k, list)
     }
-    // внутри дня — по порядку статусов
-    for (const list of map.values()) list.sort((a, b) => STATUSES.indexOf(a.status) - STATUSES.indexOf(b.status))
+    // внутри дня: приёмка — по времени, срок — по порядку статусов
+    for (const list of map.values())
+      list.sort(mode === 'due' ? (a, b) => STATUSES.indexOf(a.status) - STATUSES.indexOf(b.status) : (a, b) => calendarAt(a) - calendarAt(b))
     return map
   }, [visible, mode])
 
@@ -140,7 +144,7 @@ export default function Calendar({ orders, onOpen }: Props) {
               const k = dayKey(d)
               const list = byDay.get(k) ?? []
               const other = d.getMonth() !== month.getMonth()
-              const late = mode === 'due' && list.some((o) => isOverdue(o, today))
+              const late = mode === 'due' ? list.some((o) => isOverdue(o, today)) : list.some((o) => isLate(o))
               return (
                 <button
                   key={k}
@@ -160,7 +164,7 @@ export default function Calendar({ orders, onOpen }: Props) {
                   <span className="cal-num">{d.getDate()}</span>
                   <span className="cal-dots">
                     {list.slice(0, DOTS).map((o) => (
-                      <span key={o.id} className={`cal-dot s-${o.status}`} />
+                      <span key={o.id} className={`cal-dot s-${o.status}` + (isPlanned(o) ? ' planned' : '')} />
                     ))}
                     {list.length > DOTS && <span className="cal-more">+{list.length - DOTS}</span>}
                   </span>
@@ -190,22 +194,28 @@ export default function Calendar({ orders, onOpen }: Props) {
             </button>
           ))}
         </div>
-        <p className="hint">{t('cal.legend')}</p>
+        <p className="hint">{t('cal.legend')} {t('book.legend')}</p>
 
         {selected && (
           <section className="panel">
+            <div className="panel-head">
             <h2>
               {selected === 'nodue'
                 ? t('cal.noDue', { n: noDue.length })
                 : new Date(selected + 'T12:00').toLocaleDateString(locale, { weekday: 'long', day: 'numeric', month: 'long' })}
             </h2>
+              {selected !== 'nodue' && selected >= today && (
+                <button className="btn small primary" onClick={() => onPlan(selected)}>📅 {t('book.add')}</button>
+              )}
+            </div>
             {dayList.length === 0 ? (
               <p className="muted">{t('cal.none')}</p>
             ) : (
               <ul className="plain-list cal-orders">
                 {dayList.map((o) => (
                   <li key={o.id}>
-                    <button className="cal-order" onClick={() => onOpen(o.id)}>
+                    <button className={'cal-order' + (isPlanned(o) ? ' planned' : '')} onClick={() => onOpen(o.id)}>
+                      {mode === 'created' && <span className="cal-time">{timeText(calendarAt(o), locale)}</span>}
                       <span className={`cal-bar s-${o.status}`} />
                       <span className="cal-order-text">
                         <b>{o.plate ? formatPlate(o.plate, o.plateCountry) : carOf(o) || t('list.noPlate')}</b>
@@ -215,9 +225,15 @@ export default function Calendar({ orders, onOpen }: Props) {
                             .join(' · ')}
                         </small>
                       </span>
-                      <span className={`status st-${o.status}`}>
-                        {mode === 'due' && isOverdue(o, today) ? '⚠ ' + t('cal.overdue') : t(`status.${o.status}`)}
-                      </span>
+                      {isPlanned(o) ? (
+                        <span className={'status st-planned' + (isLate(o) ? ' late' : '')}>
+                          {isLate(o) ? '⚠ ' + t('book.late') : (o.booking?.confirmed ? '✓ ' : '📅 ') + t('book.status')}
+                        </span>
+                      ) : (
+                        <span className={`status st-${o.status}`}>
+                          {mode === 'due' && isOverdue(o, today) ? '⚠ ' + t('cal.overdue') : t(`status.${o.status}`)}
+                        </span>
+                      )}
                     </button>
                   </li>
                 ))}

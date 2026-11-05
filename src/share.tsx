@@ -1,5 +1,6 @@
 // PDF листа приёмки / акта выдачи и тексты для WhatsApp, SMS, e-mail
 import { flushSync } from 'react-dom'
+import { intakeAt } from './booking'
 import { createRoot } from 'react-dom/client'
 import { getLayout } from './body'
 import AcceptanceDoc, { DOC_WIDTH, type DocKind } from './components/AcceptanceDoc'
@@ -19,7 +20,7 @@ const MARGIN_PX = (MARGIN_MM / 210) * DOC_WIDTH
 
 export function pdfFileName(o: Order, kind: DocKind = 'acceptance'): string {
   const plate = normalizePlate(o.plate) || orderNo(o).replace(/\W+/g, '-')
-  return `${kind === 'handover' ? 'wydanie' : 'protokol'}_${plate}_${new Date(o.createdAt).toISOString().slice(0, 10)}.pdf`
+  return `${kind === 'handover' ? 'wydanie' : 'protokol'}_${plate}_${new Date(intakeAt(o)).toISOString().slice(0, 10)}.pdf`
 }
 
 export async function makePdf(order: Order, lang: Lang, kind: DocKind = 'acceptance'): Promise<Blob> {

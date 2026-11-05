@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react'
+import { intakeAt, isPlanned } from '../booking'
 import { getLayout } from '../body'
 import { Stars } from '../components/ClientRating'
 import TopBar from '../components/TopBar'
@@ -46,7 +47,8 @@ export default function Stats({ orders, onOpen }: Props) {
 
   const data = useMemo(() => {
     const [from, to] = range(period)
-    const inPeriod = orders.filter((o) => o.createdAt >= from && o.createdAt < to)
+    const accepted = orders.filter((o) => !isPlanned(o))
+    const inPeriod = accepted.filter((o) => intakeAt(o) >= from && intakeAt(o) < to)
     const totalOf = (o: Order) => orderTotals(o, settings, getLayout(o.bodyType).elements.map((e) => e.id)).gross
     const sum = inPeriod.reduce((s, o) => s + totalOf(o), 0)
     const priced = inPeriod.filter((o) => totalOf(o) > 0)
@@ -75,12 +77,12 @@ export default function Stats({ orders, onOpen }: Props) {
       const d = new Date(now.getFullYear(), now.getMonth() - 5 + i, 1)
       const a = d.getTime()
       const b = new Date(d.getFullYear(), d.getMonth() + 1, 1).getTime()
-      const list = orders.filter((o) => o.createdAt >= a && o.createdAt < b)
+      const list = accepted.filter((o) => intakeAt(o) >= a && intakeAt(o) < b)
       return { label: d.toLocaleDateString(locale, { month: 'short' }), n: list.length, sum: list.reduce((s, o) => s + totalOf(o), 0) }
     })
 
     const today = new Date().toISOString().slice(0, 10)
-    const active = orders.filter((o) => ACTIVE_STATUSES.includes(o.status))
+    const active = accepted.filter((o) => ACTIVE_STATUSES.includes(o.status))
     const overdue = active.filter((o) => o.status !== 'done' && o.dueDate && o.dueDate < today).sort((a, b) => a.dueDate.localeCompare(b.dueDate))
     const byStatus = STATUSES.map((s) => ({ s, n: orders.filter((o) => o.status === s).length }))
     const byAssignee = new Map<string, number>()
