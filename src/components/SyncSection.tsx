@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import type { T } from '../i18n'
-import { UPDATE_SERVER } from '../native'
+import { openExternal, UPDATE_SERVER } from '../native'
 import PasswordInput from './PasswordInput'
+import { PinSettings } from './AppLock'
 import { useSettings } from '../settingsHooks'
 import {
   ApiError,
@@ -30,6 +31,9 @@ import {
   setOrgBlocked,
   setOrgPro,
   syncNow,
+  totpDisable,
+  totpEnable,
+  totpSetup,
   useSyncStatus,
   wipeDevice,
   type OrgSummary,
@@ -106,6 +110,8 @@ export default function SyncSection() {
           </div>
           <MyEmail me={st.user} />
           <MyPassword />
+          <TwoFactor me={st.user} />
+          <PinSettings />
           <LogoutOthers />
         </div>
       </section>
@@ -124,6 +130,8 @@ function AuthPanel() {
   const [server, setServer] = useState(st.server.replace(/^https:\/\//, '') || DEFAULT_SERVER)
   const [login, setLogin] = useState(st.user?.login ?? '')
   const [password, setPassword] = useState('')
+  // двухфакторный вход: сервер попросил код
+  const [code, setCode] = useState('')
   const [reg, setReg] = useState({ company: '', name: '', email: '', password: '', accept: false })
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
@@ -173,8 +181,12 @@ function AuthPanel() {
         password,
         () => confirm(t('auth.switchOrg')),
         (n) => (confirm(t('auth.localMove', { n })) ? 'upload' : confirm(t('auth.localDelete', { n })) ? 'delete' : 'cancel'),
+        code.trim(),
       )
-      if (ok) setPassword('')
+      if (ok) {
+        setPassword('')
+        setCode('')
+      }
     })
 
   const doRegister = () =>
@@ -297,6 +309,22 @@ function AuthPanel() {
           <span className="field-label">{t('sync.password')}</span>
           <PasswordInput value={password} onChange={(e) => setPassword(e.target.value)} autoComplete="current-password" onKeyDown={(e) => e.key === 'Enter' && doLogin()} />
         </label>
+        {(errCode === 'totp_required' || errCode === 'totp_failed' || code) && (
+          <label className="field">
+            <span className="field-label">{t('totp.code')}</span>
+            <input
+              value={code}
+              onChange={(e) => setCode(e.target.value)}
+              autoComplete="one-time-code"
+              inputMode="text"
+              autoCapitalize="off"
+              autoCorrect="off"
+              autoFocus
+              onKeyDown={(e) => e.key === 'Enter' && doLogin()}
+            />
+            <small className="hint">{t('totp.codeHint')}</small>
+          </label>
+        )}
         {serverField}
         {err && <p className="error-text">{err}</p>}
         {notice && <p className="hint">{notice}</p>}
@@ -423,6 +451,133 @@ function MyPassword() {
       {err && <p className="error-text wide">{err}</p>}
       <button className="btn primary wide" disabled={!oldP || newP.length < 8} onClick={save}>
         {t('users.changeMy')}
+      </button>
+    </div>
+  )
+}
+
+/** Двухфакторный вход: код из приложения-аутентификатора в дополнение к паролю */
+function TwoFactor({ me }: { me: SyncUser | null }) {
+  const { t } = useSettings()
+  const [open, setOpen] = useState(false)
+  const [pass, setPass] = useState('')
+  const [code, setCode] = useState('')
+  const [setup, setSetup] = useState<{ secret: string; uri: string } | null>(null)
+  const [recovery, setRecovery] = useState<string[]>([])
+  const [err, setErr] = useState('')
+  const [busy, setBusy] = useState(false)
+  const on = Boolean(me?.totp)
+
+  const run = async (fn: () => Promise<unknown>) => {
+    setErr('')
+    setBusy(true)
+    try {
+      await fn()
+    } catch (e) {
+      setErr(errText(t, e))
+    } finally {
+      setBusy(false)
+    }
+  }
+  const reset = () => {
+    setOpen(false)
+    setPass('')
+    setCode('')
+    setSetup(null)
+  }
+
+  if (recovery.length)
+    return (
+      <div className="stack">
+        <p className="notice">✅ {t('totp.enabled')}</p>
+        <p className="hint">{t('totp.recoveryHint')}</p>
+        <pre className="recovery-codes">{recovery.join('\n')}</pre>
+        <button className="btn" onClick={() => void navigator.clipboard?.writeText(recovery.join('\n'))}>
+          {t('totp.copy')}
+        </button>
+        <button className="btn primary" onClick={() => setRecovery([])}>
+          {t('totp.saved')}
+        </button>
+      </div>
+    )
+
+  if (!open)
+    return (
+      <button className="link-btn" onClick={() => setOpen(true)}>
+        🔐 {on ? t('totp.titleOn') : t('totp.title')}
+      </button>
+    )
+
+  if (on)
+    return (
+      <div className="grid">
+        <p className="hint wide">{t('totp.offHint')}</p>
+        <label className="field">
+          <span className="field-label">{t('users.oldPass')}</span>
+          <PasswordInput value={pass} onChange={(e) => setPass(e.target.value)} autoComplete="current-password" />
+        </label>
+        <label className="field">
+          <span className="field-label">{t('totp.code')}</span>
+          <input value={code} onChange={(e) => setCode(e.target.value)} autoComplete="one-time-code" autoCapitalize="off" />
+        </label>
+        {err && <p className="error-text wide">{err}</p>}
+        <button className="btn danger wide" disabled={busy || !pass || !code.trim()} onClick={() => run(async () => (await totpDisable(pass, code.trim()), reset()))}>
+          {t('totp.disable')}
+        </button>
+        <button className="link-btn wide" onClick={reset}>
+          {t('app.close')}
+        </button>
+      </div>
+    )
+
+  if (!setup)
+    return (
+      <div className="grid">
+        <p className="hint wide">{t('totp.intro')}</p>
+        <label className="field wide">
+          <span className="field-label">{t('users.oldPass')}</span>
+          <PasswordInput value={pass} onChange={(e) => setPass(e.target.value)} autoComplete="current-password" />
+        </label>
+        {err && <p className="error-text wide">{err}</p>}
+        <button className="btn primary wide" disabled={busy || !pass} onClick={() => run(async () => setSetup(await totpSetup(pass)))}>
+          {t('totp.next')}
+        </button>
+        <button className="link-btn wide" onClick={reset}>
+          {t('app.close')}
+        </button>
+      </div>
+    )
+
+  return (
+    <div className="stack">
+      <p className="hint">{t('totp.step1')}</p>
+      <button className="btn" onClick={() => openExternal(setup.uri)}>
+        {t('totp.openApp')}
+      </button>
+      <p className="hint">{t('totp.manual')}</p>
+      <pre className="recovery-codes">{setup.secret.match(/.{1,4}/g)?.join(' ')}</pre>
+      <button className="btn ghost" onClick={() => void navigator.clipboard?.writeText(setup.secret)}>
+        {t('totp.copy')}
+      </button>
+      <label className="field">
+        <span className="field-label">{t('totp.step2')}</span>
+        <input value={code} onChange={(e) => setCode(e.target.value)} inputMode="numeric" autoComplete="one-time-code" maxLength={7} />
+      </label>
+      {err && <p className="error-text">{err}</p>}
+      <button
+        className="btn primary"
+        disabled={busy || code.replace(/\s/g, '').length !== 6}
+        onClick={() =>
+          run(async () => {
+            setRecovery(await totpEnable(code.replace(/\s/g, '')))
+            reset()
+          })
+        }
+      >
+        {t('totp.enable')}
+      </button>
+      <button className="link-btn" onClick={reset}>
+        {t('app.close')}
       </button>
     </div>
   )
@@ -740,9 +895,17 @@ function PlatformPanel() {
     }
   }
 
+  // блокировка и удаление компании — с паролем: украденной сессии мало
+  const askPass = (question: string, fn: (password: string) => Promise<unknown>) => {
+    const p = prompt(question + '\n\n' + t('platform.passPrompt'))
+    if (p) void run(() => fn(p))
+  }
+  const st = useSyncStatus()
+
   return (
     <section className="panel">
       <h2>🌐 {t('platform.title')}</h2>
+      {!st.user?.totp && <p className="notice">🔐 {t('platform.totpHint')}</p>}
       <ul className="users">
         {orgs.map((o) => (
           <li key={o.id} className={o.blocked ? 'off' : ''}>
@@ -761,12 +924,12 @@ function PlatformPanel() {
               <button
                 className="btn small"
                 onClick={() =>
-                  (o.blocked || confirm(t('platform.blockConfirm', { name: o.name }))) && run(() => setOrgBlocked(o.id, !o.blocked))
+                  o.blocked ? run(() => setOrgBlocked(o.id, false)) : askPass(t('platform.blockConfirm', { name: o.name }), (p) => setOrgBlocked(o.id, true, p))
                 }
               >
                 {o.blocked ? t('platform.unblock') : t('platform.block')}
               </button>
-              <button className="btn small danger" onClick={() => confirm(t('platform.deleteConfirm', { name: o.name })) && run(() => removeOrg(o.id))}>
+              <button className="btn small danger" onClick={() => askPass(t('platform.deleteConfirm', { name: o.name }), (p) => removeOrg(o.id, p))}>
                 {t('platform.delete')}
               </button>
             </div>

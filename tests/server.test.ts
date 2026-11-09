@@ -390,10 +390,16 @@ test('владелец платформы: список компаний, бло
   const list = (await api('/api/platform/orgs', admin)).body.orgs
   const org = list.find((o: { name: string }) => o.name === 'Zła Firma')
   assert.equal(org.owner.email, 'bad@serwis.pl')
-  assert.equal((await api(`/api/platform/orgs/${org.id}`, admin, { blocked: true }, 'PATCH')).body.org.blocked, true)
-  assert.equal((await api('/api/me', t)).status, 401)
+  // блокировка и удаление — только с паролем владельца платформы
+  assert.equal((await api(`/api/platform/orgs/${org.id}`, admin, { blocked: true }, 'PATCH')).body.code, 'old_password')
+  assert.equal((await api(`/api/platform/orgs/${org.id}`, admin, { blocked: true, password: 'secret1' }, 'PATCH')).body.org.blocked, true)
+  const me = await api('/api/me', t)
+  assert.equal(me.status, 401)
+  // приложение узнаёт, что сессию закрыли намеренно, и стирает данные с устройства
+  assert.equal(me.body.code, 'revoked')
   assert.equal((await api('/api/login', '', { login: 'bad@serwis.pl', password: 'haslo1234' })).body.code, 'blocked')
-  assert.equal((await api(`/api/platform/orgs/${org.id}`, admin, undefined, 'DELETE')).status, 200)
+  assert.equal((await api(`/api/platform/orgs/${org.id}`, admin, { password: 'nope' }, 'DELETE')).body.code, 'old_password')
+  assert.equal((await api(`/api/platform/orgs/${org.id}`, admin, { password: 'secret1' }, 'DELETE')).status, 200)
   assert.equal(existsSync(join(dir, 'orgs', org.id)), false)
   assert.equal((await api('/api/login', '', { login: 'bad@serwis.pl', password: 'haslo1234' })).status, 401)
 
@@ -634,8 +640,8 @@ test('живые обновления: одноразовый билет вме�
   assert.equal(await sse('ticket=' + ticket), 200)
   assert.equal(await sse('ticket=' + ticket), 401)
   assert.equal(await sse('ticket=nope'), 401)
-  // токен в адресе — только для /api/events (старые версии), остальное — только заголовком
-  assert.equal(await sse('token=' + admin), 200)
+  // токен в адресе не принимается нигде (версии до 1.19 — без живых обновлений)
+  assert.equal(await sse('token=' + admin), 401)
   assert.equal((await fetch(URL_ + '/api/me?token=' + admin)).status, 401)
 })
 
@@ -781,4 +787,126 @@ test('письмо за 3 дня до конца пробного периода
   await start()
   await new Promise((r) => setTimeout(r, 300))
   assert.equal(mails().length, 1)
+})
+
+// вход со своего адреса — лимит неудачных входов с 127.0.0.1 общий на все тесты
+async function loginAt(ip: string, body: Record<string, string>) {
+  const res = await fetch(URL_ + '/api/login', { method: 'POST', headers: { 'Content-Type': 'application/json', 'X-Forwarded-For': ip }, body: JSON.stringify(body) })
+  return { status: res.status, body: await res.json() }
+}
+
+test('фото и видео не перезаписываются: подменить снимок повреждений нельзя', async () => {
+  const put = (t: string, body: Uint8Array) => fetch(`${URL_}/api/photos/evidence-1`, { method: 'PUT', headers: { Authorization: `Bearer ${t}` }, body })
+  assert.equal((await put(admin, new Uint8Array([1, 2, 3]))).status, 200)
+  const again = await put(staff, new Uint8Array([9, 9, 9, 9]))
+  assert.equal(again.status, 200)
+  assert.equal((await again.json()).exists, true)
+  const got = await fetch(`${URL_}/api/photos/evidence-1`, { headers: { Authorization: `Bearer ${admin}` } })
+  assert.deepEqual(new Uint8Array(await got.arrayBuffer()), new Uint8Array([1, 2, 3]))
+  const vid = (body: Uint8Array) => fetch(`${URL_}/api/videos/evidence-v1.mp4`, { method: 'PUT', headers: { Authorization: `Bearer ${staff}` }, body })
+  assert.equal((await vid(new Uint8Array([1]))).status, 200)
+  assert.equal((await vid(new Uint8Array([2, 2]))).status, 200)
+  const v = await fetch(`${URL_}/api/videos/evidence-v1.mp4`, { headers: { Authorization: `Bearer ${admin}` } })
+  assert.deepEqual(new Uint8Array(await v.arrayBuffer()), new Uint8Array([1]))
+})
+
+test('уборка: фото и видео без заказа удаляются, у живых заказов и в корзине — остаются', async () => {
+  const { utimesSync } = await import('node:fs')
+  const t = await newCompany('sweep@serwis.pl', 'Serwis Sweep')
+  const orgId = (await api('/api/me', t)).body.user.orgId
+  const put = (id: string) => fetch(`${URL_}/api/photos/${id}`, { method: 'PUT', headers: { Authorization: `Bearer ${t}` }, body: new Uint8Array([1]) })
+  for (const id of ['keep-live-1', 'keep-trash-1', 'orphan-old-1', 'orphan-new-1']) assert.equal((await put(id)).status, 200)
+  const vput = await fetch(`${URL_}/api/videos/vid-live-1.mp4`, { method: 'PUT', headers: { Authorization: `Bearer ${t}` }, body: new Uint8Array([1]) })
+  assert.equal(vput.status, 200)
+  await fetch(`${URL_}/api/videos/vid-orphan-1.mp4`, { method: 'PUT', headers: { Authorization: `Bearer ${t}` }, body: new Uint8Array([1]) })
+  const live = order({ id: 'sw-live', elements: { hood: { photos: ['keep-live-1'] } }, walkaround: { id: 'vid-live-1.mp4', at: 1, duration: 3 } })
+  const gone = order({ id: 'sw-gone', elements: { roof: { photos: ['keep-trash-1'] } } })
+  await api('/api/sync', t, { orders: [{ id: 'sw-live', updatedAt: 100, deleted: false, data: live }, { id: 'sw-gone', updatedAt: 100, deleted: false, data: gone }] })
+  await api('/api/sync', t, { orders: [{ id: 'sw-gone', updatedAt: 999_999_999_999, deleted: true, data: null }] })
+  // «старые» файлы — загружены 30 дней назад; свежий сирота ещё может ждать свой заказ
+  const old = Date.now() / 1000 - 30 * 86400
+  for (const f of ['photos/keep-live-1.jpg', 'photos/keep-trash-1.jpg', 'photos/orphan-old-1.jpg', 'videos/vid-live-1.mp4', 'videos/vid-orphan-1.mp4'])
+    utimesSync(join(dir, 'orgs', orgId, f), old, old)
+  await stop()
+  await start()
+  const has = (f: string) => existsSync(join(dir, 'orgs', orgId, f))
+  assert.equal(has('photos/keep-live-1.jpg'), true)
+  assert.equal(has('photos/keep-trash-1.jpg'), true)
+  assert.equal(has('videos/vid-live-1.mp4'), true)
+  assert.equal(has('photos/orphan-new-1.jpg'), true)
+  assert.equal(has('photos/orphan-old-1.jpg'), false)
+  assert.equal(has('videos/vid-orphan-1.mp4'), false)
+})
+
+test('заказ неверного вида не принимается; номер далеко впереди не сдвигает счётчик', async () => {
+  const t = await newCompany('valid@serwis.pl', 'Serwis Valid')
+  const r = await api('/api/sync', t, { orders: [{ id: 'v-bad', updatedAt: 100, deleted: false, data: order({ id: 'v-bad', client: { x: 1 } }) }] })
+  assert.equal(r.status, 200)
+  assert.deepEqual([...r.body.accepted, ...r.body.merged], [])
+  const bad2 = await api('/api/sync', t, { orders: [{ id: 'v-bad2', updatedAt: 100, deleted: false, data: order({ id: 'v-bad2', elements: { hood: 'x' } }) }] })
+  assert.deepEqual([...bad2.body.accepted, ...bad2.body.merged], [])
+  await api('/api/sync', t, { orders: [{ id: 'v-far', updatedAt: 100, deleted: false, data: order({ id: 'v-far', number: '2026/99999999' }) }] })
+  const next = await api('/api/sync', t, { orders: [{ id: 'v-next', updatedAt: 100, deleted: false, data: order({ id: 'v-next' }) }] })
+  assert.equal(next.body.merged[0].data.number, '2026/0001')
+})
+
+test('отключённый сотрудник: сессия «отозвана» — приложение стирает данные; сотрудник не удаляет заказы без автора', async () => {
+  await api('/api/users', admin, { login: 'fired', name: 'Fired', password: 'secret22', role: 'staff' })
+  const f = (await loginAt('10.77.0.1', { login: 'fired', password: 'secret22' })).body.token
+  const users = (await api('/api/users', admin)).body.users
+  const id = users.find((u: { login: string }) => u.login === 'fired').id
+  await api(`/api/users/${id}`, admin, { disabled: true }, 'PATCH')
+  const r = await api('/api/sync?since=0', f)
+  assert.equal(r.status, 401)
+  assert.equal(r.body.code, 'revoked')
+  // просто неизвестный токен — обычный 401 без revoked
+  assert.equal((await api('/api/me', 'nonsense-token')).body.code, undefined)
+})
+
+test('двухфакторный вход: включение, вход с кодом, запасной код одноразовый, выключение', async () => {
+  const { createHmac } = await import('node:crypto')
+  const B32 = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567'
+  const code = (secret: string, step = Math.floor(Date.now() / 30000)) => {
+    const bits = [...secret].map((c) => B32.indexOf(c).toString(2).padStart(5, '0')).join('')
+    const key = Buffer.from(bits.match(/.{8}/g)!.map((b) => parseInt(b, 2)))
+    const msg = Buffer.alloc(8)
+    msg.writeBigUInt64BE(BigInt(step))
+    const h = createHmac('sha1', key).update(msg).digest()
+    const o = h[h.length - 1] & 15
+    return String((h.readUInt32BE(o) & 0x7fffffff) % 1_000_000).padStart(6, '0')
+  }
+  await api('/api/users', admin, { login: 'twofa', name: 'T', password: 'secret22', role: 'staff' })
+  const t = (await loginAt('10.77.0.2', { login: 'twofa', password: 'secret22' })).body.token
+  assert.equal((await api('/api/me/totp/setup', t, { password: 'wrong' })).body.code, 'old_password')
+  const { secret, uri } = (await api('/api/me/totp/setup', t, { password: 'secret22' })).body
+  assert.match(uri, /^otpauth:\/\/totp\//)
+  assert.equal((await api('/api/me/totp/enable', t, { code: '000000' === code(secret) ? '111111' : '000000' })).body.code, 'totp_failed')
+  const step = Math.floor(Date.now() / 30000)
+  const en = await api('/api/me/totp/enable', t, { code: code(secret, step) })
+  assert.equal(en.status, 200)
+  assert.equal(en.body.recovery.length, 8)
+  assert.equal((await api('/api/me', t)).body.user.totp, true)
+  // вход: без кода — просим код, с неверным — отказ, тот же код второй раз не годится
+  assert.equal((await loginAt('10.77.0.3', { login: 'twofa', password: 'secret22' })).body.code, 'totp_required')
+  assert.equal((await loginAt('10.77.0.3', { login: 'twofa', password: 'secret22', code: '12345' })).body.code, 'totp_failed')
+  assert.equal((await loginAt('10.77.0.3', { login: 'twofa', password: 'secret22', code: code(secret, step) })).body.code, 'totp_failed')
+  const ok = await loginAt('10.77.0.3', { login: 'twofa', password: 'secret22', code: code(secret, step + 1) })
+  assert.equal(ok.status, 200)
+  // запасной код — один раз
+  const rc = en.body.recovery[0]
+  assert.equal((await loginAt('10.77.0.3', { login: 'twofa', password: 'secret22', code: rc })).status, 200)
+  assert.equal((await loginAt('10.77.0.3', { login: 'twofa', password: 'secret22', code: rc })).body.code, 'totp_failed')
+  // выключить — пароль и код
+  assert.equal((await api('/api/me/totp/disable', t, { password: 'secret22', code: '000001' })).body.code, 'totp_failed')
+  assert.equal((await api('/api/me/totp/disable', t, { password: 'secret22', code: en.body.recovery[1] })).status, 200)
+  assert.equal((await loginAt('10.77.0.3', { login: 'twofa', password: 'secret22' })).status, 200)
+})
+
+test('регистрация поверх неподтверждённого приглашения другой фирмы', async () => {
+  await api('/api/users', admin, { email: 'victim@serwis.pl', name: 'V' })
+  const r = await api('/api/register', '', { company: 'Victim Serwis', name: 'V', email: 'victim@serwis.pl', password: 'haslo1234', lang: 'pl', accept: true })
+  assert.equal(r.status, 200)
+  const list = (await api('/api/platform/orgs', admin)).body.orgs
+  assert.ok(list.some((o: { name: string }) => o.name === 'Victim Serwis'))
+  assert.ok(!(await api('/api/users', admin)).body.users.some((u: { email: string }) => u.email === 'victim@serwis.pl'))
 })

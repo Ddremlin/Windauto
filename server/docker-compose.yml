@@ -50,6 +50,9 @@ services:
       ORG_QUOTA_GB: ${ORG_QUOTA_GB:-50}
       FREE_QUOTA_GB: ${FREE_QUOTA_GB:-1}
       AI_PER_MONTH: ${AI_PER_MONTH:-500}
+      # уборка фото/видео без заказа: старше скольких дней; 1 — удалить, даже если без заказа больше половины файлов
+      MEDIA_GRACE_DAYS: ${MEDIA_GRACE_DAYS:-14}
+      MEDIA_SWEEP_FORCE: ${MEDIA_SWEEP_FORCE:-}
     volumes:
       - ./data:/data
 

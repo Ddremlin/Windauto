@@ -1,6 +1,8 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
 import App from './App.tsx'
+import AppLock from './components/AppLock'
+import { initAppLock } from './appLock'
 import { requestPersistence } from './photos'
 import { SettingsProvider } from './settings'
 import { isNative } from './native'
@@ -20,7 +22,9 @@ initStorage().finally(() => {
   createRoot(document.getElementById('root')!).render(
     <StrictMode>
       <SettingsProvider>
-        <App />
+        <AppLock>
+          <App />
+        </AppLock>
       </SettingsProvider>
     </StrictMode>,
   )
@@ -28,6 +32,7 @@ initStorage().finally(() => {
 })
 
 requestPersistence()
+initAppLock()
 
 // офлайн-режим и установка на главный экран (только в собранной версии сайта; приложению он не нужен)
 if (import.meta.env.PROD && !isNative && 'serviceWorker' in navigator) {

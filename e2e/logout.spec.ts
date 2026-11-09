@@ -22,7 +22,7 @@ test('после выхода заказов на устройстве нет, �
   await expect(page.locator('.card', { hasText: 'WX 20001' })).toBeVisible({ timeout: 15_000 })
 })
 
-test('сессию закрыли с другого устройства — вместо заказов экран входа', async ({ page, request }) => {
+test('сессию закрыли с другого устройства — данные стёрты, вместо заказов экран входа', async ({ page, request }) => {
   page.on('dialog', (d) => void d.accept())
   await connect(page)
   await page.goto('/#/')
@@ -33,9 +33,11 @@ test('сессию закрыли с другого устройства — в�
   const { token } = await login.json()
   await request.post(`${SERVER}/api/logout/others`, { headers: { Authorization: `Bearer ${token}` }, data: {} })
 
+  // сессию закрыли намеренно — приложение само стирает данные компании с устройства
   await page.reload()
-  await expect(page.getByText('Вход закрыт', { exact: false })).toBeVisible({ timeout: 15_000 })
+  await expect(page.getByRole('button', { name: 'Войти', exact: true })).toBeVisible({ timeout: 15_000 })
   await expect(page.locator('.card')).toHaveCount(0)
+  await expect.poll(() => page.evaluate(() => localStorage.getItem('windauto.dataOrg'))).toBeNull()
   await page.goto('/#/order/x')
   await expect(page.getByRole('button', { name: 'Войти', exact: true })).toBeVisible()
 

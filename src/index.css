@@ -906,3 +906,13 @@ input:disabled { opacity: 0.6; }
 .status.span-left { background: transparent; border: 1px solid; white-space: nowrap; }
 .span-bar.edge { width: calc((var(--c1) - var(--c0) + 1) * (100% + var(--gap)) / 7 - var(--gap)); }
 .span-bar.head.edge { width: calc((var(--c1) - var(--c0) + 1) * (100% + var(--gap)) / 7 - var(--gap) - 6px); }
+
+/* коды двухфакторного входа: секрет и запасные коды */
+.recovery-codes { margin: 0; padding: 10px 12px; border-radius: 10px; background: var(--surface-2, rgba(127, 127, 127, 0.12)); font: 600 16px/1.6 ui-monospace, monospace; letter-spacing: 1px; white-space: pre-wrap; word-break: break-all; user-select: all; }
+
+/* экран блокировки PIN-кодом */
+.app-lock { position: fixed; inset: 0; z-index: 1000; display: grid; place-items: center; padding: 24px; background: var(--bg); }
+.app-lock-box { display: flex; flex-direction: column; gap: 12px; width: min(320px, 100%); text-align: center; }
+.app-lock-box h1 { margin: 0; }
+.app-lock-icon { font-size: 44px; }
+.pin-input { text-align: center; font-size: 28px; letter-spacing: 10px; padding: 10px; }

@@ -27,6 +27,8 @@ export interface SyncUser {
   orgName?: string
   owner?: boolean
   platform?: boolean
+  // двухфакторный вход включён
+  totp?: boolean
   // Pro: ИИ, видео, место, логотип в документах… pro — итог: оплачено, пробный период или включено вручную
   pro?: boolean
   plan?: 'pro' | 'paid' | 'trial' | 'free'
@@ -334,6 +336,12 @@ export async function syncNow(): Promise<void> {
       await refreshMe()
       if (!state.user?.pro) again = true
     }
+    // сессию закрыли намеренно (сотрудника отключили, пароль сменили, «выйти на других устройствах»,
+    // компанию заблокировали) — данные компании с этого устройства стираются сразу
+    if (err.code === 'revoked') {
+      wipeDevice()
+      return
+    }
     setStatus({ error: err.status === 402 ? null : err.message, authError: err.status === 401 })
     if (err.status === 401) stopLive()
   } finally {
@@ -430,11 +438,13 @@ export async function connect(
   password: string,
   confirmSwitch: (from: string) => boolean = () => true,
   askLocal: (n: number) => LocalChoice = () => 'upload',
+  // код двухфакторного входа (если включён): из приложения-аутентификатора или запасной
+  code = '',
 ) {
   const url = normalizeServer(server)
   const res = await api<{ token: string; user: SyncUser }>(
     '/api/login',
-    { method: 'POST', body: JSON.stringify({ login, password }) },
+    { method: 'POST', body: JSON.stringify({ login, password, ...(code ? { code } : {}) }) },
     url,
     '',
   )
@@ -562,10 +572,10 @@ export interface OrgSummary {
   lastSeen: number
 }
 export const listOrgs = () => api<{ orgs: OrgSummary[] }>('/api/platform/orgs').then((r) => r.orgs)
-export const setOrgBlocked = (id: string, blocked: boolean) =>
-  api(`/api/platform/orgs/${id}`, { method: 'PATCH', body: JSON.stringify({ blocked }) })
+export const setOrgBlocked = (id: string, blocked: boolean, password = '') =>
+  api(`/api/platform/orgs/${id}`, { method: 'PATCH', body: JSON.stringify({ blocked, ...(blocked ? { password } : {}) }) })
 export const setOrgPro = (id: string, pro: boolean) => api(`/api/platform/orgs/${id}`, { method: 'PATCH', body: JSON.stringify({ pro }) })
-export const removeOrg = (id: string) => api(`/api/platform/orgs/${id}`, { method: 'DELETE' })
+export const removeOrg = (id: string, password: string) => api(`/api/platform/orgs/${id}`, { method: 'DELETE', body: JSON.stringify({ password }) })
 
 // --- администрирование ---
 export const listUsers = () => api<{ users: SyncUser[] }>('/api/users').then((r) => r.users)
@@ -650,9 +660,22 @@ export async function refreshMe() {
     persist()
     if (user.orgId && !dataOrg()) setDataOrg(user.orgId)
     setStatus()
-  } catch {
+  } catch (e) {
+    if (e instanceof ApiError && e.code === 'revoked') wipeDevice()
     /* офлайн — в следующий раз */
   }
+}
+
+// --- двухфакторный вход ---
+export const totpSetup = (password: string) => api<{ secret: string; uri: string }>('/api/me/totp/setup', { method: 'POST', body: JSON.stringify({ password }) })
+export async function totpEnable(code: string) {
+  const r = await api<{ recovery: string[] }>('/api/me/totp/enable', { method: 'POST', body: JSON.stringify({ code }) })
+  await refreshMe()
+  return r.recovery
+}
+export async function totpDisable(password: string, code: string) {
+  await api('/api/me/totp/disable', { method: 'POST', body: JSON.stringify({ password, code }) })
+  await refreshMe()
 }
 
 // --- распознавание VIN / номера / техпаспорта по фото (на сервере, через Claude) ---

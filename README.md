@@ -46,7 +46,7 @@ docker run --rm --network host --ipc=host -v "$PWD":/app -w /app -u $(id -u):$(i
 `/opt/windauto/web`, API — `/api`, `/auth`, `/legal`). Выкладка:
 
 ```
-npm run build && rsync -a --delete dist/ root@95.216.219.8:/opt/windauto/web/
+npm run build && rsync -a --delete dist/ root@<сервер>:/opt/windauto/web/
 ```
 
 Прежний адрес https://ddremlin.github.io/Windauto/ — страница переезда (`pages-redirect/index.html`):
