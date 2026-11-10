@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client'
 import App from './App.tsx'
 import AppLock from './components/AppLock'
 import { initAppLock } from './appLock'
+import { initKeyboardFix } from './keyboardFix'
 import { requestPersistence } from './photos'
 import { SettingsProvider } from './settings'
 import { isNative } from './native'
@@ -33,6 +34,7 @@ initStorage().finally(() => {
 
 requestPersistence()
 initAppLock()
+initKeyboardFix()
 
 // офлайн-режим и установка на главный экран (только в собранной версии сайта; приложению он не нужен)
 if (import.meta.env.PROD && !isNative && 'serviceWorker' in navigator) {

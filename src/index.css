@@ -916,3 +916,6 @@ input:disabled { opacity: 0.6; }
 .app-lock-box h1 { margin: 0; }
 .app-lock-icon { font-size: 44px; }
 .pin-input { text-align: center; font-size: 28px; letter-spacing: 10px; padding: 10px; }
+
+/* поле в фокусе не прячется под закреплённой шапкой (--topbar-h ставит src/keyboardFix.ts) */
+html { scroll-padding-top: calc(var(--topbar-h, 0px) + 12px); scroll-padding-bottom: 12px; }
