@@ -919,3 +919,11 @@ input:disabled { opacity: 0.6; }
 
 /* поле в фокусе не прячется под закреплённой шапкой (--topbar-h ставит src/keyboardFix.ts) */
 html { scroll-padding-top: calc(var(--topbar-h, 0px) + 12px); scroll-padding-bottom: 12px; }
+
+/* общий поиск (#/search) */
+.search-group { display: flex; align-items: center; gap: 8px; margin: 18px 4px 8px; font-size: 15px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.04em; }
+.search-group:first-child { margin-top: 4px; }
+.search-hit mark { background: color-mix(in srgb, var(--accent, #e0a100) 35%, transparent); color: inherit; border-radius: 3px; padding: 0 1px; }
+.search-extra { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.search-more { text-align: center; margin: 4px 0 8px; }
+.topbar .search-btn { justify-self: end; color: var(--text); font-size: 20px; }

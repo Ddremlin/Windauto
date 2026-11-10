@@ -11,6 +11,7 @@ import OrderEdit from './screens/OrderEdit'
 import OrderList from './screens/OrderList'
 import Help from './screens/Help'
 import Plan from './screens/Plan'
+import Search from './screens/Search'
 import Settings from './screens/Settings'
 import Stats from './screens/Stats'
 import Sync from './screens/Sync'
@@ -43,6 +44,19 @@ function readRoute() {
 
 const NO_ORDERS: Order[] = []
 
+// откуда открыли заказ или клиента: из поиска «назад» возвращает к результатам
+// (поиск → клиент → заказ → назад к клиенту → назад к поиску). Переход по разделам стек сбрасывает
+const backStack: string[] = []
+const openFrom = (path: string) => {
+  backStack.push(readRoute())
+  go(path)
+}
+const goBack = (fallback: string) => go(backStack.pop() ?? fallback)
+const resetBack = () => {
+  backStack.length = 0
+}
+const isDetail = (r: string) => /^\/(order|client)\//.test(r) || r === '/search' || r.startsWith('/search?')
+
 export default function App() {
   const route = useRoute()
   const { orders, upsert, remove, replaceAll } = useOrders()
@@ -53,6 +67,10 @@ export default function App() {
   // без входа заказы не показываем и не напоминаем по ним: первая страница — вход и регистрация
   const locked = !sync.connected || sync.locked
   useReminderService(locked ? NO_ORDERS : orders, openOrder)
+  // ушли в обычный раздел — возвраты к поиску больше не нужны
+  useEffect(() => {
+    if (!isDetail(route)) resetBack()
+  }, [route])
 
   // Черновик создаём только при входе на #/new, а не пока маршрут ещё не сменился после «назад».
   if (route !== draftRoute) {
@@ -84,6 +102,10 @@ export default function App() {
     )
   }
 
+  // общий поиск; запрос — в адресе (#/search?q=…), из заказа «назад» вернёт к результатам
+  if (route === '/search' || route.startsWith('/search?'))
+    return <Search orders={orders} onOpenOrder={(id) => openFrom(`/order/${id}`)} onOpenClient={openFrom} />
+
   if (route === '/stats') return <Stats orders={orders} onOpen={(id) => go(`/order/${id}`)} />
 
   if (route === '/settings') return <Settings orders={orders} onImport={replaceAll} />
@@ -104,8 +126,8 @@ export default function App() {
     return (
       <ClientPage
         client={listClients(orders).find((c) => c.key === key)}
-        onBack={() => go('/clients')}
-        onOpen={(id) => go(`/order/${id}`)}
+        onBack={() => goBack('/clients')}
+        onOpen={(id) => openFrom(`/order/${id}`)}
         onSave={upsert}
         onNewOrder={(c) => {
           setDraft({ ...newOrder(), client: c.name, phone: c.phone, email: c.email })
@@ -150,7 +172,7 @@ export default function App() {
           onDelete={remove}
           onBack={() => {
             setDraft(null)
-            go('/')
+            goBack('/')
           }}
         />
       )

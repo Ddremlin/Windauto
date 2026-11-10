@@ -2,10 +2,11 @@ import { useEffect, useState } from 'react'
 import { useSettings } from '../settingsHooks'
 import { disconnect, syncNow, useSyncStatus } from '../sync'
 
-export type Section = 'orders' | 'clients' | 'calendar' | 'stats' | 'calc' | 'import' | 'sync' | 'plan' | 'settings' | 'help'
+export type Section = 'orders' | 'search' | 'clients' | 'calendar' | 'stats' | 'calc' | 'import' | 'sync' | 'plan' | 'settings' | 'help'
 
 const PATHS: Record<Section, string> = {
   orders: '/',
+  search: '/search',
   clients: '/clients',
   calendar: '/calendar',
   stats: '/stats',
@@ -93,7 +94,14 @@ export default function TopBar({ current }: { current: Section }) {
         <button className="brand-btn" onClick={() => nav('orders')} aria-label={t('menu.home')}>
           Windauto
         </button>
-        <span className="topbar-spacer" />
+        {/* общий поиск: клиенты, машины, заказы */}
+        {current === 'search' ? (
+          <span className="topbar-spacer" />
+        ) : (
+          <button className="icon-btn search-btn" aria-label={t('search.title')} onClick={() => nav('search')}>
+            🔍
+          </button>
+        )}
       </header>
 
       <div className={'drawer-backdrop' + (open ? ' open' : '')} onClick={() => setOpen(false)} />
